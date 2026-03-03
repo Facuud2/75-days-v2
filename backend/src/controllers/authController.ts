@@ -150,7 +150,11 @@ export const login = async (req: Request, res: Response) => {
             }
         });
     } catch (error) {
-        res.status(400).json({ error: 'Validation failed or Internal error' });
+        if (error instanceof z.ZodError) {
+            return res.status(401).json({ error: 'Invalid credentials format' });
+        }
+        console.error('Login Error:', error);
+        res.status(500).json({ error: 'Internal server error' });
     }
 };
 

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { authService, LoginData, RegisterData } from '../lib/api/auth';
 
 export interface User {
   id: string;
@@ -13,9 +14,14 @@ export interface User {
 
 interface AuthState {
   user: User | null;
+  token: string | null;
   isAuthenticated: boolean;
-  login: (user: User) => void;
+  isLoading: boolean;
+  error: string | null;
+  login: (credentials: LoginData) => Promise<void>;
+  register: (data: RegisterData) => Promise<void>;
   logout: () => void;
+  checkAuth: () => Promise<void>;
   updateProfile: (data: Partial<User>) => void;
 }
 
@@ -23,9 +29,49 @@ export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
       user: null,
+      token: null,
       isAuthenticated: false,
-      login: (user) => set({ user, isAuthenticated: true }),
-      logout: () => set({ user: null, isAuthenticated: false }),
+      isLoading: false,
+      error: null,
+
+      login: async (credentials) => {
+        set({ isLoading: true, error: null });
+        try {
+          const { user, token } = await authService.login(credentials);
+          set({ user, token, isAuthenticated: true, isLoading: false });
+        } catch (error: any) {
+          set({ error: error.message || 'Login failed', isLoading: false });
+          throw error;
+        }
+      },
+
+      register: async (data) => {
+        set({ isLoading: true, error: null });
+        try {
+          const { user, token } = await authService.register(data);
+          set({ user, token, isAuthenticated: true, isLoading: false });
+        } catch (error: any) {
+          set({ error: error.message || 'Registration failed', isLoading: false });
+          throw error;
+        }
+      },
+
+      logout: () => {
+        set({ user: null, token: null, isAuthenticated: false });
+        // Optionally redirect or clear other stores here if needed outside context
+      },
+
+      checkAuth: async () => {
+        set({ isLoading: true, error: null });
+        try {
+          const { user } = await authService.getMe();
+          set({ user, isAuthenticated: true, isLoading: false });
+        } catch (error: any) {
+          // If token is invalid/expired
+          set({ user: null, token: null, isAuthenticated: false, isLoading: false });
+        }
+      },
+
       updateProfile: (data) =>
         set((state) => ({
           user: state.user ? { ...state.user, ...data } : null,
