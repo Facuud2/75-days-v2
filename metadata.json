@@ -1,0 +1,5 @@
+{
+  "name": "75 Days Challenge PWA",
+  "description": "A progressive web app to track the 75 Days Challenge, including daily goals, side-quests, calendar tracking, and gamification.",
+  "requestFramePermissions": []
+}

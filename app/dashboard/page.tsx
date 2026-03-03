@@ -1,0 +1,299 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useChallengeStore } from '@/store/useChallengeStore';
+import { useAuthStore } from '@/store/useAuthStore';
+import { format, addDays, differenceInDays, startOfMonth, endOfMonth, getDay, isSameDay, subMonths, addMonths } from 'date-fns';
+import { es } from 'date-fns/locale';
+import { Check, Utensils, Dumbbell, Sun, Droplet, Book, Camera, Target, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import DayDetailsModal from '@/components/DayDetailsModal';
+
+const iconMap: Record<string, any> = {
+  utensils: Utensils,
+  dumbbell: Dumbbell,
+  sun: Sun,
+  droplet: Droplet,
+  book: Book,
+  camera: Camera,
+  target: Target
+};
+
+export default function Dashboard() {
+  const { user } = useAuthStore();
+  const { 
+    isActive, 
+    currentDay, 
+    logs, 
+    startDate,
+    logDailyGoal,
+    checkDailyReset
+  } = useChallengeStore();
+  const router = useRouter();
+
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  const todayLog = logs[todayStr];
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [currentMonthDate, setCurrentMonthDate] = useState(new Date());
+
+  useEffect(() => {
+    if (!isActive) {
+      router.push('/onboarding');
+    } else {
+      checkDailyReset();
+    }
+  }, [isActive, router, checkDailyReset]);
+
+  if (!isActive || !todayLog) return null;
+
+  const completedTasks = todayLog.goals.filter(g => g.completed).length;
+  const totalTasks = todayLog.goals.length;
+  const remainingTasks = totalTasks - completedTasks;
+  const progress = Math.round((completedTasks / totalTasks) * 100);
+
+  // Calendar logic
+  const now = new Date();
+  const monthStart = startOfMonth(currentMonthDate);
+  const monthEnd = endOfMonth(currentMonthDate);
+  const startDateObj = startDate ? new Date(startDate) : now;
+  
+  const daysInMonth = differenceInDays(monthEnd, monthStart) + 1;
+  const startDayOfWeek = getDay(monthStart); // 0 = Sunday
+
+  const calendarDays = Array.from({ length: daysInMonth }).map((_, i) => {
+    const date = addDays(monthStart, i);
+    const dateStr = format(date, 'yyyy-MM-dd');
+    const log = logs[dateStr];
+    
+    let status = 'future';
+    if (log) {
+      status = log.status;
+    } else if (differenceInDays(now, date) > 0 && differenceInDays(date, startDateObj) >= 0) {
+      status = 'fail';
+    } else if (differenceInDays(date, startDateObj) < 0) {
+      status = 'inactive';
+    }
+
+    return {
+      date,
+      dateStr,
+      status,
+      dayNum: i + 1,
+      isToday: isSameDay(date, now)
+    };
+  });
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 animate-in fade-in">
+      
+      {/* Left Column */}
+      <div className="lg:col-span-4 space-y-6">
+        
+        {/* DÍA ACTUAL */}
+        <div className="bg-[#1c0f16] border border-[#361726] rounded-3xl p-6 shadow-lg">
+          <h3 className="text-[#f43f5e] text-[10px] font-bold tracking-[0.2em] uppercase mb-4">Día Actual</h3>
+          <div className="flex items-baseline gap-1 mb-8">
+            <span className="text-7xl font-bold text-white tracking-tighter">{currentDay}</span>
+            <span className="text-2xl text-white/40 font-bold">/ 75</span>
+          </div>
+          <div className="space-y-3">
+            <div className="flex justify-between text-xs text-white/60 font-medium">
+              <span>Progreso Total</span>
+              <span>{Math.round((currentDay / 75) * 100)}%</span>
+            </div>
+            <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-[#f43f5e] transition-all duration-1000 ease-out" 
+                style={{ width: `${(currentDay / 75) * 100}%` }} 
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* ESTADO DIARIO */}
+        <div className="bg-[#1c0f16] border border-[#361726] rounded-3xl p-6 shadow-lg">
+          <h3 className="text-[#f43f5e] text-[10px] font-bold tracking-[0.2em] uppercase mb-2">Estado Diario</h3>
+          <h2 className="text-2xl font-bold uppercase tracking-tight mb-6 text-white">
+            {progress === 100 ? 'Completado' : 'En Progreso'}
+          </h2>
+          
+          <div className="flex items-center gap-6">
+            <div className="relative w-24 h-24 flex items-center justify-center shrink-0">
+              <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                <path 
+                  className="text-white/5" 
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  strokeWidth="2" 
+                />
+                <path 
+                  className={`transition-all duration-1000 ease-out ${progress === 100 ? 'text-emerald-500' : 'text-[#f43f5e]'}`} 
+                  strokeDasharray={`${progress}, 100`} 
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  strokeWidth="2" 
+                />
+              </svg>
+              <span className={`absolute text-sm font-bold ${progress === 100 ? 'text-emerald-500' : 'text-white'}`}>
+                {progress}%
+              </span>
+            </div>
+            <p className="text-sm text-white/60 leading-relaxed">
+              {remainingTasks === 0 
+                ? '¡Todas las tareas completadas por hoy! Gran trabajo.' 
+                : `${remainingTasks} tareas restantes para terminar el día.`}
+            </p>
+          </div>
+        </div>
+
+        {/* MINI CALENDAR */}
+        <div className="bg-[#1c0f16] border border-[#361726] rounded-3xl p-6 shadow-lg">
+          <div className="flex justify-between items-center mb-6">
+            <button 
+              onClick={() => setCurrentMonthDate(subMonths(currentMonthDate, 1))}
+              className="p-1 text-white/50 hover:text-white transition-colors rounded-full hover:bg-white/5"
+            >
+              <ChevronLeft size={20} />
+            </button>
+            <h3 className="text-white font-bold text-lg capitalize">
+              {format(currentMonthDate, 'MMMM yyyy', { locale: es })}
+            </h3>
+            <button 
+              onClick={() => setCurrentMonthDate(addMonths(currentMonthDate, 1))}
+              className="p-1 text-white/50 hover:text-white transition-colors rounded-full hover:bg-white/5"
+            >
+              <ChevronRight size={20} />
+            </button>
+          </div>
+          
+          <div className="grid grid-cols-7 gap-2 mb-4">
+            {['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'].map(d => (
+              <div key={d} className="text-center text-[10px] font-bold text-[#f43f5e] tracking-wider">
+                {d}
+              </div>
+            ))}
+          </div>
+          
+          <div className="grid grid-cols-7 gap-2">
+            {Array.from({ length: startDayOfWeek }).map((_, i) => (
+              <div key={`empty-${i}`} className="aspect-square" />
+            ))}
+            
+            {calendarDays.map((day) => {
+              let bg = 'bg-transparent';
+              let text = 'text-white/30';
+              let border = 'border border-transparent';
+              let dotColor = 'bg-[#f43f5e]';
+              
+              if (day.status === 'success') {
+                bg = 'bg-emerald-500/20';
+                border = 'border-emerald-500/50';
+                text = 'text-emerald-500 font-bold';
+                dotColor = 'bg-emerald-500';
+              } else if (day.status === 'fail') {
+                bg = 'bg-red-500/10';
+                border = 'border-red-500/30';
+                text = 'text-red-500 font-bold';
+              } else if (day.status === 'pending') {
+                text = 'text-white/80';
+                border = 'border-white/5 hover:border-white/20';
+              } else if (day.status === 'future') {
+                text = 'text-white/20';
+              }
+
+              if (day.isToday && day.status !== 'success') {
+                bg = 'bg-[#f43f5e]/20';
+                border = 'border-[#f43f5e]/50';
+                text = 'text-[#f43f5e] font-bold';
+              }
+
+              return (
+                <div 
+                  key={day.dateStr} 
+                  onClick={() => setSelectedDate(day.dateStr)}
+                  className={`relative aspect-square rounded-xl flex items-center justify-center text-xs transition-colors cursor-pointer ${bg} ${text} ${border}`}
+                >
+                  {day.dayNum}
+                  {day.isToday && <div className={`absolute w-1 h-1 rounded-full bottom-1 ${dotColor}`} />}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="flex items-center justify-between mt-6 pt-4 border-t border-white/5 text-[10px] text-white/50 font-medium">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-emerald-500" /> Completado
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-red-500" /> Fallido
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-white/20" /> Pendiente
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      {/* Right Column */}
+      <div className="lg:col-span-8">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-8 gap-2">
+          <h2 className="text-2xl font-bold text-[#f43f5e] tracking-tight">Tareas de Hoy</h2>
+          <span className="text-white/50 text-sm font-medium capitalize">
+            {format(now, "EEEE, d 'de' MMMM", { locale: es })}
+          </span>
+        </div>
+        
+        <div className="space-y-4">
+          {todayLog.goals.map(goal => {
+            const IconComponent = iconMap[goal.icon || 'target'] || Target;
+            
+            return (
+              <div 
+                key={goal.id} 
+                onClick={() => logDailyGoal(todayStr, goal.id, !goal.completed)}
+                className={`group bg-[#1c0f16] border rounded-2xl p-5 flex items-center gap-5 cursor-pointer transition-all duration-300 ${
+                  goal.completed 
+                    ? 'border-[#f43f5e]/30 bg-[#f43f5e]/5' 
+                    : 'border-[#361726] hover:border-[#f43f5e]/50 hover:bg-[#26151e]'
+                }`}
+              >
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${
+                  goal.completed ? 'bg-[#f43f5e]/20 text-[#f43f5e]' : 'bg-[#361726]/50 text-[#f43f5e]/70 group-hover:text-[#f43f5e]'
+                }`}>
+                  <IconComponent size={24} strokeWidth={1.5} />
+                </div>
+                
+                <div className="flex-1">
+                  <h3 className={`font-bold text-lg mb-1 transition-colors ${goal.completed ? 'text-white/70 line-through' : 'text-white'}`}>
+                    {goal.title}
+                  </h3>
+                  <p className={`text-sm transition-colors ${goal.completed ? 'text-white/30' : 'text-white/50'}`}>
+                    {goal.description || 'Completar esta tarea para avanzar en el desafío.'}
+                  </p>
+                </div>
+                
+                <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${
+                  goal.completed 
+                    ? 'bg-[#f43f5e] border-[#f43f5e] scale-110 shadow-[0_0_15px_rgba(244,63,94,0.5)]' 
+                    : 'border-[#361726] group-hover:border-[#f43f5e]/50'
+                }`}>
+                  {goal.completed && <Check size={16} className="text-white" strokeWidth={3} />}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      
+      {selectedDate && (
+        <DayDetailsModal 
+          date={selectedDate} 
+          onClose={() => setSelectedDate(null)} 
+        />
+      )}
+    </div>
+  );
+}
