@@ -10,6 +10,7 @@ export interface User {
   weight?: number;
   height?: number;
   registeredAt: string;
+  onboardingCompleted: boolean;
 }
 
 interface AuthState {
@@ -23,6 +24,7 @@ interface AuthState {
   logout: () => void;
   checkAuth: () => Promise<void>;
   updateProfile: (data: Partial<User>) => void;
+  completeOnboarding: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -76,6 +78,18 @@ export const useAuthStore = create<AuthState>()(
         set((state) => ({
           user: state.user ? { ...state.user, ...data } : null,
         })),
+
+      completeOnboarding: async () => {
+        try {
+          const { user } = await authService.completeOnboarding();
+          set((state) => ({
+            user: state.user ? { ...state.user, ...user } : user,
+          }));
+        } catch (error: any) {
+          console.error('Failed to complete onboarding:', error);
+          throw error;
+        }
+      },
     }),
     {
       name: 'auth-storage',

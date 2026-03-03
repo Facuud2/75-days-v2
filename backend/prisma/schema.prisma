@@ -15,7 +15,8 @@ model User {
   age          Int?
   weight       Float?
   height       Float?
-  registeredAt DateTime  @default(now())
+  registeredAt        DateTime  @default(now())
+  onboardingCompleted Boolean   @default(false)
   
   challenges   Challenge[]
   sideQuests   SideQuest[]

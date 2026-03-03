@@ -13,7 +13,7 @@ const AUTH_ROUTES = ['/login', '/register'];
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
     const router = useRouter();
     const pathname = usePathname();
-    const { isAuthenticated, checkAuth, isLoading } = useAuthStore();
+    const { isAuthenticated, checkAuth, isLoading, user } = useAuthStore();
 
     // Manage hydration to prevent layout flashes
     const [isHydrated, setIsHydrated] = useState(false);
@@ -31,8 +31,13 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
 
     const isPublicRoute = PUBLIC_ROUTES.includes(pathname);
     const isAuthRoute = AUTH_ROUTES.includes(pathname);
-    const isRoutingRestricted = !isPublicRoute && !isAuthenticated;
+    const isOnboardingRoute = pathname === '/onboarding';
+
+    const isRoutingRestricted = !isPublicRoute && !isOnboardingRoute && !isAuthenticated;
     const isRedundantLogin = isAuthenticated && isAuthRoute;
+
+    // Must complete onboarding: authenticated but onboarding not done, and not already on onboarding page
+    const needsOnboarding = isAuthenticated && user && user.onboardingCompleted !== true && !isOnboardingRoute;
 
     // Route Protection logic that triggers navigation instead of internal state
     useEffect(() => {
@@ -42,11 +47,13 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
             router.replace('/login');
         } else if (isRedundantLogin) {
             router.replace('/dashboard');
+        } else if (needsOnboarding) {
+            router.replace('/onboarding');
         }
-    }, [isHydrated, isLoading, isRoutingRestricted, isRedundantLogin, router]);
+    }, [isHydrated, isLoading, isRoutingRestricted, isRedundantLogin, needsOnboarding, router]);
 
     // Prevent flash of protected content while evaluating
-    if (!isHydrated || isLoading || isRoutingRestricted || isRedundantLogin) {
+    if (!isHydrated || isLoading || isRoutingRestricted || isRedundantLogin || needsOnboarding) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-zinc-50 dark:bg-zinc-950">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-zinc-900 dark:border-zinc-100"></div>

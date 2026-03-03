@@ -103,7 +103,8 @@ export const register = async (req: Request, res: Response) => {
                 id: user.newUser.id,
                 name: user.newUser.name,
                 email: user.newUser.email,
-                registeredAt: user.newUser.registeredAt
+                registeredAt: user.newUser.registeredAt,
+                onboardingCompleted: false
             },
             challenge: user.challenge
         });
@@ -146,7 +147,8 @@ export const login = async (req: Request, res: Response) => {
                 age: user.age,
                 weight: user.weight,
                 height: user.height,
-                registeredAt: user.registeredAt
+                registeredAt: user.registeredAt,
+                onboardingCompleted: user.onboardingCompleted
             }
         });
     } catch (error) {
@@ -165,12 +167,29 @@ export const getMe = async (req: AuthRequest, res: Response) => {
 
         const user = await prisma.user.findUnique({
             where: { id: userId },
-            select: { id: true, name: true, email: true, age: true, weight: true, height: true, registeredAt: true }
+            select: { id: true, name: true, email: true, age: true, weight: true, height: true, registeredAt: true, onboardingCompleted: true }
         });
 
         if (!user) return res.status(404).json({ error: 'User not found' });
 
-        res.json(user);
+        res.json({ user });
+    } catch (error) {
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+export const completeOnboarding = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user?.id;
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+        const user = await prisma.user.update({
+            where: { id: userId },
+            data: { onboardingCompleted: true },
+            select: { id: true, name: true, email: true, age: true, weight: true, height: true, registeredAt: true, onboardingCompleted: true }
+        });
+
+        res.json({ user });
     } catch (error) {
         res.status(500).json({ error: 'Internal server error' });
     }

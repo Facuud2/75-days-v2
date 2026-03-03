@@ -37,4 +37,10 @@ export const authService = {
     getMe: () => {
         return apiClient<{ user: User }>('/auth/me');
     },
+
+    completeOnboarding: () => {
+        return apiClient<{ user: User }>('/auth/complete-onboarding', {
+            method: 'PATCH',
+        });
+    },
 };
