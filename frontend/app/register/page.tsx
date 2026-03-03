@@ -1,41 +1,42 @@
 'use client';
 
-import { useState } from 'react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { zodResolver } from '@hookform/resolvers/zod';
 
+// --- Validation Schema (mirrors backend constraints) ---
 const registerSchema = z.object({
-  name: z.string().min(2, 'Name must be at least 2 characters'),
-  email: z.string().email('Please enter a valid email address'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
+  name: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
+  email: z.string().email('Ingresa un correo electrónico válido'),
+  password: z.string().min(6, 'La contraseña debe tener al menos 6 caracteres'),
+  acceptTerms: z.boolean().refine((val) => val === true, {
+    message: 'Debes aceptar los términos y condiciones',
+  }),
 });
 
-type RegisterFormValues = z.infer<typeof registerSchema>;
+type RegisterFormData = z.infer<typeof registerSchema>;
 
 export default function Register() {
+  const { register: registerUser, isLoading, error } = useAuthStore();
   const router = useRouter();
-  const [apiError, setApiError] = useState<string | null>(null);
 
   const {
     register,
     handleSubmit,
-    formState: { errors, isSubmitting },
-  } = useForm<RegisterFormValues>({
+    formState: { errors },
+  } = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
   });
 
-  const onSubmit = async (data: RegisterFormValues) => {
-    setApiError(null);
+  const onSubmit = async (data: RegisterFormData) => {
     try {
-      await useAuthStore.getState().register(data);
+      await registerUser(data);
       router.push('/onboarding');
-    } catch (error: any) {
-      console.error('Registration failed:', error);
-      setApiError(error.message || 'An unexpected error occurred during registration.');
+    } catch {
+      // Error is already stored in useAuthStore's `error` field and displayed below
     }
   };
 
@@ -47,66 +48,98 @@ export default function Register() {
           <p className="text-lg text-zinc-500 dark:text-zinc-400">Start your 75 Days challenge today</p>
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        {/* Server-side error (e.g. email already exists) */}
+        {error && (
+          <div className="mb-6 p-4 text-sm font-medium text-red-600 bg-red-50 dark:text-red-400 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 rounded-xl text-center">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
+          {/* Name */}
           <div>
-            <label className="block text-sm font-medium mb-1">Name</label>
+            <label className="block text-sm font-medium mb-1">Nombre</label>
             <input
               type="text"
               {...register('name')}
-              className={`w-full px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-800 border ${errors.name ? 'border-red-500' : 'border-transparent'
-                } focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-100 outline-none transition-all`}
-              placeholder="Your Name"
+              className={`w-full px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-800 border focus:ring-2 outline-none transition-all ${errors.name
+                ? 'border-red-400 focus:ring-red-300'
+                : 'border-transparent focus:ring-zinc-900 dark:focus:ring-zinc-100'
+                }`}
+              placeholder="Tu nombre"
             />
             {errors.name && (
-              <p className="text-red-500 text-xs mt-1">{errors.name.message}</p>
+              <p className="mt-1.5 text-xs text-red-500">Ingresa tu nombre completo (al menos 2 caracteres).</p>
             )}
           </div>
+
+          {/* Email */}
           <div>
             <label className="block text-sm font-medium mb-1">Email</label>
             <input
               type="email"
               {...register('email')}
-              className={`w-full px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-800 border ${errors.email ? 'border-red-500' : 'border-transparent'
-                } focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-100 outline-none transition-all`}
-              placeholder="you@example.com"
+              className={`w-full px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-800 border focus:ring-2 outline-none transition-all ${errors.email
+                ? 'border-red-400 focus:ring-red-300'
+                : 'border-transparent focus:ring-zinc-900 dark:focus:ring-zinc-100'
+                }`}
+              placeholder="tu@correo.com"
             />
             {errors.email && (
-              <p className="text-red-500 text-xs mt-1">{errors.email.message}</p>
+              <p className="mt-1.5 text-xs text-red-500">Ingresa un correo electrónico válido (ej: tu@correo.com).</p>
             )}
           </div>
+
+          {/* Password */}
           <div>
-            <label className="block text-sm font-medium mb-1">Password</label>
+            <label className="block text-sm font-medium mb-1">Contraseña</label>
             <input
               type="password"
               {...register('password')}
-              className={`w-full px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-800 border ${errors.password ? 'border-red-500' : 'border-transparent'
-                } focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-100 outline-none transition-all`}
-              placeholder="••••••••"
+              className={`w-full px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-800 border focus:ring-2 outline-none transition-all ${errors.password
+                ? 'border-red-400 focus:ring-red-300'
+                : 'border-transparent focus:ring-zinc-900 dark:focus:ring-zinc-100'
+                }`}
+              placeholder="Mínimo 6 caracteres"
             />
             {errors.password && (
-              <p className="text-red-500 text-xs mt-1">{errors.password.message}</p>
+              <p className="mt-1.5 text-xs text-red-500">La contraseña debe tener al menos 6 caracteres.</p>
             )}
           </div>
 
-          {apiError && (
-            <div className="p-3 mt-4 text-sm text-red-500 bg-red-50 dark:bg-red-900/10 rounded-lg border border-red-200 dark:border-red-800/30">
-              {apiError}
-            </div>
-          )}
+          {/* Terms and Conditions */}
+          <div className="pt-2">
+            <label className="flex items-start gap-3 cursor-pointer group">
+              <input
+                type="checkbox"
+                {...register('acceptTerms')}
+                className="mt-1 h-4 w-4 rounded border-zinc-300 dark:border-zinc-600 accent-zinc-900 dark:accent-zinc-100 cursor-pointer flex-shrink-0"
+              />
+              <span className="text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                Acepto los{' '}
+                <a href="#" className="text-zinc-900 dark:text-zinc-100 font-medium underline underline-offset-2 hover:opacity-70 transition-opacity">
+                  Términos y Condiciones
+                </a>{' '}de uso de la aplicación.
+              </span>
+            </label>
+            {errors.acceptTerms && (
+              <p className="mt-1.5 text-xs text-red-500 pl-7">Debes aceptar los términos y condiciones para continuar.</p>
+            )}
+          </div>
 
           <button
             type="submit"
-            disabled={isSubmitting}
+            disabled={isLoading}
             className="w-full py-3 px-4 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-xl font-medium hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors mt-6 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isSubmitting ? 'Signing up...' : 'Sign Up'}
+            {isLoading ? 'Creando cuenta...' : 'Crear cuenta'}
           </button>
         </form>
 
         <p className="text-center mt-6 text-sm text-zinc-500 dark:text-zinc-400">
-          Already have an account?{' '}
+          ¿Ya tienes cuenta?{' '}
           <Link href="/login" className="text-zinc-900 dark:text-zinc-100 font-medium hover:underline">
-            Sign in
+            Iniciar sesión
           </Link>
         </p>
       </div>

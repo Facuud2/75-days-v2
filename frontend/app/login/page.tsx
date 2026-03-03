@@ -4,39 +4,23 @@ import { useState } from 'react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-
-const loginSchema = z.object({
-  email: z.string().email('Please enter a valid email address'),
-  password: z.string().min(1, 'Password is required'),
-});
-
-type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function Login() {
-  const { login } = useAuthStore();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const { login, error, isLoading } = useAuthStore();
   const router = useRouter();
-  const [apiError, setApiError] = useState<string | null>(null);
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isSubmitting },
-  } = useForm<LoginFormValues>({
-    resolver: zodResolver(loginSchema),
-  });
-
-  const onSubmit = async (data: LoginFormValues) => {
-    setApiError(null);
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
     try {
-      console.log('Sending login payload:', data);
-      await login(data);
+      const payload = { email: email.trim(), password };
+      console.log('Sending login payload:', payload);
+      await login(payload);
       router.push('/dashboard');
     } catch (error: any) {
-      console.error('Login failed:', error);
-      setApiError(error.message || 'An unexpected error occurred during login.');
+      console.error('Login failed block raw error:', error);
+      // NOTE: Here you could add a toast notification using useUIStore in the future
     }
   };
 
@@ -48,46 +32,41 @@ export default function Login() {
           <p className="text-lg text-zinc-500 dark:text-zinc-400">Continue your 75 Days journey</p>
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        {error && (
+          <div className="mb-6 p-4 text-sm font-medium text-red-600 bg-red-50 dark:text-red-400 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 rounded-xl text-center">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleLogin} className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-1">Email</label>
             <input
               type="email"
-              {...register('email')}
-              className={`w-full px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-800 border ${errors.email ? 'border-red-500' : 'border-transparent'
-                } focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-100 outline-none transition-all`}
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-800 border-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-100 outline-none transition-all"
               placeholder="you@example.com"
             />
-            {errors.email && (
-              <p className="text-red-500 text-xs mt-1">{errors.email.message}</p>
-            )}
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Password</label>
             <input
               type="password"
-              {...register('password')}
-              className={`w-full px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-800 border ${errors.password ? 'border-red-500' : 'border-transparent'
-                } focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-100 outline-none transition-all`}
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-800 border-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-100 outline-none transition-all"
               placeholder="••••••••"
             />
-            {errors.password && (
-              <p className="text-red-500 text-xs mt-1">{errors.password.message}</p>
-            )}
           </div>
-
-          {apiError && (
-            <div className="p-3 mt-4 text-sm text-red-500 bg-red-50 dark:bg-red-900/10 rounded-lg border border-red-200 dark:border-red-800/30">
-              {apiError}
-            </div>
-          )}
-
           <button
             type="submit"
-            disabled={isSubmitting}
+            disabled={isLoading}
             className="w-full py-3 px-4 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-xl font-medium hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors mt-6 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isSubmitting ? 'Signing in...' : 'Sign In'}
+            {isLoading ? 'Signing In...' : 'Sign In'}
           </button>
         </form>
 
