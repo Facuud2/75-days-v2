@@ -7,7 +7,7 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 export default function DayDetailsModal({ date, onClose }: { date: string, onClose: () => void }) {
-  const { logs, logDailyWeight, logDailyPhoto, logDailyNotes } = useChallengeStore();
+  const { logs, logDailyMetrics } = useChallengeStore();
   const log = logs[date] || { weight: '', photoUrl: '', notes: '', status: 'future' };
 
   const [weight, setWeight] = useState(log.weight?.toString() || '');
@@ -37,7 +37,7 @@ export default function DayDetailsModal({ date, onClose }: { date: string, onClo
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         ctx?.drawImage(img, 0, 0, width, height);
-        
+
         // Compress to base64 jpeg
         const base64 = canvas.toDataURL('image/jpeg', 0.7);
         setPhotoUrl(base64);
@@ -48,9 +48,14 @@ export default function DayDetailsModal({ date, onClose }: { date: string, onClo
   };
 
   const handleSave = () => {
-    if (weight) logDailyWeight(date, parseFloat(weight));
-    if (photoUrl) logDailyPhoto(date, photoUrl);
-    if (notes) logDailyNotes(date, notes);
+    const metrics: any = {};
+    if (weight) metrics.weight = parseFloat(weight);
+    if (photoUrl) metrics.photoUrl = photoUrl;
+    if (notes) metrics.notes = notes;
+
+    if (Object.keys(metrics).length > 0) {
+      logDailyMetrics(date, metrics);
+    }
     onClose();
   };
 
@@ -62,7 +67,7 @@ export default function DayDetailsModal({ date, onClose }: { date: string, onClo
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
       <div className="bg-[#1c0f16] border border-[#361726] rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
-        
+
         <div className="flex items-center justify-between p-6 border-b border-white/5">
           <div className="flex items-center gap-3">
             <Calendar className="text-[#f43f5e]" />
@@ -74,15 +79,15 @@ export default function DayDetailsModal({ date, onClose }: { date: string, onClo
         </div>
 
         <div className="p-6 overflow-y-auto flex-1 space-y-6">
-          
+
           {/* Weight */}
           <div className="space-y-2">
             <label className="flex items-center gap-2 text-sm font-medium text-white/70">
               <Scale size={16} className="text-[#f43f5e]" />
               Peso (kg)
             </label>
-            <input 
-              type="number" 
+            <input
+              type="number"
               step="0.1"
               value={weight}
               onChange={(e) => setWeight(e.target.value)}
@@ -99,7 +104,7 @@ export default function DayDetailsModal({ date, onClose }: { date: string, onClo
                 Foto de Progreso
               </div>
               {photoUrl && (
-                <button 
+                <button
                   onClick={() => setPhotoUrl('')}
                   className="text-xs text-red-500 hover:text-red-400"
                 >
@@ -107,9 +112,9 @@ export default function DayDetailsModal({ date, onClose }: { date: string, onClo
                 </button>
               )}
             </label>
-            
+
             {!photoUrl ? (
-              <div 
+              <div
                 onClick={() => fileInputRef.current?.click()}
                 className="w-full h-32 rounded-xl border-2 border-dashed border-[#361726] hover:border-[#f43f5e]/50 bg-[#050505] flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors text-white/50 hover:text-[#f43f5e]"
               >
@@ -117,7 +122,7 @@ export default function DayDetailsModal({ date, onClose }: { date: string, onClo
                 <span className="text-sm font-medium">Subir Imagen</span>
               </div>
             ) : (
-              <div 
+              <div
                 onClick={() => fileInputRef.current?.click()}
                 className="mt-2 rounded-xl overflow-hidden border border-[#361726] aspect-video relative cursor-pointer group"
               >
@@ -130,10 +135,10 @@ export default function DayDetailsModal({ date, onClose }: { date: string, onClo
                 </div>
               </div>
             )}
-            <input 
-              type="file" 
-              accept="image/*" 
-              className="hidden" 
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
               ref={fileInputRef}
               onChange={handleImageUpload}
             />
@@ -145,7 +150,7 @@ export default function DayDetailsModal({ date, onClose }: { date: string, onClo
               <AlignLeft size={16} className="text-[#f43f5e]" />
               Notas del Día
             </label>
-            <textarea 
+            <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="¿Cómo te sentiste hoy? ¿Algún obstáculo?"
@@ -157,14 +162,14 @@ export default function DayDetailsModal({ date, onClose }: { date: string, onClo
         </div>
 
         <div className="p-6 border-t border-white/5 flex justify-end gap-3 bg-[#050505]">
-          <button 
-            onClick={onClose} 
+          <button
+            onClick={onClose}
             className="px-6 py-3 rounded-xl font-medium text-white/70 hover:text-white hover:bg-white/5 transition-colors"
           >
             Cancelar
           </button>
-          <button 
-            onClick={handleSave} 
+          <button
+            onClick={handleSave}
             className="px-8 py-3 bg-[#f43f5e] text-white rounded-xl font-bold hover:bg-[#e11d48] transition-colors shadow-[0_0_15px_rgba(244,63,94,0.3)]"
           >
             Guardar

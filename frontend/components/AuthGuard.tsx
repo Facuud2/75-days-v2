@@ -27,7 +27,10 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
         if (isHydrated) {
             checkAuth().catch(() => { });
         }
-    }, [isHydrated, checkAuth]);
+        // checkAuth is excluded intentionally: it's stable in zustand but changes reference on each render.
+        // We only want to re-run this when hydration status changes.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isHydrated]);
 
     const isPublicRoute = PUBLIC_ROUTES.includes(pathname);
     const isAuthRoute = AUTH_ROUTES.includes(pathname);

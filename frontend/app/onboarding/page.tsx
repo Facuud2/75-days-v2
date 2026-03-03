@@ -73,7 +73,7 @@ export default function Onboarding() {
       setStep(3);
     } else if (step === 3) {
       const formattedCustomGoals = customGoals.map(g => ({ title: g }));
-      startChallenge(difficulty, difficulty === 'Custom' ? formattedCustomGoals : undefined);
+      await startChallenge(difficulty, difficulty === 'Custom' ? formattedCustomGoals : undefined);
       await completeOnboarding();
       router.push('/dashboard');
     }
@@ -258,26 +258,25 @@ export default function Onboarding() {
         ) : <div />}
 
         <div className="flex items-center gap-3">
-          {/* Skip button — only on step 2 */}
-          {step === 2 && (
+          {step === 2 && selectedQuests.length === 0 ? (
             <button
               onClick={handleSkipStep2}
-              className="flex items-center px-5 py-3 rounded-xl font-medium text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+              className="flex items-center px-8 py-3 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-xl font-medium hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors cursor-pointer"
             >
-              Saltar <SkipForward size={18} className="ml-2" />
+              Saltar <SkipForward size={20} className="ml-2" />
+            </button>
+          ) : (
+            <button
+              onClick={handleNext}
+              disabled={!canProceed()}
+              className={`flex items-center px-8 py-3 rounded-xl font-medium transition-colors ${canProceed()
+                ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 cursor-pointer'
+                : 'bg-zinc-300 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-400 cursor-not-allowed opacity-60'
+                }`}
+            >
+              {step === 3 ? 'Comenzar Desafío' : 'Siguiente'} <ChevronRight size={20} className="ml-2" />
             </button>
           )}
-
-          <button
-            onClick={handleNext}
-            disabled={!canProceed()}
-            className={`flex items-center px-8 py-3 rounded-xl font-medium transition-colors ${canProceed()
-              ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 cursor-pointer'
-              : 'bg-zinc-300 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-400 cursor-not-allowed opacity-60'
-              }`}
-          >
-            {step === 3 ? 'Comenzar Desafío' : 'Siguiente'} <ChevronRight size={20} className="ml-2" />
-          </button>
         </div>
       </div>
     </div>

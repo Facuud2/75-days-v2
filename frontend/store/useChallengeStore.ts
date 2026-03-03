@@ -55,7 +55,7 @@ export interface ChallengeState {
 
   // Actions
   fetchCurrentChallenge: () => Promise<void>;
-  startChallenge: (difficulty: Difficulty, customGoals?: GoalTemplate[]) => Promise<void>;
+  startChallenge: (difficulty: Difficulty, customGoalsTemplate?: GoalTemplate[]) => Promise<void>;
   abandonChallenge: () => Promise<void>;
 
   logDailyGoal: (date: string, goalId: string, completed: boolean) => Promise<void>;
@@ -89,9 +89,16 @@ export const useChallengeStore = create<ChallengeState>()(
       fetchCurrentChallenge: async () => {
         set({ isLoading: true, error: null });
         try {
-          const data = await challengeService.getCurrentChallenge();
-          if (data && Object.keys(data).length > 0) {
-            set({ ...data, isActive: true, isLoading: false });
+          const { dailyLogs, ...restData } = (await challengeService.getCurrentChallenge()) as any;
+          if (restData && Object.keys(restData).length > 0) {
+            let parsedLogs = get().logs;
+            if (Array.isArray(dailyLogs)) {
+              parsedLogs = dailyLogs.reduce((acc: any, log: any) => {
+                acc[log.date] = log;
+                return acc;
+              }, {});
+            }
+            set({ ...restData, logs: parsedLogs, isActive: true, isLoading: false });
           } else {
             set({ isActive: false, isLoading: false });
           }
@@ -100,11 +107,18 @@ export const useChallengeStore = create<ChallengeState>()(
         }
       },
 
-      startChallenge: async (difficulty, customGoals) => {
+      startChallenge: async (difficulty, customGoalsTemplate) => {
         set({ isLoading: true, error: null });
         try {
-          const data = await challengeService.startChallenge({ difficulty, customGoals });
-          set({ ...data, isActive: true, isLoading: false });
+          const { dailyLogs, ...restData } = (await challengeService.startChallenge({ difficulty, customGoalsTemplate })) as any;
+          let parsedLogs = get().logs;
+          if (Array.isArray(dailyLogs)) {
+            parsedLogs = dailyLogs.reduce((acc: any, log: any) => {
+              acc[log.date] = log;
+              return acc;
+            }, {});
+          }
+          set({ ...restData, logs: parsedLogs, isActive: true, isLoading: false });
         } catch (error: any) {
           set({ error: error.message || 'Failed to start challenge', isLoading: false });
           throw error;

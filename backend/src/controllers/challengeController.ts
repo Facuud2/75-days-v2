@@ -71,9 +71,14 @@ export const startChallenge = async (req: AuthRequest, res: Response) => {
         });
 
         const today = format(new Date(), 'yyyy-MM-dd');
-        const templatesToUse = difficulty === 'Custom' && customGoalsTemplate
+
+        if (difficulty === 'Custom' && (!customGoalsTemplate || customGoalsTemplate.length === 0)) {
+            return res.status(400).json({ error: 'Custom plans require at least one custom goal.' });
+        }
+
+        const templatesToUse = (difficulty === 'Custom' && customGoalsTemplate)
             ? customGoalsTemplate
-            : DEFAULT_GOALS[difficulty as keyof typeof DEFAULT_GOALS];
+            : DEFAULT_GOALS[difficulty as keyof typeof DEFAULT_GOALS] ?? DEFAULT_GOALS['Hard'];
 
         const challenge = await prisma.challenge.create({
             data: {

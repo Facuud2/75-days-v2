@@ -4,7 +4,7 @@ import { ChallengeState, Difficulty, GoalTemplate } from '../../store/useChallen
 // Maps to the backend Challenge API
 export interface StartChallengeData {
     difficulty: Difficulty;
-    customGoals?: GoalTemplate[];
+    customGoalsTemplate?: GoalTemplate[];
 }
 
 export const challengeService = {
