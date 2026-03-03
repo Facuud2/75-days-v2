@@ -94,7 +94,9 @@ export const useChallengeStore = create<ChallengeState>()(
             let parsedLogs = get().logs;
             if (Array.isArray(dailyLogs)) {
               parsedLogs = dailyLogs.reduce((acc: any, log: any) => {
-                acc[log.date] = log;
+                // Normalize Prisma ISO date (e.g. "2026-03-03T00:00:00.000Z") to "YYYY-MM-DD"
+                const dateKey = typeof log.date === 'string' ? log.date.slice(0, 10) : log.date;
+                acc[dateKey] = { ...log, date: dateKey, goals: log.goals ?? [] };
                 return acc;
               }, {});
             }
@@ -114,7 +116,8 @@ export const useChallengeStore = create<ChallengeState>()(
           let parsedLogs = get().logs;
           if (Array.isArray(dailyLogs)) {
             parsedLogs = dailyLogs.reduce((acc: any, log: any) => {
-              acc[log.date] = log;
+              const dateKey = typeof log.date === 'string' ? log.date.slice(0, 10) : log.date;
+              acc[dateKey] = { ...log, date: dateKey, goals: log.goals ?? [] };
               return acc;
             }, {});
           }
@@ -151,22 +154,32 @@ export const useChallengeStore = create<ChallengeState>()(
         // Optimistic update
         set((state) => {
           const log = state.logs[date];
-          if (!log) return state;
-          const updatedGoals = log.goals.map(g => g.id === goalId ? { ...g, completed } : g);
+          if (!log || !Array.isArray(log.goals)) return state;
+          const updatedGoals = log.goals.map((g: any) => g.id === goalId ? { ...g, completed } : g);
           return { logs: { ...state.logs, [date]: { ...log, goals: updatedGoals } } };
         });
 
         try {
-          const updatedLog = await logService.updateGoalStatus(date, goalId, completed);
-          set((state) => ({
-            logs: { ...state.logs, [date]: updatedLog }
-          }));
+          const response = await logService.updateGoalStatus(date, goalId, completed);
+          // Only sync the status from backend — keep the optimistic goals in state
+          // to avoid any shape mismatch from the Prisma response wiping out goals
+          set((state) => {
+            const log = state.logs[date];
+            if (!log) return state;
+            return {
+              logs: {
+                ...state.logs,
+                [date]: { ...log, status: (response as any).status ?? log.status }
+              }
+            };
+          });
         } catch (error: any) {
           // Revert optimistic update on failure
           set({ logs: previousLogs, error: error.message || 'Failed to update goal' });
           throw error;
         }
       },
+
 
       logDailyMetrics: async (date, metrics) => {
         set({ isLoading: true, error: null });

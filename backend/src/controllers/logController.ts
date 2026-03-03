@@ -86,7 +86,12 @@ export const updateGoalStatus = async (req: AuthRequest, res: Response) => {
             });
         }
 
-        res.json({ message: 'Goal updated' });
+        const updatedLog = await prisma.dailyLog.findUnique({
+            where: { id: log.id },
+            include: { goals: true }
+        });
+
+        res.json(updatedLog);
     } catch (error) {
         if (error instanceof z.ZodError) {
             return res.status(400).json({ error: 'Validation failed', details: error.issues });

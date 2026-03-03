@@ -12,10 +12,10 @@ export const logService = {
         return apiClient<DailyLog[]>('/logs');
     },
 
-    updateGoalStatus: (date: string, goalId: string, status: boolean) => {
+    updateGoalStatus: (date: string, goalId: string, completed: boolean) => {
         return apiClient<DailyLog>(`/logs/${date}/goal/${goalId}`, {
             method: 'PUT',
-            body: JSON.stringify({ status }),
+            body: JSON.stringify({ completed }),
         });
     },
 
