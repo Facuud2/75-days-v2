@@ -37,6 +37,7 @@ export default function Dashboard() {
   const todayLog = logs[todayStr];
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [currentMonthDate, setCurrentMonthDate] = useState(new Date());
+  const [updatingGoalId, setUpdatingGoalId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isActive) {
@@ -107,21 +108,45 @@ export default function Dashboard() {
   // Determine current active plan name mapped to UI strings
   const currentPlanName = useChallengeStore.getState().difficulty || 'Activo';
 
+
   const renderGoalItem = (goal: any) => {
     const IconComponent = iconMap[goal.icon || 'target'] || Target;
+    const isThisUpdating = updatingGoalId === goal.id;
+    const isLocked = updatingGoalId !== null && !isThisUpdating;
+
+    const handleClick = async () => {
+      if (updatingGoalId !== null) return;
+      setUpdatingGoalId(goal.id);
+      try {
+        await logDailyGoal(todayStr, goal.id, !goal.completed);
+      } finally {
+        setUpdatingGoalId(null);
+      }
+    };
 
     return (
       <div
         key={goal.id}
-        onClick={() => logDailyGoal(todayStr, goal.id, !goal.completed)}
-        className={`group bg-[#1c0f16] border rounded-2xl p-5 flex items-center gap-5 cursor-pointer transition-all duration-300 ${goal.completed
-          ? 'border-[#f43f5e]/30 bg-[#f43f5e]/5'
-          : 'border-[#361726] hover:border-[#f43f5e]/50 hover:bg-[#26151e]'
+        onClick={handleClick}
+        className={`group bg-[#1c0f16] border rounded-2xl p-5 flex items-center gap-5 transition-all duration-300 ${isLocked
+            ? 'border-[#361726] opacity-40 cursor-not-allowed select-none'
+            : isThisUpdating
+              ? 'border-[#f43f5e]/20 cursor-wait'
+              : goal.completed
+                ? 'border-[#f43f5e]/30 bg-[#f43f5e]/5 cursor-pointer'
+                : 'border-[#361726] hover:border-[#f43f5e]/50 hover:bg-[#26151e] cursor-pointer'
           }`}
       >
-        <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${goal.completed ? 'bg-[#f43f5e]/20 text-[#f43f5e]' : 'bg-[#361726]/50 text-[#f43f5e]/70 group-hover:text-[#f43f5e]'
+        <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${isThisUpdating
+            ? 'bg-white/10 text-white/40'
+            : goal.completed
+              ? 'bg-[#f43f5e]/20 text-[#f43f5e]'
+              : 'bg-[#361726]/50 text-[#f43f5e]/70 group-hover:text-[#f43f5e]'
           }`}>
-          <IconComponent size={24} strokeWidth={1.5} />
+          {isThisUpdating
+            ? <div className="w-5 h-5 rounded-full border-2 border-white/20 border-t-white/60 animate-spin" />
+            : <IconComponent size={24} strokeWidth={1.5} />
+          }
         </div>
 
         <div className="flex-1">
@@ -133,15 +158,18 @@ export default function Dashboard() {
           </p>
         </div>
 
-        <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${goal.completed
-          ? 'bg-[#f43f5e] border-[#f43f5e] scale-110 shadow-[0_0_15px_rgba(244,63,94,0.5)]'
-          : 'border-[#361726] group-hover:border-[#f43f5e]/50'
+        <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${isThisUpdating
+            ? 'border-white/20'
+            : goal.completed
+              ? 'bg-[#f43f5e] border-[#f43f5e] scale-110 shadow-[0_0_15px_rgba(244,63,94,0.5)]'
+              : 'border-[#361726] group-hover:border-[#f43f5e]/50'
           }`}>
-          {goal.completed && <Check size={16} className="text-white" strokeWidth={3} />}
+          {goal.completed && !isThisUpdating && <Check size={16} className="text-white" strokeWidth={3} />}
         </div>
       </div>
     );
   };
+
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 animate-in fade-in">
