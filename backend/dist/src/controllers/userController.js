@@ -74,6 +74,7 @@ const getProfile = async (req, res) => {
                 registeredAt: user.registeredAt,
                 initialWeight: initialWeight,
                 currentWeight: bestWeight || initialWeight,
+                targetWeight: user.targetWeight || 0,
                 weightHistory,
             },
             stats: {

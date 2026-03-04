@@ -38,9 +38,10 @@ export const authService = {
         return apiClient<{ user: User }>('/auth/me');
     },
 
-    completeOnboarding: () => {
+    completeOnboarding: (data?: Partial<User>) => {
         return apiClient<{ user: User }>('/auth/complete-onboarding', {
             method: 'PATCH',
+            body: data ? JSON.stringify(data) : undefined,
         });
     },
 };

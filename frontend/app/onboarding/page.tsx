@@ -15,6 +15,7 @@ export default function Onboarding() {
   // Step 1: Biometrics
   const [age, setAge] = useState('');
   const [weight, setWeight] = useState('');
+  const [targetWeight, setTargetWeight] = useState('');
   const [height, setHeight] = useState('');
 
   // Step 2: Side Quests
@@ -62,6 +63,7 @@ export default function Onboarding() {
       updateProfile({
         age: parseInt(age),
         weight: parseFloat(weight),
+        targetWeight: targetWeight ? parseFloat(targetWeight) : undefined,
         height: parseFloat(height),
       });
       setStep(2);
@@ -137,6 +139,20 @@ export default function Onboarding() {
                   onChange={e => setWeight(e.target.value)}
                   className="w-full px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-800 border-none outline-none"
                   placeholder="ej. 75.5"
+                  min={0.1}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  Meta de peso (kg) <span className="text-zinc-500 font-normal text-xs ml-1">(Opcional)</span>
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={targetWeight}
+                  onChange={e => setTargetWeight(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-800 border-none outline-none"
+                  placeholder="ej. 70.0"
                   min={0.1}
                 />
               </div>

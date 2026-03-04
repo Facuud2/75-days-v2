@@ -117,11 +117,24 @@ const abandonChallenge = async (req, res) => {
         if (!challenge) {
             return res.status(404).json({ error: 'No active challenge found' });
         }
-        await prisma_1.prisma.challenge.update({
-            where: { id: challenge.id },
-            data: { isActive: false }
-        });
-        res.json({ message: 'Challenge abandoned' });
+        const startDate = new Date(challenge.startDate);
+        const now = new Date();
+        const differenceInHours = Math.abs(now.getTime() - startDate.getTime()) / 36e5;
+        if (differenceInHours < 24) {
+            // Delete false start
+            await prisma_1.prisma.challenge.delete({
+                where: { id: challenge.id }
+            });
+            res.json({ message: 'Challenge deleted (active < 24h)' });
+        }
+        else {
+            // Preserve history
+            await prisma_1.prisma.challenge.update({
+                where: { id: challenge.id },
+                data: { isActive: false }
+            });
+            res.json({ message: 'Challenge marked inactive (history preserved)' });
+        }
     }
     catch (error) {
         res.status(500).json({ error: 'Internal server error' });

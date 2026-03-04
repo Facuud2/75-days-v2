@@ -178,19 +178,47 @@ export const getMe = async (req: AuthRequest, res: Response) => {
     }
 };
 
+const completeOnboardingSchema = z.object({
+    age: z.number().optional(),
+    weight: z.number().optional(),
+    targetWeight: z.number().optional(),
+    height: z.number().optional(),
+});
+
 export const completeOnboarding = async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user?.id;
         if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
+        const bodyData = completeOnboardingSchema.parse(req.body);
+
         const user = await prisma.user.update({
             where: { id: userId },
-            data: { onboardingCompleted: true },
-            select: { id: true, name: true, email: true, age: true, weight: true, height: true, registeredAt: true, onboardingCompleted: true }
+            data: {
+                onboardingCompleted: true,
+                age: bodyData.age,
+                weight: bodyData.weight,
+                height: bodyData.height,
+                targetWeight: bodyData.targetWeight
+            },
+            select: {
+                id: true,
+                name: true,
+                email: true,
+                age: true,
+                weight: true,
+                targetWeight: true,
+                height: true,
+                registeredAt: true,
+                onboardingCompleted: true
+            }
         });
 
         res.json({ user });
     } catch (error) {
+        if (error instanceof z.ZodError) {
+            return res.status(400).json({ error: 'Validation failed', details: error.issues });
+        }
         res.status(500).json({ error: 'Internal server error' });
     }
 };

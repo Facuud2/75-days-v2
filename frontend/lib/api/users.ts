@@ -8,6 +8,7 @@ export interface UserProfileResponse {
         registeredAt: string;
         initialWeight: number;
         currentWeight: number;
+        targetWeight: number;
         weightHistory?: { date: string; weight: number }[];
     };
     stats: {

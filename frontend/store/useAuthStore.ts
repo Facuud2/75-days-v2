@@ -8,6 +8,7 @@ export interface User {
   email: string;
   age?: number;
   weight?: number;
+  targetWeight?: number;
   height?: number;
   registeredAt: string;
   onboardingCompleted: boolean;
@@ -29,7 +30,7 @@ interface AuthState {
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       user: null,
       token: null,
       isAuthenticated: false,
@@ -81,9 +82,18 @@ export const useAuthStore = create<AuthState>()(
 
       completeOnboarding: async () => {
         try {
-          const { user } = await authService.completeOnboarding();
-          set((state) => ({
-            user: state.user ? { ...state.user, ...user } : user,
+          const state = get();
+
+          // Send the cached onboarding payload (age, weight, targetWeight, height) up to sync
+          const { user } = await authService.completeOnboarding({
+            age: state.user?.age,
+            weight: state.user?.weight,
+            targetWeight: state.user?.targetWeight,
+            height: state.user?.height,
+          });
+
+          set((s) => ({
+            user: s.user ? { ...s.user, ...user } : user,
           }));
         } catch (error: any) {
           console.error('Failed to complete onboarding:', error);

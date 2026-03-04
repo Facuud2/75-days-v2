@@ -170,7 +170,9 @@ export const useChallengeStore = create<ChallengeState>()(
               logs: {
                 ...state.logs,
                 [date]: { ...log, status: (response as any).status ?? log.status }
-              }
+              },
+              streak: (response as any).challengeStreak ?? state.streak,
+              points: (response as any).challengePoints ?? state.points
             };
           });
         } catch (error: any) {
@@ -184,7 +186,11 @@ export const useChallengeStore = create<ChallengeState>()(
       logDailyMetrics: async (date, metrics) => {
         set({ isLoading: true, error: null });
         try {
-          const updatedLog = await logService.updateMetrics(date, metrics);
+          const updatedLog = await logService.updateMetrics(date, metrics) as any;
+          // Normalize Prisma ISO date back to YYYY-MM-DD format
+          const formattedDate = typeof updatedLog.date === 'string' ? updatedLog.date.slice(0, 10) : updatedLog.date;
+          updatedLog.date = formattedDate;
+
           set((state) => {
             const bestWeight = (metrics.weight && (state.bestWeight === null || metrics.weight < state.bestWeight))
               ? metrics.weight

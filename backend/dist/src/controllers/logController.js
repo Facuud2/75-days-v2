@@ -61,7 +61,10 @@ const updateGoalStatus = async (req, res) => {
             });
             await prisma_1.prisma.challenge.update({
                 where: { id: challenge.id },
-                data: { points: challenge.points + 10 }
+                data: {
+                    points: challenge.points + 10,
+                    streak: challenge.streak + 1
+                }
             });
         }
         else if (!allCompleted && log.status === 'success') {
@@ -71,14 +74,24 @@ const updateGoalStatus = async (req, res) => {
             });
             await prisma_1.prisma.challenge.update({
                 where: { id: challenge.id },
-                data: { points: Math.max(0, challenge.points - 10) }
+                data: {
+                    points: Math.max(0, challenge.points - 10),
+                    streak: Math.max(0, challenge.streak - 1)
+                }
             });
         }
         const updatedLog = await prisma_1.prisma.dailyLog.findUnique({
             where: { id: log.id },
             include: { goals: true }
         });
-        res.json(updatedLog);
+        const updatedChallenge = await prisma_1.prisma.challenge.findUnique({
+            where: { id: challenge.id }
+        });
+        res.json({
+            ...updatedLog,
+            challengeStreak: updatedChallenge?.streak,
+            challengePoints: updatedChallenge?.points
+        });
     }
     catch (error) {
         if (error instanceof zod_1.z.ZodError) {
@@ -106,9 +119,10 @@ const updateMetrics = async (req, res) => {
             return res.status(404).json({ error: 'Challenge or Log not found' });
         }
         const log = challenge.dailyLogs[0];
-        await prisma_1.prisma.dailyLog.update({
+        const updatedLog = await prisma_1.prisma.dailyLog.update({
             where: { id: log.id },
-            data: { weight, photoUrl, notes }
+            data: { weight, photoUrl, notes },
+            include: { goals: true }
         });
         if (weight) {
             const best = challenge.bestWeight;
@@ -119,7 +133,7 @@ const updateMetrics = async (req, res) => {
                 });
             }
         }
-        res.json({ message: 'Metrics updated' });
+        res.json(updatedLog);
     }
     catch (error) {
         if (error instanceof zod_1.z.ZodError) {
@@ -147,6 +161,7 @@ const checkDailyReset = async (req, res) => {
         const yesterdayLog = logs.find((l) => l.date === yesterday);
         const todayLog = logs.find((l) => l.date === today);
         let newStreak = challenge.streak;
+        const currentDayNumber = (0, date_fns_1.differenceInDays)(new Date(), new Date(challenge.startDate)) + 1;
         if (yesterdayLog) {
             if (yesterdayLog.status !== 'success') {
                 newStreak = 0;
@@ -157,20 +172,19 @@ const checkDailyReset = async (req, res) => {
                     });
                 }
             }
-            else {
-                newStreak++;
-            }
         }
         else if ((0, date_fns_1.differenceInDays)(new Date(), new Date(challenge.startDate)) > 0) {
             newStreak = 0;
         }
-        await prisma_1.prisma.challenge.update({
-            where: { id: challenge.id },
-            data: {
-                streak: newStreak,
-                currentDay: (0, date_fns_1.differenceInDays)(new Date(), new Date(challenge.startDate)) + 1
-            }
-        });
+        if (challenge.streak !== newStreak || challenge.currentDay !== currentDayNumber) {
+            await prisma_1.prisma.challenge.update({
+                where: { id: challenge.id },
+                data: {
+                    streak: newStreak,
+                    currentDay: currentDayNumber
+                }
+            });
+        }
         if (!todayLog) {
             await prisma_1.prisma.dailyLog.create({
                 data: {

@@ -41,14 +41,18 @@ export default function Profile() {
 
   if (!user || loadingProfile) return <div className="p-8 text-center text-zinc-400 min-h-screen bg-zinc-950">Cargando perfil...</div>;
 
-  const mockWeightLost = profileData?.stats.totalWeightLost || 0;
+  const mockWeightLost = Number((profileData?.stats.totalWeightLost || 0).toFixed(2));
   const mockChallengesCount = profileData?.stats.totalChallengesCompleted || 0;
   const mockTotalDays = profileData?.stats.totalDaysCompleted || 0;
 
   const mockInitialWeight = profileData?.user.initialWeight || 0;
-  const mockGoalWeight = 72.5; // Not currently in DB
+  const mockGoalWeight = profileData?.user.targetWeight || 0;
   const mockCurrentWeight = profileData?.user.currentWeight || 0;
-  const mockToLose = Math.max(0, mockCurrentWeight - mockGoalWeight).toFixed(1);
+
+  // Only calculate "to lose" if a goal is set and we're above it
+  const mockToLose = mockGoalWeight > 0
+    ? Math.max(0, mockCurrentWeight - mockGoalWeight).toFixed(1)
+    : "0.0";
 
   const weightHistoryData = profileData?.user.weightHistory || [];
 
@@ -313,14 +317,14 @@ export default function Profile() {
             </div>
           </div>
 
-          {/* Recent Activity Widget */}
+          {/* Recent Activity Widget
           <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6">
             <h3 className="text-sm font-semibold flex items-center gap-2 mb-5 text-zinc-300">
               <BarChart3 className="w-4 h-4 text-rose-400" />
               Actividad Reciente
             </h3>
 
-            {/* Mock bar chart */}
+            Refactored Mock bar chart
             <div className="flex items-end justify-between h-20 mb-6 gap-1">
               {[40, 60, 45, 80, 50, 90, 100].map((height, i) => (
                 <div key={i} className="flex-1 bg-rose-500/20 hover:bg-rose-500/40 transition-colors rounded-t-sm relative group cursor-pointer" style={{ height: `${height}%` }}>
@@ -355,8 +359,9 @@ export default function Profile() {
               </div>
             </div>
           </div>
+          */}
 
-          {/* Global Stats Widget */}
+          {/* Global Stats Widget
           <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6">
             <h3 className="text-sm font-semibold flex items-center gap-2 mb-5 text-zinc-300">
               <Target className="w-4 h-4 text-yellow-500" />
@@ -395,9 +400,10 @@ export default function Profile() {
               </div>
             </div>
           </div>
+          */}
 
           {/* Total Metrics Widget */}
-          <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6">
+          {/* <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6">
             <h3 className="text-sm font-semibold flex items-center gap-2 mb-4 text-zinc-300">
               <Zap className="w-4 h-4 text-orange-400" />
               Métricas Totales
@@ -420,7 +426,7 @@ export default function Profile() {
                 <span className="text-zinc-100 font-medium">{mockBMI}</span>
               </div>
             </div>
-          </div>
+          </div> */}
 
         </div>
       </div>
