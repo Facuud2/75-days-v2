@@ -16,6 +16,17 @@ export interface UserProfileResponse {
         totalDaysCompleted: number;
         totalWeightLost: number;
     };
+    achievements: {
+        id: string;
+        title: string;
+        description: string;
+        icon: string;
+        color: string;
+        unlocked: boolean;
+        unlockedAt: string | null;
+        progress: number;
+        total: number;
+    }[];
 }
 
 export const userService = {

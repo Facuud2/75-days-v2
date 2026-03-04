@@ -13,7 +13,9 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
                     include: {
                         dailyLogs: true
                     }
-                }
+                },
+                sideQuests: true,
+                achievements: true
             }
         });
 
@@ -25,6 +27,8 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
         let totalChallengesCompleted = 0;
         let totalDaysCompleted = 0;
         let totalWeightLost = 0;
+        let maxStreak = 0;
+        let weightLogsCount = 0;
 
         let bestWeight = user.weight || 0;
         const initialWeight = user.weight || 0;
@@ -39,6 +43,9 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
 
         for (const challenge of user.challenges) {
             totalChallengesCompleted += challenge.challengesCompleted;
+            if (challenge.streak > maxStreak) {
+                maxStreak = challenge.streak;
+            }
 
             // Count successful days from logs
             const successfulLogs = challenge.dailyLogs.filter(log => log.status === 'success');
@@ -46,6 +53,7 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
 
             for (const log of challenge.dailyLogs) {
                 if (log.weight) {
+                    weightLogsCount++;
                     if (bestWeight === 0 || log.weight < bestWeight) {
                         bestWeight = log.weight;
                     }
@@ -77,6 +85,59 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
             return a.date.localeCompare(b.date);
         });
 
+        // Achievements Logic
+        const completedSideQuests = user.sideQuests.filter(sq => sq.completed).length;
+
+        const achievementDefinitions = [
+            { id: '1', title: 'Primer Paso', description: 'Completar el primer día de un desafío.', icon: '🏆', color: 'bg-yellow-500/20 text-yellow-500', total: 1, currentProgress: totalDaysCompleted },
+            { id: '2', title: 'Constancia', description: 'Alcanzar una racha de 7 días.', icon: '🔥', color: 'bg-orange-500/20 text-orange-500', total: 7, currentProgress: maxStreak },
+            { id: '3', title: 'Disciplina', description: 'Completar un desafío de 75 días.', icon: '🎯', color: 'bg-rose-500/20 text-rose-500', total: 1, currentProgress: totalChallengesCompleted },
+            { id: '4', title: 'Fuerza de Voluntad', description: 'Registrar el peso durante 10 días.', icon: '⚖️', color: 'bg-blue-500/20 text-blue-500', total: 10, currentProgress: weightLogsCount },
+            { id: '5', title: 'Aventurero', description: 'Completar tu primera misión secundaria.', icon: '🗺️', color: 'bg-green-500/20 text-green-500', total: 1, currentProgress: completedSideQuests },
+            { id: '6', title: 'Transformación', description: 'Perder tus primeros 5 kg.', icon: '✨', color: 'bg-purple-500/20 text-purple-500', total: 5, currentProgress: totalWeightLost },
+        ];
+
+        const updatedAchievements = [];
+
+        for (const def of achievementDefinitions) {
+            const existing = user.achievements.find(a => a.title === def.title);
+            const progress = Math.min(Math.floor(def.currentProgress), def.total);
+            const unlocked = progress >= def.total;
+
+            if (existing) {
+                // Update if changed
+                if (existing.progress !== progress || existing.unlocked !== unlocked) {
+                    const updated = await prisma.achievement.update({
+                        where: { id: existing.id },
+                        data: {
+                            progress,
+                            unlocked,
+                            unlockedAt: unlocked && !existing.unlocked ? new Date() : existing.unlockedAt
+                        }
+                    });
+                    updatedAchievements.push(updated);
+                } else {
+                    updatedAchievements.push(existing);
+                }
+            } else {
+                // Create
+                const created = await prisma.achievement.create({
+                    data: {
+                        userId,
+                        title: def.title,
+                        description: def.description,
+                        icon: def.icon,
+                        color: def.color,
+                        progress,
+                        total: def.total,
+                        unlocked,
+                        unlockedAt: unlocked ? new Date() : null
+                    }
+                });
+                updatedAchievements.push(created);
+            }
+        }
+
         res.json({
             user: {
                 id: user.id,
@@ -92,7 +153,8 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
                 totalChallengesCompleted,
                 totalDaysCompleted,
                 totalWeightLost,
-            }
+            },
+            achievements: updatedAchievements
         });
     } catch (error) {
         console.error('Error fetching profile:', error);

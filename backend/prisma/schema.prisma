@@ -21,6 +21,7 @@ model User {
   
   challenges   Challenge[]
   sideQuests   SideQuest[]
+  achievements Achievement[]
 }
 
 model Challenge {
@@ -87,4 +88,21 @@ model SideQuest {
   completed    Boolean   @default(false)
 
   user         User      @relation(fields: [userId], references: [id])
+}
+
+model Achievement {
+  id          String    @id @default(uuid())
+  userId      String
+  title       String
+  description String
+  icon        String
+  color       String
+  unlocked    Boolean   @default(false)
+  unlockedAt  DateTime?
+  progress    Int       @default(0)
+  total       Int
+
+  user        User      @relation(fields: [userId], references: [id])
+
+  @@unique([userId, title]) // Ensure users don't have duplicate achievements of the same type
 }

@@ -7,6 +7,7 @@ import { userService, UserProfileResponse } from '@/lib/api/users';
 import { format } from 'date-fns';
 import { Trophy, Calendar, Scale, Award, Flame, Target, ChevronRight, CheckCircle2, Lock, Activity, BarChart3, Footprints, Clock, Zap } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
+import AchievementsModal from '@/components/AchievementsModal';
 
 export default function Profile() {
   const { user } = useAuthStore();
@@ -24,6 +25,7 @@ export default function Profile() {
 
   const [profileData, setProfileData] = useState<UserProfileResponse | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
+  const [isAchievementsModalOpen, setIsAchievementsModalOpen] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -66,9 +68,10 @@ export default function Profile() {
   const mockTotalCals = 0;
   const mockBMI = 0;
 
-  // Empty achievements as requested, empty completed challenges
   const mockCompletedChallenges: any[] = [];
-  const mockAchievementsList: any[] = [];
+  const achievementsList = profileData?.achievements || [];
+  const unlockedAchievementsCount = achievementsList.filter(a => a.unlocked).length;
+  const achievementsPercentage = achievementsList.length > 0 ? Math.round((unlockedAchievementsCount / achievementsList.length) * 100) : 0;
 
   const level = Math.floor(points / 100) + 1;
 
@@ -198,48 +201,58 @@ export default function Profile() {
           </div>
 
           {/* Achievements Section */}
-          <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6">
-            <div className="flex items-center text-zinc-100 justify-between mb-6 pb-4 border-b border-zinc-800/50">
+          <div
+            className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6 cursor-pointer hover:border-zinc-700 transition-colors group relative overflow-hidden"
+            onClick={() => setIsAchievementsModalOpen(true)}
+          >
+            {/* Subtle interactive hover highlight */}
+            <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
+
+            <div className="flex items-center text-zinc-100 justify-between mb-6 pb-4 border-b border-zinc-800/50 relative z-10">
               <div className="flex items-center gap-3">
                 <div className="bg-yellow-500/20 p-2 rounded-lg">
                   <Award className="text-yellow-500 w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold leading-tight">Logros</h2>
-                  <p className="text-sm text-zinc-400">3 de 6 desbloqueados</p>
+                  <h2 className="text-lg font-semibold leading-tight group-hover:text-yellow-400 transition-colors flex items-center gap-2">
+                    Logros <ChevronRight className="w-4 h-4 opacity-50 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
+                  </h2>
+                  <p className="text-sm text-zinc-400">{unlockedAchievementsCount} de {achievementsList.length} desbloqueados</p>
                 </div>
               </div>
               <div className="text-right">
-                <span className="text-xl font-bold">50%</span>
+                <span className="text-xl font-bold">{achievementsPercentage}%</span>
                 <p className="text-xs text-zinc-500">Completado</p>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {mockAchievementsList.map((ach, i) => (
-                <div key={i} className={`p-4 rounded-xl border flex gap-4 ${ach.unlocked
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 relative z-10">
+              {achievementsList.slice(0, 4).map((ach) => (
+                <div key={ach.id} className={`p-4 rounded-xl border flex gap-4 ${ach.unlocked
                   ? 'bg-zinc-950/40 border-zinc-800'
                   : 'bg-zinc-950/20 border-zinc-800/40 opacity-70'
                   }`}>
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${ach.color}`}>
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 text-xl shadow-inner ${ach.color}`}>
                     {ach.icon}
                   </div>
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between mb-1">
-                      <h4 className="font-semibold text-sm">{ach.title}</h4>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-1 gap-2">
+                      <h4 className="font-semibold text-sm truncate">{ach.title}</h4>
                       {ach.unlocked && <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />}
                     </div>
-                    <p className="text-xs text-zinc-400 mb-2">{ach.desc}</p>
+                    <p className="text-xs text-zinc-400 line-clamp-1 mb-2">{ach.description}</p>
 
                     {ach.unlocked ? (
-                      <span className="text-[10px] text-rose-400 font-medium">Desbloqueado el {ach.date}</span>
+                      <span className="text-[10px] text-yellow-500/80 font-medium">
+                        Desbloqueado {ach.unlockedAt ? new Date(ach.unlockedAt).toLocaleDateString() : ''}
+                      </span>
                     ) : (
                       <div className="flex items-center gap-2 mt-auto">
                         <span className="text-[10px] text-zinc-500">Progreso</span>
                         <div className="flex-1 h-1 bg-zinc-800 rounded-full overflow-hidden">
                           <div
-                            className="h-full bg-rose-500/50 rounded-full"
-                            style={{ width: `${(ach.progress! / ach.total!) * 100}%` }}
+                            className="h-full bg-zinc-600 rounded-full transition-all duration-1000 ease-out"
+                            style={{ width: `${Math.min(100, (ach.progress / ach.total) * 100)}%` }}
                           />
                         </div>
                         <span className="text-[10px] text-zinc-500">{ach.progress} / {ach.total}</span>
@@ -249,6 +262,12 @@ export default function Profile() {
                 </div>
               ))}
             </div>
+
+            {achievementsList.length > 4 && (
+              <div className="mt-4 text-center text-xs text-zinc-500 group-hover:text-zinc-400 transition-colors">
+                Haz clic para ver los {achievementsList.length} logros
+              </div>
+            )}
           </div>
 
         </div>
@@ -430,6 +449,12 @@ export default function Profile() {
 
         </div>
       </div>
+
+      <AchievementsModal
+        isOpen={isAchievementsModalOpen}
+        onClose={() => setIsAchievementsModalOpen(false)}
+        achievements={achievementsList}
+      />
     </div>
   );
 }
