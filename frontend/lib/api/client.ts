@@ -39,6 +39,21 @@ export async function apiClient<T>(
     const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
 
     if (!response.ok) {
+        if (response.status === 401) {
+            const isAuthEndpoint = endpoint.includes('/auth/login') || endpoint.includes('/auth/register') || endpoint.includes('/auth/me');
+            if (!isAuthEndpoint) {
+                if (typeof window !== 'undefined') {
+                    localStorage.removeItem('auth-storage');
+                    const currentPath = window.location.pathname;
+                    if (currentPath !== '/login' && currentPath !== '/register' && currentPath !== '/') {
+                        window.location.href = '/login';
+                        // Retornamos una promesa que nunca se resuelve para suspender la ejecución mientras redirige
+                        return new Promise(() => { }) as Promise<T>;
+                    }
+                }
+            }
+        }
+
         const errorBody = await response.json().catch(() => ({}));
         let errorMessage = errorBody.message || errorBody.error || `API request failed with status ${response.status}`;
 

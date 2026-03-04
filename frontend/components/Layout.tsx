@@ -112,12 +112,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <span className="text-[10px] mt-1 hidden sm:block">Planes</span>
               </button>
               <Link href="/profile" className={`flex flex-col items-center p-2 transition-colors ${pathname === '/profile' ? 'text-white' : 'text-white/50 hover:text-white'}`}>
-                <Trophy size={20} />
-                <span className="text-[10px] mt-1 hidden sm:block">Logros</span>
-              </Link>
-              <Link href="/settings" className={`flex flex-col items-center p-2 transition-colors ${pathname === '/settings' ? 'text-white' : 'text-white/50 hover:text-white'}`}>
                 <User size={20} />
                 <span className="text-[10px] mt-1 hidden sm:block">Perfil</span>
+              </Link>
+              <Link href="/settings" className={`flex flex-col items-center p-2 transition-colors ${pathname === '/settings' ? 'text-white' : 'text-white/50 hover:text-white'}`}>
+                <Settings size={20} />
+                <span className="text-[10px] mt-1 hidden sm:block">Ajustes</span>
               </Link>
               <button onClick={toggleTheme} className="p-2 text-white/50 hover:text-white transition-colors rounded-full border border-white/10 ml-2 hidden sm:block">
                 {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
@@ -147,10 +147,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <Target size={24} />
           </button>
           <Link href="/profile" className={`flex flex-col items-center p-2 ${pathname === '/profile' ? 'text-white' : 'text-white/50'}`}>
-            <Trophy size={24} />
+            <User size={24} />
           </Link>
           <Link href="/settings" className={`flex flex-col items-center p-2 ${pathname === '/settings' ? 'text-white' : 'text-white/50'}`}>
-            <User size={24} />
+            <Settings size={24} />
           </Link>
         </nav>
       )}
