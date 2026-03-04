@@ -1,16 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useChallengeStore } from '@/store/useChallengeStore';
 import { userService, UserProfileResponse } from '@/lib/api/users';
 import { format } from 'date-fns';
-import { Trophy, Calendar, Scale, Award, Flame, Target, ChevronRight, CheckCircle2, Lock, Activity, BarChart3, Footprints, Clock, Zap } from 'lucide-react';
+import { Trophy, Calendar, Scale, Award, Flame, Target, ChevronRight, CheckCircle2, Lock, Activity, BarChart3, Footprints, Clock, Zap, Pencil } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import AchievementsModal from '@/components/AchievementsModal';
+import EditProfileModal from '@/components/EditProfileModal';
 
 export default function Profile() {
-  const { user } = useAuthStore();
+  const { user, updateProfile: updateAuthUser } = useAuthStore();
   const {
     isActive,
     difficulty,
@@ -26,8 +27,9 @@ export default function Profile() {
   const [profileData, setProfileData] = useState<UserProfileResponse | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [isAchievementsModalOpen, setIsAchievementsModalOpen] = useState(false);
+  const [isEditProfileModalOpen, setIsEditProfileModalOpen] = useState(false);
 
-  useEffect(() => {
+  const fetchProfile = useCallback(() => {
     if (user) {
       userService.getProfile()
         .then(data => {
@@ -40,6 +42,10 @@ export default function Profile() {
         });
     }
   }, [user]);
+
+  useEffect(() => {
+    fetchProfile();
+  }, [fetchProfile]);
 
   if (!user || loadingProfile) return <div className="p-8 text-center text-zinc-400 min-h-screen bg-zinc-950">Cargando perfil...</div>;
 
@@ -108,6 +114,16 @@ export default function Profile() {
 
         {/* Key Stats Right */}
         <div className="flex flex-wrap md:flex-nowrap gap-3 md:gap-4 justify-center md:justify-end">
+          {/* Edit Profile Button */}
+          <button
+            onClick={() => setIsEditProfileModalOpen(true)}
+            className="bg-zinc-950/50 border border-zinc-800 hover:border-rose-500/50 p-4 rounded-xl flex flex-col items-center justify-center min-w-[100px] group transition-colors cursor-pointer"
+          >
+            <Pencil className="w-6 h-6 text-rose-400 mb-2 group-hover:scale-110 transition-transform" />
+            <span className="text-sm font-semibold group-hover:text-rose-400 transition-colors">Editar</span>
+            <span className="text-xs text-zinc-500">Perfil</span>
+          </button>
+
           <div className="bg-zinc-950/50 border border-zinc-800 p-4 rounded-xl flex flex-col items-center justify-center min-w-[100px]">
             <Flame className="w-6 h-6 text-orange-500 mb-2" />
             <span className="text-xl font-bold">{streak} días</span>
@@ -454,6 +470,33 @@ export default function Profile() {
         isOpen={isAchievementsModalOpen}
         onClose={() => setIsAchievementsModalOpen(false)}
         achievements={achievementsList}
+      />
+
+      <EditProfileModal
+        isOpen={isEditProfileModalOpen}
+        onClose={() => setIsEditProfileModalOpen(false)}
+        onSaved={(updated) => {
+          // Immediately sync auth store with the new values —
+          // this triggers a re-render of every component that reads from useAuthStore()
+          updateAuthUser({
+            ...(updated.name !== undefined && { name: updated.name }),
+            ...(updated.email !== undefined && { email: updated.email }),
+            ...(updated.age !== undefined && { age: updated.age }),
+            ...(updated.weight !== undefined && { weight: updated.weight }),
+            ...(updated.targetWeight !== undefined && { targetWeight: updated.targetWeight }),
+            ...(updated.height !== undefined && { height: updated.height }),
+          });
+          // Also re-fetch profile stats (weight history, achievements, etc.)
+          fetchProfile();
+        }}
+        initialValues={{
+          name: user.name,
+          email: user.email,
+          age: user.age ?? undefined,
+          weight: user.weight ?? undefined,
+          targetWeight: user.targetWeight ?? undefined,
+          height: user.height ?? undefined,
+        }}
       />
     </div>
   );

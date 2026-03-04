@@ -1,4 +1,6 @@
 import { Request, Response } from 'express';
+import bcrypt from 'bcryptjs';
+import { z } from 'zod';
 import { prisma } from '../utils/prisma';
 import { AuthRequest } from '../middlewares/auth';
 
@@ -158,6 +160,90 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
         });
     } catch (error) {
         console.error('Error fetching profile:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// --- PUT /users/profile ---
+const updateProfileSchema = z.object({
+    name: z.string().min(2).optional(),
+    email: z.string().email().optional(),
+    age: z.number().int().positive().optional(),
+    weight: z.number().positive().optional(),
+    targetWeight: z.number().positive().optional(),
+    height: z.number().positive().optional(),
+});
+
+export const updateProfile = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user!.id;
+        const data = updateProfileSchema.parse(req.body);
+
+        // If email is being changed, make sure it's not already in use
+        if (data.email) {
+            const existing = await prisma.user.findFirst({
+                where: { email: data.email, NOT: { id: userId } }
+            });
+            if (existing) {
+                return res.status(400).json({ error: 'El email ya está en uso.' });
+            }
+        }
+
+        const user = await prisma.user.update({
+            where: { id: userId },
+            data: {
+                ...(data.name !== undefined && { name: data.name }),
+                ...(data.email !== undefined && { email: data.email }),
+                ...(data.age !== undefined && { age: data.age }),
+                ...(data.weight !== undefined && { weight: data.weight }),
+                ...(data.targetWeight !== undefined && { targetWeight: data.targetWeight }),
+                ...(data.height !== undefined && { height: data.height }),
+            },
+            select: {
+                id: true, name: true, email: true,
+                age: true, weight: true, targetWeight: true, height: true,
+                registeredAt: true, onboardingCompleted: true
+            }
+        });
+
+        res.json({ user });
+    } catch (error) {
+        if (error instanceof z.ZodError) {
+            return res.status(400).json({ error: 'Datos inválidos', details: error.issues });
+        }
+        console.error('Error updating profile:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// --- PUT /users/password ---
+const updatePasswordSchema = z.object({
+    currentPassword: z.string().min(1),
+    newPassword: z.string().min(6),
+});
+
+export const updatePassword = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user!.id;
+        const { currentPassword, newPassword } = updatePasswordSchema.parse(req.body);
+
+        const user = await prisma.user.findUnique({ where: { id: userId } });
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        const isMatch = await bcrypt.compare(currentPassword, user.passwordHash);
+        if (!isMatch) {
+            return res.status(400).json({ error: 'La contraseña actual es incorrecta.' });
+        }
+
+        const passwordHash = await bcrypt.hash(newPassword, 10);
+        await prisma.user.update({ where: { id: userId }, data: { passwordHash } });
+
+        res.json({ message: 'Contraseña actualizada correctamente.' });
+    } catch (error) {
+        if (error instanceof z.ZodError) {
+            return res.status(400).json({ error: 'Datos inválidos', details: error.issues });
+        }
+        console.error('Error updating password:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 };

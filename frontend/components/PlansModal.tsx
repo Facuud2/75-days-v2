@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useUIStore } from '@/store/useUIStore';
 import { useChallengeStore, Difficulty } from '@/store/useChallengeStore';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -76,6 +77,7 @@ const PLANS: {
   ];
 
 export default function PlansModal() {
+  const router = useRouter();
   const { isPlansModalOpen, closePlansModal } = useUIStore();
   const { startChallenge, isActive, difficulty: currentDifficulty } = useChallengeStore();
   const { user } = useAuthStore();
@@ -96,6 +98,7 @@ export default function PlansModal() {
     const formattedCustomGoals = customGoals.map(g => ({ title: g }));
     startChallenge(difficulty, difficulty === 'Custom' ? formattedCustomGoals : undefined);
     closePlansModal();
+    router.push('/dashboard');
   };
 
   const selectedPlan = PLANS.find(p => p.difficulty === difficulty);

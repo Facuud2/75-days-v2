@@ -29,8 +29,35 @@ export interface UserProfileResponse {
     }[];
 }
 
+export interface UpdateProfilePayload {
+    name?: string;
+    email?: string;
+    age?: number;
+    weight?: number;
+    targetWeight?: number;
+    height?: number;
+}
+
+export interface UpdatePasswordPayload {
+    currentPassword: string;
+    newPassword: string;
+}
+
 export const userService = {
     getProfile: () => {
         return apiClient<UserProfileResponse>('/users/profile');
     },
+    updateProfile: (payload: UpdateProfilePayload) => {
+        return apiClient<{ user: { id: string; name: string; email: string; age?: number; weight?: number; targetWeight?: number; height?: number } }>('/users/profile', {
+            method: 'PUT',
+            body: JSON.stringify(payload),
+        });
+    },
+    updatePassword: (payload: UpdatePasswordPayload) => {
+        return apiClient<{ message: string }>('/users/password', {
+            method: 'PUT',
+            body: JSON.stringify(payload),
+        });
+    },
 };
+
