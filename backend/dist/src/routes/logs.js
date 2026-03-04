@@ -1,0 +1,12 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const logController_1 = require("../controllers/logController");
+const auth_1 = require("../middlewares/auth");
+const router = (0, express_1.Router)();
+router.use(auth_1.authenticate);
+router.get('/', logController_1.getLogs);
+router.put('/:date/goal/:goalId', logController_1.updateGoalStatus);
+router.put('/:date/metrics', logController_1.updateMetrics);
+router.post('/check-reset', logController_1.checkDailyReset);
+exports.default = router;

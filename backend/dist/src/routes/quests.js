@@ -1,0 +1,11 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const questController_1 = require("../controllers/questController");
+const auth_1 = require("../middlewares/auth");
+const router = (0, express_1.Router)();
+router.use(auth_1.authenticate);
+router.get('/', questController_1.getQuests);
+router.post('/', questController_1.addQuest);
+router.put('/:id/progress', questController_1.progressQuest);
+exports.default = router;

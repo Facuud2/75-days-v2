@@ -5,6 +5,7 @@ import authRoutes from './routes/auth';
 import challengeRoutes from './routes/challenges';
 import logRoutes from './routes/logs';
 import questRoutes from './routes/quests';
+import usersRoutes from './routes/users';
 
 dotenv.config();
 
@@ -23,6 +24,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/challenges', challengeRoutes);
 app.use('/api/logs', logRoutes);
 app.use('/api/quests', questRoutes);
+app.use('/api/users', usersRoutes);
 
 app.listen(port, () => {
     console.log(`Server is running on port ${port}`);

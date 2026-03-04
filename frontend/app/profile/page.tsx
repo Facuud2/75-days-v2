@@ -1,9 +1,12 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useChallengeStore } from '@/store/useChallengeStore';
+import { userService, UserProfileResponse } from '@/lib/api/users';
 import { format } from 'date-fns';
 import { Trophy, Calendar, Scale, Award, Flame, Target, ChevronRight, CheckCircle2, Lock, Activity, BarChart3, Footprints, Clock, Zap } from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 
 export default function Profile() {
   const { user } = useAuthStore();
@@ -11,6 +14,7 @@ export default function Profile() {
     isActive,
     difficulty,
     streak,
+    currentDay,
     points,
     achievements,
     bestWeight,
@@ -18,43 +22,49 @@ export default function Profile() {
     sideQuests
   } = useChallengeStore();
 
-  if (!user) return null;
+  const [profileData, setProfileData] = useState<UserProfileResponse | null>(null);
+  const [loadingProfile, setLoadingProfile] = useState(true);
 
-  // Mock data for new UI sections based on images
-  const mockWeightLost = 12.5; // Example calculation
-  const mockChallengesCount = 8;
-  const mockTotalDays = challengesCompleted * 30 + streak; // Example
+  useEffect(() => {
+    if (user) {
+      userService.getProfile()
+        .then(data => {
+          setProfileData(data);
+          setLoadingProfile(false);
+        })
+        .catch(err => {
+          console.error('Error fetching profile:', err);
+          setLoadingProfile(false);
+        });
+    }
+  }, [user]);
 
-  const mockInitialWeight = user.weight || 85.0;
-  const mockGoalWeight = 72.5;
-  const mockCurrentWeight = bestWeight || 72.5;
+  if (!user || loadingProfile) return <div className="p-8 text-center text-zinc-400 min-h-screen bg-zinc-950">Cargando perfil...</div>;
+
+  const mockWeightLost = profileData?.stats.totalWeightLost || 0;
+  const mockChallengesCount = profileData?.stats.totalChallengesCompleted || 0;
+  const mockTotalDays = profileData?.stats.totalDaysCompleted || 0;
+
+  const mockInitialWeight = profileData?.user.initialWeight || 0;
+  const mockGoalWeight = 72.5; // Not currently in DB
+  const mockCurrentWeight = profileData?.user.currentWeight || 0;
   const mockToLose = Math.max(0, mockCurrentWeight - mockGoalWeight).toFixed(1);
 
-  const mockWeeklyWorkouts = 7;
-  const mockWeeklyCals = 3710;
-  const mockWeeklyHours = 8.5;
+  const weightHistoryData = profileData?.user.weightHistory || [];
 
-  const mockTotalDistance = 385;
-  const mockTotalHours = 124.5;
-  const mockTotalCals = 52340;
-  const mockBMI = 23.8;
+  // Keeping these at 0 since there are no fields yet for this
+  const mockWeeklyWorkouts = 0;
+  const mockWeeklyCals = 0;
+  const mockWeeklyHours = 0;
 
-  const mockCompletedChallenges = [
-    { title: 'Enero Saludable', desc: '31 días de comida saludable y ejercicio diario', date: '31 Ene 2025', icon: '🥗', color: 'text-green-500' },
-    { title: 'Reto Cardio 30', desc: '30 días consecutivos de ejercicio cardiovascular mínimo 30 min', date: '15 Dic 2024', icon: '💪', color: 'text-yellow-500' },
-    { title: 'Hidratación Pro', desc: 'Beber 3 litros de agua diariamente por 21 días', date: '28 Nov 2024', icon: '💧', color: 'text-rose-500' },
-    { title: 'Sin Azúcar', desc: '30 días sin consumir azúcar refinada', date: '10 Dic 2024', icon: '🚫', color: 'text-red-500' },
-    { title: 'Meditación Diaria', desc: '15 minutos de meditación todos los días por 30 días', date: '22 Dic 2024', icon: '🧘', color: 'text-orange-400' },
-  ];
+  const mockTotalDistance = 0;
+  const mockTotalHours = 0;
+  const mockTotalCals = 0;
+  const mockBMI = 0;
 
-  const mockAchievementsList = [
-    { title: 'Primer Paso', desc: 'Completa tu primer día del desafío', date: '15 Nov 2024', icon: <Award className="w-6 h-6" />, color: 'bg-rose-500', unlocked: true },
-    { title: 'Semana de Fuego', desc: 'Completa 7 días consecutivos', date: '22 Nov 2024', icon: <Flame className="w-6 h-6" />, color: 'bg-rose-400', unlocked: true },
-    { title: 'Guerrero Incansable', desc: 'Alcanza 30 días de racha', date: '10 Dic 2024', icon: <Trophy className="w-6 h-6" />, color: 'bg-rose-300', unlocked: true },
-    { title: 'Leyenda 75', desc: 'Completa el desafío de 75 días', progress: 42, total: 75, icon: <Lock className="w-6 h-6 text-zinc-500" />, color: 'bg-zinc-800', unlocked: false },
-    { title: 'Maestro del Fitness', desc: 'Completa 100 entrenamientos', progress: 68, total: 100, icon: <Lock className="w-6 h-6 text-zinc-500" />, color: 'bg-zinc-800', unlocked: false },
-    { title: 'Corazón de Acero', desc: 'Mantén tu frecuencia cardíaca en zona óptima', progress: 23, total: 50, icon: <Lock className="w-6 h-6 text-zinc-500" />, color: 'bg-zinc-800', unlocked: false },
-  ];
+  // Empty achievements as requested, empty completed challenges
+  const mockCompletedChallenges: any[] = [];
+  const mockAchievementsList: any[] = [];
 
   const level = Math.floor(points / 100) + 1;
 
@@ -148,11 +158,11 @@ export default function Profile() {
                   <div className="h-2 w-full bg-zinc-800 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-rose-500 rounded-full transition-all duration-1000 ease-out"
-                      style={{ width: `${Math.min(100, (streak / 75) * 100)}%` }}
+                      style={{ width: `${Math.min(100, (currentDay / 75) * 100)}%` }}
                     />
                   </div>
                   <div className="flex justify-end text-xs text-zinc-500 font-medium">
-                    {streak}/75 días
+                    {currentDay}/75 días
                   </div>
                 </div>
               </div>
@@ -253,12 +263,36 @@ export default function Profile() {
               <div className="text-sm text-green-400 font-medium mt-1">↓ {mockWeightLost} kg total</div>
             </div>
 
-            {/* Simple graph line placeholder */}
-            <div className="w-full h-8 flex items-end mb-6 relative">
-              <div className="absolute inset-0 bg-gradient-to-b from-rose-500/10 to-transparent"></div>
-              <svg className="w-full h-full text-rose-500" preserveAspectRatio="none" viewBox="0 0 100 20">
-                <polyline points="0,20 20,15 40,12 60,8 80,5 100,2" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
+            {/* Dynamic Graph Line using Recharts */}
+            <div className="w-full h-32 flex items-end mb-6 relative -ml-2">
+              {weightHistoryData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={weightHistoryData} margin={{ top: 5, right: 0, left: -25, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorWeight" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#f43f5e" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <XAxis dataKey="date" stroke="#52525b" fontSize={10} tickLine={false} axisLine={false} dy={10} />
+                    <YAxis stroke="#52525b" fontSize={10} tickLine={false} axisLine={false} domain={['dataMin - 1', 'dataMax + 1']} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', borderRadius: '8px', fontSize: '12px' }}
+                      itemStyle={{ color: '#f43f5e', fontWeight: 'bold' }}
+                      labelStyle={{ color: '#a1a1aa', marginBottom: '4px' }}
+                      formatter={(value: number | undefined) => [`${value} kg`, 'Peso Registrado']}
+                    />
+                    {mockInitialWeight > 0 && (
+                      <ReferenceLine y={mockInitialWeight} stroke="#a1a1aa" strokeDasharray="3 3" opacity={0.5} />
+                    )}
+                    <Area type="monotone" dataKey="weight" name="Peso (kg)" stroke="#f43f5e" strokeWidth={3} fillOpacity={1} fill="url(#colorWeight)" activeDot={{ r: 6, fill: '#f43f5e', stroke: '#18181b', strokeWidth: 2 }} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-zinc-500 text-xs text-center px-4">
+                  Registra tu peso diariamente para ver tu progreso aquí.
+                </div>
+              )}
             </div>
 
             <div className="space-y-3 text-sm">
