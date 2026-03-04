@@ -11,7 +11,7 @@ import { useEffect, useState } from 'react';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, logout } = useAuthStore();
-  const { theme, customColors, setTheme } = useThemeStore();
+  const { appearance, colorPalette, customPalette, setAppearance } = useThemeStore();
   const { openPlansModal } = useUIStore();
   const pathname = usePathname();
   const router = useRouter();
@@ -37,38 +37,38 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return () => clearInterval(timer);
   }, []);
 
+  // Apply appearance (dark class) + data-appearance attribute
   useEffect(() => {
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else if (theme === 'light') {
-      document.documentElement.classList.remove('dark');
-    } else if (theme === 'system') {
-      if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
+    const root = document.documentElement;
+    let isDark = appearance === 'dark';
+    if (appearance === 'system') {
+      isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     }
-  }, [theme]);
+    isDark ? root.classList.add('dark') : root.classList.remove('dark');
+    root.setAttribute('data-appearance', isDark ? 'dark' : 'light');
+  }, [appearance]);
 
+  // Apply colour palette: data-palette attr for presets, direct CSS vars for custom
   useEffect(() => {
-    if (theme === 'custom') {
-      document.documentElement.style.setProperty('--color-primary', customColors.primary);
-      document.documentElement.style.setProperty('--color-secondary', customColors.secondary);
-      document.documentElement.style.setProperty('--color-accent', customColors.accent);
+    const root = document.documentElement;
+    root.setAttribute('data-palette', colorPalette);
+    if (colorPalette === 'custom') {
+      root.style.setProperty('--color-primary', customPalette.primary);
+      root.style.setProperty('--color-secondary', customPalette.secondary);
+      root.style.setProperty('--color-accent', customPalette.accent);
     } else {
-      document.documentElement.style.removeProperty('--color-primary');
-      document.documentElement.style.removeProperty('--color-secondary');
-      document.documentElement.style.removeProperty('--color-accent');
+      root.style.removeProperty('--color-primary');
+      root.style.removeProperty('--color-secondary');
+      root.style.removeProperty('--color-accent');
     }
-  }, [theme, customColors]);
+  }, [colorPalette, customPalette]);
 
   if (!isAuthenticated && pathname !== '/login' && pathname !== '/register') {
     return <div className="min-h-screen bg-[#050505] text-white">{children}</div>;
   }
 
   const toggleTheme = () => {
-    setTheme(theme === 'dark' ? 'light' : 'dark');
+    setAppearance(appearance === 'dark' ? 'light' : 'dark');
   };
 
   return (
@@ -120,7 +120,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <span className="text-[10px] mt-1 hidden sm:block">Ajustes</span>
               </Link>
               <button onClick={toggleTheme} className="p-2 text-white/50 hover:text-white transition-colors rounded-full border border-white/10 ml-2 hidden sm:block">
-                {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+                {appearance === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
               </button>
               <button onClick={() => { logout(); router.push('/login'); }} className="p-2 text-white/50 hover:text-white transition-colors rounded-full border border-white/10 ml-2">
                 <LogOut size={18} />

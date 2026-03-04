@@ -1,1 +1,58 @@
 @import "tailwindcss";
+
+/* ──────────────────────────────────────────────────────────────────────────
+   COLOUR TOKENS — applied by Layout.tsx via data-palette attribute
+   These CSS variables are consumed wherever we write var(--color-primary) etc.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* Default: Pink Neon (rose) */
+:root {
+  --color-primary:   #f43f5e;
+  --color-secondary: #be123c;
+  --color-accent:    #fb7185;
+}
+
+[data-palette="pink-neon"] {
+  --color-primary:   #f43f5e;
+  --color-secondary: #be123c;
+  --color-accent:    #fb7185;
+}
+
+[data-palette="soft-blue"] {
+  --color-primary:   #3b82f6;
+  --color-secondary: #1d4ed8;
+  --color-accent:    #60a5fa;
+}
+
+[data-palette="bamboo-green"] {
+  --color-primary:   #22c55e;
+  --color-secondary: #15803d;
+  --color-accent:    #4ade80;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   APPEARANCE — discord-inspired background tokens
+   dark  →  #313338  (Discord dark)
+   light →  #f2f3f5  (Discord light, not pure white)
+   ────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  --bg-base:       #050505;
+  --bg-surface:    #0f0f0f;
+  --text-base:     #f4f4f5;
+  --text-muted:    #a1a1aa;
+}
+
+[data-appearance="dark"] {
+  --bg-base:    #050505;
+  --bg-surface: #0f0f0f;
+  --text-base:  #f4f4f5;
+  --text-muted: #a1a1aa;
+}
+
+[data-appearance="light"] {
+  --bg-base:    #f2f3f5;
+  --bg-surface: #ffffff;
+  --text-base:  #1e1f22;
+  --text-muted: #6b7280;
+}
