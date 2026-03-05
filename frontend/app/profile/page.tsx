@@ -309,22 +309,22 @@ export default function Profile() {
                   <AreaChart data={weightHistoryData} margin={{ top: 5, right: 0, left: -25, bottom: 0 }}>
                     <defs>
                       <linearGradient id="colorWeight" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#f43f5e" stopOpacity={0} />
+                        <stop offset="5%" stopColor="var(--color-rose-500)" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="var(--color-rose-500)" stopOpacity={0} />
                       </linearGradient>
                     </defs>
                     <XAxis dataKey="date" stroke="#52525b" fontSize={10} tickLine={false} axisLine={false} dy={10} />
                     <YAxis stroke="#52525b" fontSize={10} tickLine={false} axisLine={false} domain={['dataMin - 1', 'dataMax + 1']} />
                     <Tooltip
                       contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', borderRadius: '8px', fontSize: '12px' }}
-                      itemStyle={{ color: '#f43f5e', fontWeight: 'bold' }}
+                      itemStyle={{ color: 'var(--color-rose-500)', fontWeight: 'bold' }}
                       labelStyle={{ color: '#a1a1aa', marginBottom: '4px' }}
                       formatter={(value: number | undefined) => [`${value} kg`, 'Peso Registrado']}
                     />
                     {mockInitialWeight > 0 && (
                       <ReferenceLine y={mockInitialWeight} stroke="#a1a1aa" strokeDasharray="3 3" opacity={0.5} />
                     )}
-                    <Area type="monotone" dataKey="weight" name="Peso (kg)" stroke="#f43f5e" strokeWidth={3} fillOpacity={1} fill="url(#colorWeight)" activeDot={{ r: 6, fill: '#f43f5e', stroke: '#18181b', strokeWidth: 2 }} />
+                    <Area type="monotone" dataKey="weight" name="Peso (kg)" stroke="var(--color-rose-500)" strokeWidth={3} fillOpacity={1} fill="url(#colorWeight)" activeDot={{ r: 6, fill: 'var(--color-rose-500)', stroke: '#18181b', strokeWidth: 2 }} />
                   </AreaChart>
                 </ResponsiveContainer>
               ) : (

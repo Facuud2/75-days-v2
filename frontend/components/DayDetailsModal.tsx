@@ -70,7 +70,7 @@ export default function DayDetailsModal({ date, onClose }: { date: string, onClo
 
         <div className="flex items-center justify-between p-6 border-b border-white/5">
           <div className="flex items-center gap-3">
-            <Calendar className="text-[#f43f5e]" />
+            <Calendar className="text-rose-500" />
             <h2 className="text-xl font-bold text-white tracking-tight capitalize">{formattedDate}</h2>
           </div>
           <button onClick={onClose} className="text-white/50 hover:text-white transition-colors p-2 rounded-full hover:bg-white/5">
@@ -83,7 +83,7 @@ export default function DayDetailsModal({ date, onClose }: { date: string, onClo
           {/* Weight */}
           <div className="space-y-2">
             <label className="flex items-center gap-2 text-sm font-medium text-white/70">
-              <Scale size={16} className="text-[#f43f5e]" />
+              <Scale size={16} className="text-rose-500" />
               Peso (kg)
             </label>
             <input
@@ -92,7 +92,7 @@ export default function DayDetailsModal({ date, onClose }: { date: string, onClo
               value={weight}
               onChange={(e) => setWeight(e.target.value)}
               placeholder="Ej. 75.5"
-              className="w-full px-4 py-3 rounded-xl bg-[#050505] border border-[#361726] text-white outline-none focus:border-[#f43f5e] transition-colors"
+              className="w-full px-4 py-3 rounded-xl bg-[#050505] border border-[#361726] text-white outline-none focus:border-rose-500 transition-colors"
             />
           </div>
 
@@ -100,7 +100,7 @@ export default function DayDetailsModal({ date, onClose }: { date: string, onClo
           <div className="space-y-2">
             <label className="flex items-center justify-between text-sm font-medium text-white/70">
               <div className="flex items-center gap-2">
-                <Camera size={16} className="text-[#f43f5e]" />
+                <Camera size={16} className="text-rose-500" />
                 Foto de Progreso
               </div>
               {photoUrl && (
@@ -116,7 +116,7 @@ export default function DayDetailsModal({ date, onClose }: { date: string, onClo
             {!photoUrl ? (
               <div
                 onClick={() => fileInputRef.current?.click()}
-                className="w-full h-32 rounded-xl border-2 border-dashed border-[#361726] hover:border-[#f43f5e]/50 bg-[#050505] flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors text-white/50 hover:text-[#f43f5e]"
+                className="w-full h-32 rounded-xl border-2 border-dashed border-[#361726] hover:border-rose-500/50 bg-[#050505] flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors text-white/50 hover:text-rose-500"
               >
                 <Upload size={24} />
                 <span className="text-sm font-medium">Subir Imagen</span>
@@ -147,7 +147,7 @@ export default function DayDetailsModal({ date, onClose }: { date: string, onClo
           {/* Notes */}
           <div className="space-y-2">
             <label className="flex items-center gap-2 text-sm font-medium text-white/70">
-              <AlignLeft size={16} className="text-[#f43f5e]" />
+              <AlignLeft size={16} className="text-rose-500" />
               Notas del Día
             </label>
             <textarea
@@ -155,7 +155,7 @@ export default function DayDetailsModal({ date, onClose }: { date: string, onClo
               onChange={(e) => setNotes(e.target.value)}
               placeholder="¿Cómo te sentiste hoy? ¿Algún obstáculo?"
               rows={4}
-              className="w-full px-4 py-3 rounded-xl bg-[#050505] border border-[#361726] text-white outline-none focus:border-[#f43f5e] transition-colors resize-none"
+              className="w-full px-4 py-3 rounded-xl bg-[#050505] border border-[#361726] text-white outline-none focus:border-rose-500 transition-colors resize-none"
             />
           </div>
 
@@ -170,7 +170,7 @@ export default function DayDetailsModal({ date, onClose }: { date: string, onClo
           </button>
           <button
             onClick={handleSave}
-            className="px-8 py-3 bg-[#f43f5e] text-white rounded-xl font-bold hover:bg-[#e11d48] transition-colors shadow-[0_0_15px_rgba(244,63,94,0.3)]"
+            className="px-8 py-3 bg-rose-500 text-white rounded-xl font-bold hover:bg-rose-600 transition-colors shadow-[0_0_15px_var(--color-rose-500)]"
           >
             Guardar
           </button>

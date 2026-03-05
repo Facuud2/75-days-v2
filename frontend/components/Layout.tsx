@@ -52,14 +52,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const root = document.documentElement;
     root.setAttribute('data-palette', colorPalette);
+    const roseShades = ['400', '500', '600', '700', '900', '950'];
     if (colorPalette === 'custom') {
-      root.style.setProperty('--color-primary', customPalette.primary);
-      root.style.setProperty('--color-secondary', customPalette.secondary);
-      root.style.setProperty('--color-accent', customPalette.accent);
+      // Override Tailwind's rose-* vars so ALL rose-* classes follow the custom picker
+      root.style.setProperty('--color-rose-400', customPalette.accent);
+      root.style.setProperty('--color-rose-500', customPalette.primary);
+      root.style.setProperty('--color-rose-600', customPalette.secondary);
+      root.style.setProperty('--color-rose-700', customPalette.secondary);
+      root.style.setProperty('--color-rose-900', customPalette.secondary);
+      root.style.setProperty('--color-rose-950', customPalette.secondary);
     } else {
-      root.style.removeProperty('--color-primary');
-      root.style.removeProperty('--color-secondary');
-      root.style.removeProperty('--color-accent');
+      // Clear any inline overrides left from a previous custom selection
+      roseShades.forEach((s) => root.style.removeProperty(`--color-rose-${s}`));
     }
   }, [colorPalette, customPalette]);
 
@@ -76,9 +80,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Header */}
       <header className="sticky top-0 z-50 bg-[#050505] border-b border-white/5 px-4 md:px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Flame className="text-[#f43f5e]" fill="currentColor" />
+          <Flame className="text-rose-500" fill="currentColor" />
           <span className="font-bold text-xl tracking-wider hidden sm:inline">75 DAYS</span>
-          <span className="text-[#f43f5e] italic font-bold text-xl">HARD</span>
+          <span className="text-rose-500 italic font-bold text-xl">HARD</span>
         </div>
 
         <div className="flex items-center gap-4 md:gap-6">
@@ -86,13 +90,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {isAuthenticated && (
             <div className="hidden md:flex items-center gap-2 text-sm">
               <div className="flex gap-1">
-                <span className="bg-white/5 border border-white/10 px-2 py-1 rounded text-[#f43f5e] font-mono">
+                <span className="bg-white/5 border border-white/10 px-2 py-1 rounded text-rose-500 font-mono">
                   {timeLeft.hours.toString().padStart(2, '0')}
                 </span>:
-                <span className="bg-white/5 border border-white/10 px-2 py-1 rounded text-[#f43f5e] font-mono">
+                <span className="bg-white/5 border border-white/10 px-2 py-1 rounded text-rose-500 font-mono">
                   {timeLeft.minutes.toString().padStart(2, '0')}
                 </span>:
-                <span className="bg-white/5 border border-white/10 px-2 py-1 rounded text-[#f43f5e] font-mono">
+                <span className="bg-white/5 border border-white/10 px-2 py-1 rounded text-rose-500 font-mono">
                   {timeLeft.seconds.toString().padStart(2, '0')}
                 </span>
               </div>

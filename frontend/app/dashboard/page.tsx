@@ -52,7 +52,7 @@ export default function Dashboard() {
   if (isLoading || (isActive && !todayLog)) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-        <div className="w-12 h-12 rounded-full border-4 border-white/10 border-t-[#f43f5e] animate-spin" />
+        <div className="w-12 h-12 rounded-full border-4 border-white/10 border-t-rose-500 animate-spin" />
         <p className="text-white/50 font-medium">Cargando tu desafío...</p>
       </div>
     );
@@ -128,20 +128,20 @@ export default function Dashboard() {
       <div
         key={goal.id}
         onClick={handleClick}
-        className={`group bg-[#1c0f16] border rounded-2xl p-5 flex items-center gap-5 transition-all duration-300 ${isLocked
-            ? 'border-[#361726] opacity-40 cursor-not-allowed select-none'
-            : isThisUpdating
-              ? 'border-[#f43f5e]/20 cursor-wait'
-              : goal.completed
-                ? 'border-[#f43f5e]/30 bg-[#f43f5e]/5 cursor-pointer'
-                : 'border-[#361726] hover:border-[#f43f5e]/50 hover:bg-[#26151e] cursor-pointer'
+        className={`group bg-rose-950/20 border rounded-2xl p-5 flex items-center gap-5 transition-all duration-300 ${isLocked
+          ? 'border-[#361726] opacity-40 cursor-not-allowed select-none'
+          : isThisUpdating
+            ? 'border-rose-500/20 cursor-wait'
+            : goal.completed
+              ? 'border-rose-500/30 bg-rose-500/5 cursor-pointer'
+              : 'border-[#361726] hover:border-rose-500/50 hover:bg-rose-950/40 cursor-pointer'
           }`}
       >
         <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${isThisUpdating
-            ? 'bg-white/10 text-white/40'
-            : goal.completed
-              ? 'bg-[#f43f5e]/20 text-[#f43f5e]'
-              : 'bg-[#361726]/50 text-[#f43f5e]/70 group-hover:text-[#f43f5e]'
+          ? 'bg-white/10 text-white/40'
+          : goal.completed
+            ? 'bg-rose-500/20 text-rose-500'
+            : 'bg-rose-950/60 text-rose-500/70 group-hover:text-rose-500'
           }`}>
           {isThisUpdating
             ? <div className="w-5 h-5 rounded-full border-2 border-white/20 border-t-white/60 animate-spin" />
@@ -159,10 +159,10 @@ export default function Dashboard() {
         </div>
 
         <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${isThisUpdating
-            ? 'border-white/20'
-            : goal.completed
-              ? 'bg-[#f43f5e] border-[#f43f5e] scale-110 shadow-[0_0_15px_rgba(244,63,94,0.5)]'
-              : 'border-[#361726] group-hover:border-[#f43f5e]/50'
+          ? 'border-white/20'
+          : goal.completed
+            ? 'bg-rose-500 border-rose-500 scale-110 shadow-[0_0_15px_var(--color-rose-500)]'
+            : 'border-rose-950/40 group-hover:border-rose-500/50'
           }`}>
           {goal.completed && !isThisUpdating && <Check size={16} className="text-white" strokeWidth={3} />}
         </div>
@@ -178,8 +178,8 @@ export default function Dashboard() {
       <div className="lg:col-span-4 space-y-6">
 
         {/* DÍA ACTUAL */}
-        <div className="bg-[#1c0f16] border border-[#361726] rounded-3xl p-6 shadow-lg">
-          <h3 className="text-[#f43f5e] text-[10px] font-bold tracking-[0.2em] uppercase mb-4">Día Actual</h3>
+        <div className="bg-rose-950/20 border border-rose-950/40 rounded-3xl p-6 shadow-lg">
+          <h3 className="text-rose-500 text-[10px] font-bold tracking-[0.2em] uppercase mb-4">Día Actual</h3>
           <div className="flex items-baseline gap-1 mb-8">
             <span className="text-7xl font-bold text-white tracking-tighter">{currentDay}</span>
             <span className="text-2xl text-white/40 font-bold">/ 75</span>
@@ -191,7 +191,7 @@ export default function Dashboard() {
             </div>
             <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
               <div
-                className="h-full bg-[#f43f5e] transition-all duration-1000 ease-out"
+                className="h-full bg-rose-500 transition-all duration-1000 ease-out"
                 style={{ width: `${(currentDay / 75) * 100}%` }}
               />
             </div>
@@ -199,8 +199,8 @@ export default function Dashboard() {
         </div>
 
         {/* ESTADO DIARIO */}
-        <div className="bg-[#1c0f16] border border-[#361726] rounded-3xl p-6 shadow-lg">
-          <h3 className="text-[#f43f5e] text-[10px] font-bold tracking-[0.2em] uppercase mb-2">Estado Diario</h3>
+        <div className="bg-rose-950/20 border border-rose-950/40 rounded-3xl p-6 shadow-lg">
+          <h3 className="text-rose-500 text-[10px] font-bold tracking-[0.2em] uppercase mb-2">Estado Diario</h3>
           <h2 className="text-2xl font-bold uppercase tracking-tight mb-6 text-white">
             {progress === 100 ? 'Completado' : 'En Progreso'}
           </h2>
@@ -216,7 +216,7 @@ export default function Dashboard() {
                   strokeWidth="2"
                 />
                 <path
-                  className={`transition-all duration-1000 ease-out ${progress === 100 ? 'text-emerald-500' : 'text-[#f43f5e]'}`}
+                  className={`transition-all duration-1000 ease-out ${progress === 100 ? 'text-emerald-500' : 'text-rose-500'}`}
                   strokeDasharray={`${progress}, 100`}
                   d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                   fill="none"
@@ -237,7 +237,7 @@ export default function Dashboard() {
         </div>
 
         {/* MINI CALENDAR */}
-        <div className="bg-[#1c0f16] border border-[#361726] rounded-3xl p-6 shadow-lg">
+        <div className="bg-rose-950/20 border border-rose-950/40 rounded-3xl p-6 shadow-lg">
           <div className="flex justify-between items-center mb-6">
             <button
               onClick={() => setCurrentMonthDate(subMonths(currentMonthDate, 1))}
@@ -258,7 +258,7 @@ export default function Dashboard() {
 
           <div className="grid grid-cols-7 gap-2 mb-4">
             {['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'].map(d => (
-              <div key={d} className="text-center text-[10px] font-bold text-[#f43f5e] tracking-wider">
+              <div key={d} className="text-center text-[10px] font-bold text-rose-500 tracking-wider">
                 {d}
               </div>
             ))}
@@ -273,7 +273,7 @@ export default function Dashboard() {
               let bg = 'bg-transparent';
               let text = 'text-white/30';
               let border = 'border border-transparent';
-              let dotColor = 'bg-[#f43f5e]';
+              let dotColor = 'bg-rose-500';
 
               if (day.status === 'success') {
                 bg = 'bg-emerald-500/20';
@@ -292,9 +292,9 @@ export default function Dashboard() {
               }
 
               if (day.isToday && day.status !== 'success') {
-                bg = 'bg-[#f43f5e]/20';
-                border = 'border-[#f43f5e]/50';
-                text = 'text-[#f43f5e] font-bold';
+                bg = 'bg-rose-500/20';
+                border = 'border-rose-500/50';
+                text = 'text-rose-500 font-bold';
               }
 
               return (
@@ -328,7 +328,7 @@ export default function Dashboard() {
       {/* Right Column */}
       <div className="lg:col-span-8">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-8 gap-2">
-          <h2 className="text-2xl font-bold text-[#f43f5e] tracking-tight">Tareas de Hoy</h2>
+          <h2 className="text-2xl font-bold text-rose-500 tracking-tight">Tareas de Hoy</h2>
           <span className="text-white/50 text-sm font-medium capitalize">
             {format(now, "EEEE, d 'de' MMMM", { locale: es })}
           </span>
@@ -349,7 +349,7 @@ export default function Dashboard() {
             <>
               {/* TAREAS DEL PLAN BASE (Soft / Medium / Hard) */}
               <div>
-                <h3 className="text-sm font-bold tracking-widest text-[#f43f5e] uppercase mb-4 opacity-80 flex items-center gap-2">
+                <h3 className="text-sm font-bold tracking-widest text-rose-500 uppercase mb-4 opacity-80 flex items-center gap-2">
                   <Target size={16} /> Plan {currentPlanName}
                 </h3>
                 <div className="space-y-3">
