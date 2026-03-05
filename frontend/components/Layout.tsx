@@ -8,6 +8,7 @@ import { Home, Calendar, User, Settings, LogOut, Moon, Sun, Flame, Target, Troph
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { startCircularReveal } from '@/lib/themeTransition';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, logout } = useAuthStore();
@@ -37,15 +38,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return () => clearInterval(timer);
   }, []);
 
-  // Apply appearance (dark class) + data-appearance attribute
-  useEffect(() => {
+  // ── Applies dark/light class + data-appearance synchronously on <html> ──────
+  // This must run synchronously inside startViewTransition's callback so the API
+  // can capture the before/after DOM snapshots and animate between them.
+  const applyAppearanceToDom = (mode: typeof appearance) => {
     const root = document.documentElement;
-    let isDark = appearance === 'dark';
-    if (appearance === 'system') {
-      isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    }
+    const isDark = mode === 'dark' || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
     isDark ? root.classList.add('dark') : root.classList.remove('dark');
     root.setAttribute('data-appearance', isDark ? 'dark' : 'light');
+  };
+
+  // Apply appearance on store changes (covers page load & system changes)
+  useEffect(() => {
+    applyAppearanceToDom(appearance);
   }, [appearance]);
 
   // Apply colour palette: data-palette attr for presets, direct CSS vars for custom
@@ -54,7 +59,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     root.setAttribute('data-palette', colorPalette);
     const roseShades = ['400', '500', '600', '700', '900', '950'];
     if (colorPalette === 'custom') {
-      // Override Tailwind's rose-* vars so ALL rose-* classes follow the custom picker
       root.style.setProperty('--color-rose-400', customPalette.accent);
       root.style.setProperty('--color-rose-500', customPalette.primary);
       root.style.setProperty('--color-rose-600', customPalette.secondary);
@@ -62,7 +66,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       root.style.setProperty('--color-rose-900', customPalette.secondary);
       root.style.setProperty('--color-rose-950', customPalette.secondary);
     } else {
-      // Clear any inline overrides left from a previous custom selection
       roseShades.forEach((s) => root.style.removeProperty(`--color-rose-${s}`));
     }
   }, [colorPalette, customPalette]);
@@ -71,9 +74,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return <div className="min-h-screen bg-[#050505] text-white">{children}</div>;
   }
 
-  const toggleTheme = () => {
-    setAppearance(appearance === 'dark' ? 'light' : 'dark');
+  const toggleTheme = (e: React.MouseEvent) => {
+    const nextMode = appearance === 'dark' ? 'light' : 'dark';
+    startCircularReveal(e, () => {
+      applyAppearanceToDom(nextMode);
+      setAppearance(nextMode);
+    });
   };
+
 
   return (
     <div className="min-h-screen bg-[#050505] text-white flex flex-col font-sans">
@@ -123,8 +131,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <Settings size={20} />
                 <span className="text-[10px] mt-1 hidden sm:block">Ajustes</span>
               </Link>
-              <button onClick={toggleTheme} className="p-2 text-white/50 hover:text-white transition-colors rounded-full border border-white/10 ml-2 hidden sm:block">
-                {appearance === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+              <button onClick={(e) => toggleTheme(e)} className="p-2 text-white/50 hover:text-white transition-colors rounded-full border border-white/10 ml-2 hidden sm:block relative overflow-hidden" title={appearance === 'dark' ? 'Cambiar a claro' : 'Cambiar a oscuro'}>
+                <span className={`block transition-all duration-300 ${appearance === 'dark' ? 'rotate-0 scale-100' : 'rotate-90 scale-0 absolute'}`}>
+                  <Sun size={18} />
+                </span>
+                <span className={`block transition-all duration-300 ${appearance === 'dark' ? '-rotate-90 scale-0 absolute' : 'rotate-0 scale-100'}`}>
+                  <Moon size={18} />
+                </span>
               </button>
               <button onClick={() => { logout(); router.push('/login'); }} className="p-2 text-white/50 hover:text-white transition-colors rounded-full border border-white/10 ml-2">
                 <LogOut size={18} />

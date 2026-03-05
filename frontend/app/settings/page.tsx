@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { startCircularReveal } from '@/lib/themeTransition';
 import { useThemeStore, ColorPalette, AppearanceMode, PALETTES, PaletteConfig } from '@/store/useThemeStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import {
@@ -95,6 +96,37 @@ export default function SettingsPage() {
     setAppearance, setColorPalette, setCustomPalette,
   } = useThemeStore();
   const { user, updateProfile: updateAuthUser } = useAuthStore();
+
+  // ── Animated appearance switch ───────────────────────────────────────────
+  const switchAppearance = (mode: AppearanceMode, e: React.MouseEvent) => {
+    const isDark = mode === 'dark' || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    startCircularReveal(e, () => {
+      const root = document.documentElement;
+      isDark ? root.classList.add('dark') : root.classList.remove('dark');
+      root.setAttribute('data-appearance', isDark ? 'dark' : 'light');
+      setAppearance(mode);
+    });
+  };
+
+  // ── Animated palette switch (View Transitions API) ────────────────────────
+  const switchPalette = (palette: ColorPalette, e: React.MouseEvent) => {
+    const roseShades = ['400', '500', '600', '700', '900', '950'];
+    startCircularReveal(e, () => {
+      const root = document.documentElement;
+      root.setAttribute('data-palette', palette);
+      if (palette === 'custom') {
+        root.style.setProperty('--color-rose-400', customPalette.accent);
+        root.style.setProperty('--color-rose-500', customPalette.primary);
+        root.style.setProperty('--color-rose-600', customPalette.secondary);
+        root.style.setProperty('--color-rose-700', customPalette.secondary);
+        root.style.setProperty('--color-rose-900', customPalette.secondary);
+        root.style.setProperty('--color-rose-950', customPalette.secondary);
+      } else {
+        roseShades.forEach((s) => root.style.removeProperty(`--color-rose-${s}`));
+      }
+      setColorPalette(palette);
+    });
+  };
 
   // ── Profile fields ───────────────────────────────────────────────────────
   const [name, setName] = useState(user?.name ?? '');
@@ -283,10 +315,10 @@ export default function SettingsPage() {
                 return (
                   <button
                     key={id}
-                    onClick={() => setColorPalette(id)}
+                    onClick={(e) => switchPalette(id, e)}
                     className={`relative flex flex-col items-start gap-3 p-4 rounded-2xl border-2 transition-all text-left ${active
-                        ? 'border-white/30 bg-white/5 shadow-md'
-                        : 'border-zinc-800 bg-zinc-800/30 hover:bg-zinc-800/60 hover:border-zinc-700'
+                      ? 'border-white/30 bg-white/5 shadow-md'
+                      : 'border-zinc-800 bg-zinc-800/30 hover:bg-zinc-800/60 hover:border-zinc-700'
                       }`}
                   >
                     {active && (
@@ -318,10 +350,10 @@ export default function SettingsPage() {
                 const active = colorPalette === 'custom';
                 return (
                   <button
-                    onClick={() => setColorPalette('custom')}
+                    onClick={(e) => switchPalette('custom', e)}
                     className={`relative flex flex-col items-start gap-3 p-4 rounded-2xl border-2 transition-all text-left ${active
-                        ? 'border-white/30 bg-white/5 shadow-md'
-                        : 'border-zinc-800 bg-zinc-800/30 hover:bg-zinc-800/60 hover:border-zinc-700'
+                      ? 'border-white/30 bg-white/5 shadow-md'
+                      : 'border-zinc-800 bg-zinc-800/30 hover:bg-zinc-800/60 hover:border-zinc-700'
                       }`}
                   >
                     {active && (
@@ -407,10 +439,10 @@ export default function SettingsPage() {
                 return (
                   <button
                     key={id}
-                    onClick={() => setAppearance(id)}
+                    onClick={(e) => switchAppearance(id, e)}
                     className={`relative flex flex-col items-center justify-center gap-2 py-5 rounded-2xl border-2 transition-all ${active
-                        ? 'border-white/30 bg-white/5 shadow-md'
-                        : 'border-zinc-800 bg-zinc-800/30 hover:bg-zinc-800/60 hover:border-zinc-700'
+                      ? 'border-white/30 bg-white/5 shadow-md'
+                      : 'border-zinc-800 bg-zinc-800/30 hover:bg-zinc-800/60 hover:border-zinc-700'
                       }`}
                   >
                     {active && (
@@ -419,8 +451,8 @@ export default function SettingsPage() {
                       </span>
                     )}
                     <div className={`w-8 h-8 rounded-full border flex items-center justify-center ${id === 'dark' ? 'bg-[#313338] border-zinc-600'
-                        : id === 'light' ? 'bg-[#f2f3f5] border-zinc-400'
-                          : 'bg-gradient-to-br from-[#313338] to-[#f2f3f5] border-zinc-600'
+                      : id === 'light' ? 'bg-[#f2f3f5] border-zinc-400'
+                        : 'bg-gradient-to-br from-[#313338] to-[#f2f3f5] border-zinc-600'
                       }`}>
                       <Icon className={`w-4 h-4 ${id === 'light' ? 'text-zinc-800' : 'text-zinc-200'}`} />
                     </div>

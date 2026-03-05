@@ -61,3 +61,52 @@ html[data-appearance="light"] {
   --text-base: #1e1f22;
   --text-muted: #6b7280;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   THEME TRANSITION ANIMATIONS
+   Smooth cross-fades when appearance (dark/light) or palette changes.
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* Property-level transitions: every element smoothly fades between themes */
+*,
+*::before,
+*::after {
+  transition:
+    background-color 0.3s ease,
+    border-color 0.25s ease,
+    color 0.15s ease,
+    fill 0.15s ease,
+    stroke 0.15s ease,
+    box-shadow 0.3s ease,
+    opacity 0.2s ease;
+}
+
+/* Opt-out: elements that must NOT animate (e.g. spinners, progress bars) */
+.no-transition,
+.no-transition * {
+  transition: none !important;
+}
+
+/* ── View Transitions API — Circular Reveal from click position ─────────── */
+/* --vt-x / --vt-y are set by JS before startViewTransition() is called.    */
+/* The old snapshot stays frozen; the new theme circles in on top.           */
+::view-transition-old(root) {
+  animation: none;
+  z-index: 1;
+}
+
+::view-transition-new(root) {
+  animation: 520ms cubic-bezier(0.4, 0, 0.2, 1) both theme-circle-reveal;
+  z-index: 2;
+}
+
+@keyframes theme-circle-reveal {
+  from {
+    clip-path: circle(0px at var(--vt-x, 50%) var(--vt-y, 50%));
+  }
+
+  to {
+    /* --vt-r is the exact distance to the farthest corner, computed in JS */
+    clip-path: circle(var(--vt-r, 150%) at var(--vt-x, 50%) var(--vt-y, 50%));
+  }
+}
