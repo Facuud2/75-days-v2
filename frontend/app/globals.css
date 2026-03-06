@@ -90,6 +90,12 @@ html[data-appearance="light"] {
 /* ── View Transitions API — Circular Reveal from click position ─────────── */
 /* --vt-x / --vt-y are set by JS before startViewTransition() is called.    */
 /* The old snapshot stays frozen; the new theme circles in on top.           */
+/* Forces the view transition layer above ALL page elements (headers, modals…) */
+::view-transition {
+  z-index: 9999;
+  pointer-events: none;
+}
+
 ::view-transition-old(root) {
   animation: none;
   z-index: 1;
