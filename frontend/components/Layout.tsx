@@ -71,7 +71,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [colorPalette, customPalette]);
 
   if (!isAuthenticated && pathname !== '/login' && pathname !== '/register') {
-    return <div className="min-h-screen bg-[#050505] text-white">{children}</div>;
+    return <div className="min-h-screen bg-zinc-950 text-white">{children}</div>;
   }
 
   const toggleTheme = (e: React.MouseEvent) => {
@@ -84,9 +84,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white flex flex-col font-sans">
+    <div className="min-h-screen bg-zinc-950 text-white flex flex-col font-sans">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-[#050505] border-b border-white/5 px-4 md:px-6 py-4 flex items-center justify-between">
+      <header className="sticky top-0 z-50 bg-zinc-950 border-b border-white/5 px-4 md:px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Flame className="text-rose-500" fill="currentColor" />
           <span className="font-bold text-xl tracking-wider hidden sm:inline">75 DAYS</span>
@@ -156,7 +156,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       {/* Mobile Bottom Nav - Only visible if logged in */}
       {isAuthenticated && (
-        <nav className="sm:hidden fixed bottom-0 left-0 right-0 bg-[#050505] border-t border-white/5 flex justify-around p-2 z-50">
+        <nav className="sm:hidden fixed bottom-0 left-0 right-0 bg-zinc-950 border-t border-white/5 flex justify-around p-2 z-50">
           <Link href="/dashboard" className={`flex flex-col items-center p-2 ${pathname === '/dashboard' ? 'text-white' : 'text-white/50'}`}>
             <Home size={24} />
           </Link>

@@ -46,20 +46,60 @@ html[data-palette="bamboo-green"] {
 /* via style.setProperty so no static rules needed here.                     */
 
 /* ══════════════════════════════════════════════════════════════════════════════
-   APPEARANCE TOKENS (Discord-inspired backgrounds)
+   APPEARANCE TOKENS
+   Tailwind v4 compiles utility classes to CSS custom property references:
+     bg-zinc-950  →  background-color: var(--color-zinc-950)
+     text-zinc-100 →  color: var(--color-zinc-100)
+   By overriding --color-zinc-* and --color-white here, every zinc-* AND white
+   utility class in every component adapts automatically — zero JSX changes needed.
+
+   Strategy: in light mode, invert the zinc scale so surfaces become light and
+   text becomes dark. white becomes dark text colour.
    ══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Dark mode (default) ──────────────────────────────────────────────────── */
 html[data-appearance="dark"] {
   --bg-base: #050505;
   --bg-surface: #0f0f0f;
   --text-base: #f4f4f5;
   --text-muted: #a1a1aa;
+  /* Zinc defaults are already dark — no overrides needed */
 }
 
+/* ── Light mode ───────────────────────────────────────────────────────────── */
 html[data-appearance="light"] {
   --bg-base: #f2f3f5;
   --bg-surface: #ffffff;
   --text-base: #1e1f22;
   --text-muted: #6b7280;
+
+  /* ── Invert zinc surface shades (dark bg → light bg) ─────────────────── */
+  --color-zinc-950: oklch(0.96 0.002 286);
+  /* was near-black, now near-white  */
+  --color-zinc-900: oklch(1 0 0);
+  /* was very dark,  now white       */
+  --color-zinc-800: oklch(0.93 0.003 286);
+  /* was dark,       now light gray  */
+  --color-zinc-700: oklch(0.87 0.004 286);
+  /* was mid-dark,   now border gray */
+  --color-zinc-600: oklch(0.67 0.005 286);
+  /* was mid,        now mid-gray    */
+
+  /* ── Invert zinc text shades (light text → dark text) ────────────────── */
+  --color-zinc-500: oklch(0.50 0.005 286);
+  /* muted text stays neutral        */
+  --color-zinc-400: oklch(0.40 0.005 286);
+  /* was light muted, now dark muted */
+  --color-zinc-300: oklch(0.28 0.004 286);
+  --color-zinc-200: oklch(0.20 0.003 286);
+  --color-zinc-100: oklch(0.13 0.003 286);
+  /* was near-white,  now near-black */
+  --color-zinc-50: oklch(0.09 0.002 286);
+  /* was lightest,    now darkest    */
+
+  /* ── white becomes dark primary text in light mode ───────────────────── */
+  /* text-white, border-white/N, bg-white/N all become dark automatically  */
+  --color-white: oklch(0.13 0.003 286);
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
