@@ -184,9 +184,18 @@ export const healthService = {
     getFoodDetails: (id: string) =>
         healthClient<FatSecretFoodDetails>(`/fatsecret/food/${id}`),
     logMeal: (payload: LogMealPayload) =>
-        healthClient<{ message: string, meal: any }>('/nutrition/meals', {
+        healthClient<{ id: string }>('/nutrition/meals', {
             method: 'POST',
             body: JSON.stringify(payload)
+        }),
+    updateLoggedMeal: (id: string, payload: LogMealPayload) =>
+        healthClient<{ id: string }>(`/nutrition/meals/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(payload)
+        }),
+    deleteLoggedMeal: (id: string) =>
+        healthClient<void>(`/nutrition/meals/${id}`, {
+            method: 'DELETE'
         }),
     // Custom Foods CRUD
     getSystemIngredients: () =>

@@ -100,6 +100,32 @@ export const deleteMeal = async (req: AuthRequest, res: Response) => {
 };
 
 /**
+ * PUT /api/nutrition/meals/:id
+ * Edit an existing meal entry. Only the owner can edit it.
+ */
+export const editMeal = async (req: AuthRequest, res: Response) => {
+    const userId = req.user!.id;
+    const id = String(req.params.id);
+    const parsed = MealEntrySchema.safeParse(req.body);
+
+    if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.flatten() });
+    }
+
+    const meal = await prisma.mealEntry.findUnique({ where: { id } });
+
+    if (!meal) return res.status(404).json({ error: 'Meal not found' });
+    if (meal.userId !== userId) return res.status(403).json({ error: 'Forbidden' });
+
+    const updated = await prisma.mealEntry.update({
+        where: { id },
+        data: parsed.data,
+    });
+
+    return res.json(updated);
+};
+
+/**
  * PUT /api/nutrition/goals
  * Create or update the user's caloric and macro goals.
  */

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useChallengeStore } from '@/store/useChallengeStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { format, addDays, differenceInDays, startOfMonth, endOfMonth, getDay, isSameDay, subMonths, addMonths } from 'date-fns';
@@ -29,6 +29,7 @@ export default function Dashboard() {
     startDate,
     logDailyGoal,
     fetchCurrentChallenge,
+    checkDailyReset,
     isLoading
   } = useChallengeStore();
   const router = useRouter();
@@ -38,15 +39,24 @@ export default function Dashboard() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [currentMonthDate, setCurrentMonthDate] = useState(new Date());
   const [updatingGoalId, setUpdatingGoalId] = useState<string | null>(null);
+  const hasCheckedReset = React.useRef(false);
 
   useEffect(() => {
     if (!isActive) {
       router.push('/onboarding');
-    } else if (Object.keys(logs).length === 0) {
-      // Fetch full challenge data including logs on first load if we don't have them
-      fetchCurrentChallenge();
+    } else {
+      // Always run daily reset check when visiting dashboard if active, but only once per mount
+      if (!hasCheckedReset.current) {
+        hasCheckedReset.current = true;
+        checkDailyReset().then(() => {
+          // Fallback if logs are completely empty even after check
+          if (Object.keys(useChallengeStore.getState().logs).length === 0) {
+            fetchCurrentChallenge();
+          }
+        });
+      }
     }
-  }, [isActive, router, logs, fetchCurrentChallenge]);
+  }, [isActive, router, checkDailyReset, fetchCurrentChallenge]);
 
   // Loading state prevents returning generic null silently
   if (isLoading || (isActive && !todayLog)) {

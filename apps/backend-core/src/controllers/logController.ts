@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { prisma } from '../utils/prisma';
 import { AuthRequest } from '../middlewares/auth';
 import { z } from 'zod';
-import { format, differenceInDays, subDays } from 'date-fns';
+import { format, differenceInCalendarDays, subDays } from 'date-fns';
 
 export const getLogs = async (req: AuthRequest, res: Response) => {
     try {
@@ -185,7 +185,7 @@ export const checkDailyReset = async (req: AuthRequest, res: Response) => {
         const todayLog = logs.find((l: any) => l.date === today);
 
         let newStreak = challenge.streak;
-        const currentDayNumber = differenceInDays(new Date(), new Date(challenge.startDate)) + 1;
+        const currentDayNumber = differenceInCalendarDays(new Date(), new Date(challenge.startDate)) + 1;
 
         if (yesterdayLog) {
             if (yesterdayLog.status !== 'success') {
@@ -197,7 +197,7 @@ export const checkDailyReset = async (req: AuthRequest, res: Response) => {
                     });
                 }
             }
-        } else if (differenceInDays(new Date(), new Date(challenge.startDate)) > 0) {
+        } else if (differenceInCalendarDays(new Date(), new Date(challenge.startDate)) > 0) {
             newStreak = 0;
         }
 
@@ -225,11 +225,18 @@ export const checkDailyReset = async (req: AuthRequest, res: Response) => {
                     }
                 }
             });
-            return res.status(201).json({ message: 'New daily log created', streak: newStreak });
         }
 
-        res.json({ message: 'Checked', streak: newStreak });
+        // Return the full updated log array for the store
+        const updatedLogs = await prisma.dailyLog.findMany({
+            where: { challengeId: challenge.id },
+            include: { goals: true },
+            orderBy: { date: 'asc' }
+        });
+
+        res.json({ message: 'Checked', streak: newStreak, currentDay: currentDayNumber, logs: updatedLogs });
     } catch (error) {
+        console.error('Error in checkDailyReset:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 };

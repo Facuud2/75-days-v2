@@ -4,6 +4,7 @@ import {
     logMeal,
     getMealsForDay,
     deleteMeal,
+    editMeal,
     upsertGoals,
     getGoals,
 } from '../controllers/nutritionController';
@@ -15,6 +16,7 @@ router.use(authenticate);
 
 router.post('/meals', logMeal);
 router.get('/meals/:date', getMealsForDay);
+router.put('/meals/:id', editMeal);
 router.delete('/meals/:id', deleteMeal);
 router.put('/goals', upsertGoals);
 router.get('/goals', getGoals);

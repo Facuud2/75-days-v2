@@ -27,7 +27,7 @@ export const logService = {
     },
 
     checkDailyReset: () => {
-        return apiClient<{ message: string; streak: number; logs: DailyLog[] }>('/logs/check-reset', {
+        return apiClient<{ message: string; streak: number; currentDay: number; logs: DailyLog[] }>('/logs/check-reset', {
             method: 'POST',
         });
     },

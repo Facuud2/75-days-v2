@@ -100,7 +100,20 @@ export const useChallengeStore = create<ChallengeState>()(
                 return acc;
               }, {});
             }
-            set({ ...restData, logs: parsedLogs, isActive: true, isLoading: false });
+
+            // Calculate exact day to avoid stale DB records before checkDailyReset fires
+            let safeCurrentDay = restData.currentDay;
+            if (restData.startDate) {
+              const start = new Date(restData.startDate);
+              start.setHours(0, 0, 0, 0);
+              const now = new Date();
+              now.setHours(0, 0, 0, 0);
+              const diffTime = Math.abs(now.getTime() - start.getTime());
+              const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+              safeCurrentDay = Math.max(1, diffDays + 1);
+            }
+
+            set({ ...restData, logs: parsedLogs, currentDay: safeCurrentDay, isActive: true, isLoading: false });
           } else {
             set({ isActive: false, isLoading: false });
           }
@@ -249,17 +262,18 @@ export const useChallengeStore = create<ChallengeState>()(
       checkDailyReset: async () => {
         set({ isLoading: true, error: null });
         try {
-          const { streak, logs } = await logService.checkDailyReset();
-          // Convert array of logs from backend to Record map if needed, or update endpoints
+          const { streak, currentDay, logs } = await logService.checkDailyReset();
+          // Convert array of logs from backend to Record map, handling Prisma ISO dates
           const logsRecord = logs.reduce((acc, log) => {
-            acc[log.date] = log;
+            const dateKey = typeof log.date === 'string' ? log.date.slice(0, 10) : log.date;
+            acc[dateKey] = { ...log, date: dateKey };
             return acc;
           }, {} as Record<string, DailyLog>);
 
           set((state) => ({
             streak,
             logs: { ...state.logs, ...logsRecord },
-            currentDay: Math.max(...logs.map(l => Object.keys(state.logs).length + 1), state.currentDay),
+            currentDay: currentDay ?? state.currentDay,
             isLoading: false
           }));
         } catch (error: any) {

@@ -11,6 +11,8 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import AchievementsModal from '@/components/AchievementsModal';
 import EditProfileModal from '@/components/EditProfileModal';
 import LogMealModal from '@/components/LogMealModal';
+import EditMealModal from '@/components/EditMealModal';
+import { Meal } from '@/lib/api/health';
 
 export default function Profile() {
   const { user, updateProfile: updateAuthUser } = useAuthStore();
@@ -32,6 +34,7 @@ export default function Profile() {
   const [isAchievementsModalOpen, setIsAchievementsModalOpen] = useState(false);
   const [isEditProfileModalOpen, setIsEditProfileModalOpen] = useState(false);
   const [isLogMealModalOpen, setIsLogMealModalOpen] = useState(false);
+  const [editingMeal, setEditingMeal] = useState<Meal | null>(null);
 
   const fetchProfile = useCallback(() => {
     if (user) {
@@ -482,15 +485,20 @@ export default function Profile() {
                   ) : (
                     <div className="space-y-2">
                       {dailyStats.meals.map(meal => (
-                        <div key={meal.id} className="flex justify-between items-center bg-zinc-950/40 border border-zinc-800/50 p-3 rounded-xl">
+                        <button
+                          key={meal.id}
+                          onClick={() => setEditingMeal(meal)}
+                          className="w-full text-left flex justify-between items-center bg-zinc-950/40 border border-zinc-800/50 p-3 rounded-xl hover:border-zinc-700 hover:bg-zinc-900/50 transition-colors group cursor-pointer"
+                        >
                           <div className="flex flex-col">
-                            <span className="text-sm font-semibold text-zinc-200">{meal.name}</span>
+                            <span className="text-sm font-semibold text-zinc-200 group-hover:text-amber-400 transition-colors">{meal.name}</span>
                             <span className="text-[10px] text-zinc-500 uppercase font-medium">{meal.mealType} • {meal.proteinG}g P, {meal.carbG}g C, {meal.fatG}g G</span>
                           </div>
-                          <div className="text-sm font-bold text-orange-400">
+                          <div className="text-sm font-bold text-orange-400 flex items-center gap-2">
                             {meal.calories} <span className="text-[10px] text-zinc-500 font-normal">kcal</span>
+                            <Pencil className="w-3 h-3 text-zinc-600 group-hover:text-amber-400 transition-colors" />
                           </div>
-                        </div>
+                        </button>
                       ))}
                     </div>
                   )}
@@ -657,6 +665,17 @@ export default function Profile() {
         onSaved={() => {
           // Re-fetch health stats specifically
           fetchProfile();
+        }}
+      />
+
+      <EditMealModal
+        isOpen={!!editingMeal}
+        meal={editingMeal}
+        date={format(new Date(), 'yyyy-MM-dd')}
+        onClose={() => setEditingMeal(null)}
+        onSaved={() => {
+          fetchProfile();
+          setEditingMeal(null);
         }}
       />
     </div>

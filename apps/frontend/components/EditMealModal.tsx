@@ -1,0 +1,178 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { X, Loader2, CheckCircle2, Edit3, Trash2 } from 'lucide-react';
+import { healthService, Meal, LogMealPayload } from '@/lib/api/health';
+
+interface EditMealModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    onSaved: () => void;
+    meal: Meal | null;
+    date: string;
+}
+
+export default function EditMealModal({ isOpen, onClose, onSaved, meal, date }: EditMealModalProps) {
+    const [isSaving, setIsSaving] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [formData, setFormData] = useState({
+        name: '',
+        calories: '',
+        proteinG: '',
+        carbG: '',
+        fatG: ''
+    });
+
+    useEffect(() => {
+        if (isOpen && meal) {
+            setFormData({
+                name: meal.name,
+                calories: meal.calories.toString(),
+                proteinG: meal.proteinG.toString(),
+                carbG: meal.carbG.toString(),
+                fatG: meal.fatG.toString()
+            });
+        }
+    }, [isOpen, meal]);
+
+    if (!isOpen || !meal) return null;
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!formData.name || !formData.calories) return;
+
+        setIsSaving(true);
+        try {
+            const payload: LogMealPayload = {
+                date: date,
+                mealType: meal.mealType as any,
+                name: formData.name,
+                calories: Number(formData.calories),
+                proteinG: Number(formData.proteinG) || 0,
+                carbG: Number(formData.carbG) || 0,
+                fatG: Number(formData.fatG) || 0
+            };
+
+            await healthService.updateLoggedMeal(meal.id, payload);
+            onSaved();
+            onClose();
+        } catch (error) {
+            console.error('Failed to update meal:', error);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleDelete = async () => {
+        if (!meal || !window.confirm('¿Estás seguro de que deseas eliminar este alimento?')) return;
+
+        setIsDeleting(true);
+        try {
+            await healthService.deleteLoggedMeal(meal.id);
+            onSaved();
+            onClose();
+        } catch (error) {
+            console.error('Failed to delete meal:', error);
+            alert('Error al eliminar el alimento.');
+        } finally {
+            setIsDeleting(false);
+        }
+    };
+
+    return (
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+            onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+        >
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm shadow-2xl flex flex-col max-h-[85vh]">
+
+                {/* Header */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 shrink-0">
+                    <h2 className="text-lg font-bold text-zinc-100 flex items-center gap-2">
+                        <Edit3 className="w-5 h-5 text-orange-400" />
+                        Editar Alimento
+                    </h2>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={handleDelete}
+                            disabled={isSaving || isDeleting}
+                            className="text-red-500 hover:text-red-400 transition-colors p-2 rounded-lg hover:bg-zinc-800 disabled:opacity-50"
+                            title="Eliminar alimento"
+                        >
+                            {isDeleting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
+                        </button>
+                        <button
+                            onClick={onClose}
+                            className="text-zinc-500 hover:text-zinc-300 transition-colors p-2 rounded-lg hover:bg-zinc-800"
+                        >
+                            <X className="w-5 h-5" />
+                        </button>
+                    </div>
+                </div>
+
+                {/* Body Content */}
+                <div className="flex-1 overflow-y-auto p-6">
+                    <form id="edit-meal-form" onSubmit={handleSubmit} className="space-y-4">
+                        <div>
+                            <label className="text-xs font-semibold text-zinc-400 mb-1 block">Nombre del Registro *</label>
+                            <input
+                                required
+                                type="text"
+                                value={formData.name}
+                                onChange={e => setFormData({ ...formData, name: e.target.value })}
+                                className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-orange-500"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="text-xs font-semibold text-zinc-400 mb-1 block">Calorías Totales *</label>
+                            <input
+                                required
+                                type="number"
+                                min="0"
+                                value={formData.calories}
+                                onChange={e => setFormData({ ...formData, calories: e.target.value })}
+                                className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-orange-500"
+                            />
+                        </div>
+
+                        <div className="pt-2 border-t border-zinc-800">
+                            <p className="text-xs text-zinc-500 mb-3">Macronutrientes (Gramos)</p>
+                            <div className="grid grid-cols-3 gap-3">
+                                <div>
+                                    <label className="text-[10px] uppercase font-bold text-blue-400 mb-1 block">Proteínas</label>
+                                    <input type="number" min="0" step="any" value={formData.proteinG} onChange={e => setFormData({ ...formData, proteinG: e.target.value })} className="w-full bg-zinc-950/50 border border-zinc-800 rounded-lg px-2 py-2 text-sm text-center text-zinc-200 focus:border-blue-500 focus:outline-none" />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] uppercase font-bold text-yellow-400 mb-1 block">Carbos</label>
+                                    <input type="number" min="0" step="any" value={formData.carbG} onChange={e => setFormData({ ...formData, carbG: e.target.value })} className="w-full bg-zinc-950/50 border border-zinc-800 rounded-lg px-2 py-2 text-sm text-center text-zinc-200 focus:border-yellow-500 focus:outline-none" />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] uppercase font-bold text-red-400 mb-1 block">Grasas</label>
+                                    <input type="number" min="0" step="any" value={formData.fatG} onChange={e => setFormData({ ...formData, fatG: e.target.value })} className="w-full bg-zinc-950/50 border border-zinc-800 rounded-lg px-2 py-2 text-sm text-center text-zinc-200 focus:border-red-500 focus:outline-none" />
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+                {/* Footer Controls */}
+                <div className="p-4 border-t border-zinc-800 bg-zinc-950/50 shrink-0">
+                    <button
+                        type="submit"
+                        form="edit-meal-form"
+                        disabled={isSaving || !formData.name || !formData.calories}
+                        className="w-full flex justify-center items-center gap-2 bg-orange-600 hover:bg-orange-500 text-white font-bold py-3 rounded-xl transition-all disabled:opacity-50"
+                    >
+                        {isSaving ? (
+                            <><Loader2 className="w-5 h-5 animate-spin" /> Guardando...</>
+                        ) : (
+                            <><CheckCircle2 className="w-5 h-5" /> Guardar Cambios</>
+                        )}
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    );
+}
