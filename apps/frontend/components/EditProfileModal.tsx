@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { X, User, Mail, Ruler, Weight, Target, ChevronDown, ChevronUp, Lock, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { userService, UpdateProfilePayload } from '@/lib/api/users';
+import { healthService } from '@/lib/api/health';
 
 interface EditProfileModalProps {
     isOpen: boolean;
@@ -95,6 +96,16 @@ export default function EditProfileModal({
 
             if (showPassword && currentPassword && newPassword) {
                 await userService.updatePassword({ currentPassword, newPassword });
+            }
+
+            // Sync the weight with the health microservice to ensure accurate Calorie computations
+            if (profilePayload.weight !== undefined) {
+                try {
+                    await healthService.updateGoals({ weightKg: profilePayload.weight });
+                } catch (healthErr) {
+                    console.error('Failed to sync weight to health service:', healthErr);
+                    // Decide if we want to fail the whole process or just log. We just log for now.
+                }
             }
 
             setAlert({ type: 'success', message: '¡Perfil actualizado correctamente!' });

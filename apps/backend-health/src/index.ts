@@ -1,12 +1,13 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+dotenv.config();
+
 import nutritionRoutes from './routes/nutrition';
 import workoutRoutes from './routes/workouts';
 import statsRoutes from './routes/stats';
 import internalRoutes from './routes/internal';
-
-dotenv.config();
+import fatsecretRoutes from './routes/fatsecret';
 
 const app = express();
 const port = process.env.PORT || 3002;
@@ -27,20 +28,12 @@ app.get('/health', (_req, res) => {
 app.use('/api/nutrition', nutritionRoutes);
 app.use('/api/workouts', workoutRoutes);
 app.use('/api/stats', statsRoutes);
+app.use('/api/fatsecret', fatsecretRoutes);
 
 // ── Internal Routes (API-key-protected) ──────────────────────────────────────
 
 app.use('/internal', internalRoutes);
 
-// ── Global Error Handler ──────────────────────────────────────────────────────
-
-app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-    console.error('[backend-health] Unhandled error:', err);
-    res.status(500).json({ error: 'Internal server error' });
-});
-
-// ── Start ─────────────────────────────────────────────────────────────────────
-
-app.listen(port, () => {
-    console.log(`[backend-health] Service running on port ${port}`);
+app.listen(Number(port), '0.0.0.0', () => {
+    console.log(`[backend-health] Service running on port ${port} (IPv4)`);
 });

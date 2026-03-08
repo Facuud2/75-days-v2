@@ -9,6 +9,7 @@ export interface UserProfileResponse {
         initialWeight: number;
         currentWeight: number;
         targetWeight: number;
+        height?: number;
         weightHistory?: { date: string; weight: number }[];
     };
     stats: {

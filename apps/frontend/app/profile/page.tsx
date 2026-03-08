@@ -4,11 +4,13 @@ import { useEffect, useState, useCallback } from 'react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useChallengeStore } from '@/store/useChallengeStore';
 import { userService, UserProfileResponse } from '@/lib/api/users';
+import { healthService, DailyStats } from '@/lib/api/health';
 import { format } from 'date-fns';
-import { Trophy, Calendar, Scale, Award, Flame, Target, ChevronRight, CheckCircle2, Lock, Activity, BarChart3, Footprints, Clock, Zap, Pencil } from 'lucide-react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
+import { Trophy, Calendar, Scale, Award, Flame, Target, ChevronRight, CheckCircle2, Lock, Activity, BarChart3, Footprints, Clock, Zap, Pencil, PieChart as PieChartIcon } from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, PieChart, Pie, Cell, Legend } from 'recharts';
 import AchievementsModal from '@/components/AchievementsModal';
 import EditProfileModal from '@/components/EditProfileModal';
+import LogMealModal from '@/components/LogMealModal';
 
 export default function Profile() {
   const { user, updateProfile: updateAuthUser } = useAuthStore();
@@ -25,19 +27,26 @@ export default function Profile() {
   } = useChallengeStore();
 
   const [profileData, setProfileData] = useState<UserProfileResponse | null>(null);
+  const [dailyStats, setDailyStats] = useState<DailyStats | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [isAchievementsModalOpen, setIsAchievementsModalOpen] = useState(false);
   const [isEditProfileModalOpen, setIsEditProfileModalOpen] = useState(false);
+  const [isLogMealModalOpen, setIsLogMealModalOpen] = useState(false);
 
   const fetchProfile = useCallback(() => {
     if (user) {
-      userService.getProfile()
-        .then(data => {
-          setProfileData(data);
+      const today = format(new Date(), 'yyyy-MM-dd');
+      Promise.all([
+        userService.getProfile(),
+        healthService.getDailyStats(today).catch(() => null)
+      ])
+        .then(([profile, healthData]) => {
+          setProfileData(profile);
+          setDailyStats(healthData);
           setLoadingProfile(false);
         })
         .catch(err => {
-          console.error('Error fetching profile:', err);
+          console.error('Error fetching data:', err);
           setLoadingProfile(false);
         });
     }
@@ -55,12 +64,20 @@ export default function Profile() {
 
   const mockInitialWeight = profileData?.user.initialWeight || 0;
   const mockGoalWeight = profileData?.user.targetWeight || 0;
-  const mockCurrentWeight = profileData?.user.currentWeight || 0;
+  const mockCurrentWeight = profileData?.user.currentWeight || user?.weight || 0;
 
   // Only calculate "to lose" if a goal is set and we're above it
   const mockToLose = mockGoalWeight > 0
     ? Math.max(0, mockCurrentWeight - mockGoalWeight).toFixed(1)
     : "0.0";
+
+  // Macros Pie Chart Data
+  const macrosData = dailyStats && dailyStats.macros ? [
+    { name: 'Proteínas', value: dailyStats.macros.proteinG, color: '#3b82f6' }, // Blue
+    { name: 'Carbos', value: dailyStats.macros.carbG, color: '#f59e0b' },    // Yellow
+    { name: 'Grasas', value: dailyStats.macros.fatG, color: '#ef4444' }       // Red
+  ] : [];
+  const hasMacros = macrosData.some(m => m.value > 0);
 
   const weightHistoryData = profileData?.user.weightHistory || [];
 
@@ -72,7 +89,18 @@ export default function Profile() {
   const mockTotalDistance = 0;
   const mockTotalHours = 0;
   const mockTotalCals = 0;
-  const mockBMI = 0;
+
+  const mockHeightMeters = (profileData?.user.height || user?.height || 0) / 100;
+  const mockBMI = mockHeightMeters > 0 ? Number((mockCurrentWeight / (mockHeightMeters * mockHeightMeters)).toFixed(1)) : 0;
+
+  const getBMICategory = (bmi: number) => {
+    if (bmi === 0) return { label: 'Sin datos', color: 'text-zinc-500', bg: 'bg-zinc-800' };
+    if (bmi < 18.5) return { label: 'Bajo peso', color: 'text-yellow-400', bg: 'bg-yellow-500/20' };
+    if (bmi < 25) return { label: 'Normal', color: 'text-green-400', bg: 'bg-green-500/20' };
+    if (bmi < 30) return { label: 'Sobrepeso', color: 'text-orange-400', bg: 'bg-orange-500/20' };
+    return { label: 'Obesidad', color: 'text-red-400', bg: 'bg-red-500/20' };
+  };
+  const bmiCategory = getBMICategory(mockBMI);
 
   const mockCompletedChallenges: any[] = [];
   const achievementsList = profileData?.achievements || [];
@@ -293,9 +321,16 @@ export default function Profile() {
 
           {/* Weight Progress Widget */}
           <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6">
-            <h3 className="text-sm font-semibold flex items-center gap-2 mb-4 text-zinc-300">
-              <Scale className="w-4 h-4 text-green-400" />
-              Progreso de Peso
+            <h3 className="text-sm font-semibold flex items-center justify-between mb-4 text-zinc-300">
+              <span className="flex items-center gap-2">
+                <Scale className="w-4 h-4 text-green-400" />
+                Progreso de Peso
+              </span>
+              {mockBMI > 0 && (
+                <div className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${bmiCategory.bg} ${bmiCategory.color}`}>
+                  IMC: {mockBMI} ({bmiCategory.label})
+                </div>
+              )}
             </h3>
             <div className="mb-6">
               <div className="text-3xl font-bold">{mockCurrentWeight} kg</div>
@@ -350,6 +385,122 @@ export default function Profile() {
                 </span>
               </div>
             </div>
+          </div>
+
+          {/* Daily Nutrition Widget */}
+          <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6 relative overflow-hidden group">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold flex items-center gap-2 text-zinc-300">
+                <PieChartIcon className="w-4 h-4 text-orange-400" />
+                Nutrición de Hoy
+              </h3>
+              <button
+                onClick={() => setIsLogMealModalOpen(true)}
+                className="text-xs font-bold text-orange-400 hover:text-orange-300 transition-colors"
+              >
+                + Registrar
+              </button>
+            </div>
+
+            {dailyStats ? (
+              <div className="space-y-6">
+                {/* Calories Summary */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-zinc-950/50 rounded-xl p-3 text-center border border-zinc-800">
+                    <div className="text-xs text-zinc-500 mb-1">Consumido</div>
+                    <div className="font-bold text-orange-400">{dailyStats.consumed} kcal</div>
+                  </div>
+                  <div className="bg-zinc-950/50 rounded-xl p-3 text-center border border-zinc-800">
+                    <div className="text-xs text-zinc-500 mb-1">Restante</div>
+                    <div className="font-bold text-green-400">{dailyStats.remainingToGoal > 0 ? dailyStats.remainingToGoal : 0} kcal</div>
+                  </div>
+                </div>
+
+                {/* Progress Bar for Calories */}
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs text-zinc-400">
+                    <span>0</span>
+                    <span>Meta: {dailyStats.dailyGoal} kcal</span>
+                  </div>
+                  <div className="h-2 w-full bg-zinc-800 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-1000 ${dailyStats.consumed > dailyStats.dailyGoal ? 'bg-red-500' : 'bg-orange-500'}`}
+                      style={{ width: `${Math.min(100, (dailyStats.consumed / (dailyStats.dailyGoal || 1)) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Macros Donut Chart */}
+                <div className="pt-2">
+                  <h4 className="text-xs font-semibold text-zinc-400 mb-2 uppercase tracking-wider text-center">Macronutrientes</h4>
+                  {hasMacros ? (
+                    <div className="h-48 relative">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={macrosData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={50}
+                            outerRadius={75}
+                            paddingAngle={5}
+                            dataKey="value"
+                            stroke="none"
+                          >
+                            {macrosData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip
+                            contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', borderRadius: '8px', fontSize: '12px' }}
+                            itemStyle={{ color: '#fff' }}
+                            formatter={(value: any) => [`${value}g`, '']}
+                          />
+                          <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                      {/* Center absolute text */}
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none pb-8 text-center pt-[15px]">
+                        <span className="text-lg font-bold text-zinc-300">{(macrosData[0].value * 4 + macrosData[1].value * 4 + macrosData[2].value * 9).toFixed(0)} <br /><span className="text-[10px] uppercase tracking-wide text-zinc-500 font-medium">kcal</span></span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="h-24 bg-zinc-950/50 rounded-xl border border-zinc-800 flex items-center justify-center text-xs text-zinc-500 text-center px-4 mt-4">
+                      No has registrado comidas hoy.
+                    </div>
+                  )}
+                </div>
+
+                {/* Registered Meals Feed */}
+                <div className="pt-2 border-t border-zinc-800/80">
+                  <h4 className="text-xs font-semibold text-zinc-400 mb-3 uppercase tracking-wider">Últimas Comidas</h4>
+
+                  {(!dailyStats.meals || dailyStats.meals.length === 0) ? (
+                    <div className="text-center text-xs text-zinc-500 py-4 bg-zinc-950/30 rounded-lg">
+                      No hay registros
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {dailyStats.meals.map(meal => (
+                        <div key={meal.id} className="flex justify-between items-center bg-zinc-950/40 border border-zinc-800/50 p-3 rounded-xl">
+                          <div className="flex flex-col">
+                            <span className="text-sm font-semibold text-zinc-200">{meal.name}</span>
+                            <span className="text-[10px] text-zinc-500 uppercase font-medium">{meal.mealType} • {meal.proteinG}g P, {meal.carbG}g C, {meal.fatG}g G</span>
+                          </div>
+                          <div className="text-sm font-bold text-orange-400">
+                            {meal.calories} <span className="text-[10px] text-zinc-500 font-normal">kcal</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="text-center text-sm text-zinc-500 py-8 bg-zinc-950/50 rounded-xl border border-zinc-800">
+                Información nutricional no disponible.
+              </div>
+            )}
           </div>
 
           {/* Recent Activity Widget
@@ -496,6 +647,16 @@ export default function Profile() {
           weight: user.weight ?? undefined,
           targetWeight: user.targetWeight ?? undefined,
           height: user.height ?? undefined,
+        }}
+      />
+
+      <LogMealModal
+        isOpen={isLogMealModalOpen}
+        onClose={() => setIsLogMealModalOpen(false)}
+        date={format(new Date(), 'yyyy-MM-dd')}
+        onSaved={() => {
+          // Re-fetch health stats specifically
+          fetchProfile();
         }}
       />
     </div>

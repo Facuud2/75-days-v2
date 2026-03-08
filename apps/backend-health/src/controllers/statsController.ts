@@ -52,6 +52,15 @@ async function buildDaySummary(userId: string, date: string, profile: { dailyCal
         },
         workoutsCount: workouts.length,
         totalWorkoutMin: workoutMin,
+        meals: meals.map(m => ({
+            id: m.id,
+            mealType: m.mealType,
+            name: m.name,
+            calories: m.calories,
+            proteinG: m.proteinG,
+            carbG: m.carbG,
+            fatG: m.fatG
+        })),
     };
 }
 

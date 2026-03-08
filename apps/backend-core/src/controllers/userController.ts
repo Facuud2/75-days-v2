@@ -149,6 +149,7 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
                 initialWeight: initialWeight,
                 currentWeight: bestWeight || initialWeight,
                 targetWeight: user.targetWeight || 0,
+                height: user.height || 0,
                 weightHistory,
             },
             stats: {
