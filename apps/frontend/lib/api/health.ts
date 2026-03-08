@@ -125,6 +125,42 @@ export interface FatSecretFoodDetails {
     servings: FatSecretFoodServing[];
 }
 
+export interface Ingredient {
+    id: string;
+    name: string;
+    caloriesPer100g: number;
+    proteinPer100g: number;
+    carbPer100g: number;
+    fatPer100g: number;
+}
+
+export interface CustomFoodIngredient {
+    id: string;
+    ingredientId: string;
+    weightGrams: number;
+    ingredient?: Ingredient;
+}
+
+export interface CustomFood {
+    id: string;
+    userId: string;
+    name: string;
+    description: string | null;
+    calories: number;
+    proteinG: number;
+    carbG: number;
+    fatG: number;
+    servingSize: string | null;
+    ingredients?: CustomFoodIngredient[];
+}
+
+export interface CreateCustomFoodPayload {
+    name: string;
+    description?: string | null;
+    servingSize?: string | null;
+    ingredients: { ingredientId: string; weightGrams: number }[];
+}
+
 export interface LogMealPayload {
     date: string;
     mealType: string;
@@ -151,5 +187,24 @@ export const healthService = {
         healthClient<{ message: string, meal: any }>('/nutrition/meals', {
             method: 'POST',
             body: JSON.stringify(payload)
-        })
+        }),
+    // Custom Foods CRUD
+    getSystemIngredients: () =>
+        healthClient<Ingredient[]>('/nutrition/custom-foods/ingredients'),
+    getCustomFoods: () =>
+        healthClient<CustomFood[]>('/nutrition/custom-foods'),
+    createCustomFood: (payload: CreateCustomFoodPayload) =>
+        healthClient<CustomFood>('/nutrition/custom-foods', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        }),
+    updateCustomFood: (id: string, payload: CreateCustomFoodPayload) =>
+        healthClient<CustomFood>(`/nutrition/custom-foods/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(payload)
+        }),
+    deleteCustomFood: (id: string) =>
+        healthClient<void>(`/nutrition/custom-foods/${id}`, {
+            method: 'DELETE'
+        }),
 };

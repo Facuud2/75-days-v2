@@ -8,6 +8,7 @@ import workoutRoutes from './routes/workouts';
 import statsRoutes from './routes/stats';
 import internalRoutes from './routes/internal';
 import fatsecretRoutes from './routes/fatsecret';
+import customFoodsRoutes from './routes/customFoods';
 
 const app = express();
 const port = process.env.PORT || 3002;
@@ -25,6 +26,7 @@ app.get('/health', (_req, res) => {
 
 // ── Public API Routes (JWT-protected internally) ──────────────────────────────
 
+app.use('/api/nutrition/custom-foods', customFoodsRoutes);
 app.use('/api/nutrition', nutritionRoutes);
 app.use('/api/workouts', workoutRoutes);
 app.use('/api/stats', statsRoutes);
