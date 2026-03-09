@@ -3,10 +3,11 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useChallengeStore } from '@/store/useChallengeStore';
+import { useQuestStore } from '@/store/useQuestStore';
 import { userService, UserProfileResponse } from '@/lib/api/users';
 import { healthService, DailyStats } from '@/lib/api/health';
 import { format } from 'date-fns';
-import { Trophy, Calendar, Scale, Award, Flame, Target, ChevronRight, CheckCircle2, Lock, Activity, BarChart3, Footprints, Clock, Zap, Pencil, PieChart as PieChartIcon, RefreshCw } from 'lucide-react';
+import { Trophy, Calendar, Scale, Award, Flame, Target, ChevronRight, CheckCircle2, Lock, Activity, BarChart3, Footprints, Clock, Zap, Pencil, PieChart as PieChartIcon, RefreshCw, Sun, Moon, Dumbbell, Book, Droplet } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, PieChart, Pie, Cell, Legend } from 'recharts';
 import AchievementsModal from '@/components/AchievementsModal';
 import EditProfileModal from '@/components/EditProfileModal';
@@ -14,6 +15,15 @@ import LogMealModal from '@/components/LogMealModal';
 import EditMealModal from '@/components/EditMealModal';
 import LogWorkoutModal from '@/components/LogWorkoutModal';
 import { Meal } from '@/lib/api/health';
+
+const iconMap: Record<string, any> = {
+  droplet: Droplet,
+  dumbbell: Dumbbell,
+  book: Book,
+  sun: Sun,
+  moon: Moon,
+  target: Target,
+};
 
 export default function Profile() {
   const { user, updateProfile: updateAuthUser } = useAuthStore();
@@ -28,6 +38,15 @@ export default function Profile() {
     challengesCompleted,
     sideQuests
   } = useChallengeStore();
+
+  const {
+    quests,
+    availableQuests,
+    fetchQuests,
+    fetchAvailableQuests,
+    subscribeToQuest,
+    progressQuest
+  } = useQuestStore();
 
   const [profileData, setProfileData] = useState<UserProfileResponse | null>(null);
   const [dailyStats, setDailyStats] = useState<DailyStats | null>(null);
@@ -44,6 +63,7 @@ export default function Profile() {
   const [syncingStrava, setSyncingStrava] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [recentWorkouts, setRecentWorkouts] = useState<any[]>([]);
+  const [subscribingTo, setSubscribingTo] = useState<string | null>(null);
 
   const fetchProfile = useCallback(() => {
     if (user) {
@@ -70,6 +90,8 @@ export default function Profile() {
 
   useEffect(() => {
     fetchProfile();
+    fetchQuests();
+    fetchAvailableQuests();
 
     // Check for OAuth callbacks in URL
     const urlParams = new URLSearchParams(window.location.search);
@@ -80,7 +102,7 @@ export default function Profile() {
       setAuthError('Error al conectar con Strava');
       window.history.replaceState({}, document.title, window.location.pathname);
     }
-  }, [fetchProfile]);
+  }, [fetchProfile, fetchQuests, fetchAvailableQuests]);
 
   const handleConnectStrava = async () => {
     try {
@@ -105,6 +127,15 @@ export default function Profile() {
       alert('Error sincronizando entrenamientos.');
     } finally {
       setSyncingStrava(false);
+    }
+  };
+
+  const handleSubscribe = async (title: string, difficulty: string, durationDays: number) => {
+    setSubscribingTo(title);
+    try {
+      await subscribeToQuest(title, difficulty, durationDays);
+    } finally {
+      setSubscribingTo(null);
     }
   };
 
@@ -364,6 +395,171 @@ export default function Profile() {
                 Haz clic para ver los {achievementsList.length} logros
               </div>
             )}
+          </div>
+
+          {/* Dynamic Activities Section */}
+          <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6 relative overflow-hidden">
+            {/* Subtle background glow */}
+            <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-900/5 rounded-full blur-3xl -z-10 pointer-events-none"></div>
+
+            <div className="flex items-center text-zinc-100 justify-between mb-8 relative z-10 border-b border-zinc-800/50 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="bg-emerald-500/20 p-2 rounded-lg">
+                  <Target className="text-emerald-500 w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold leading-tight">Actividades Dinámicas</h2>
+                  <p className="text-sm text-zinc-400">Misiones secundarias para potenciar tu progreso</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-8 relative z-10">
+              {/* Suscribed Quests */}
+              <div>
+                <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500/70" />
+                  Mis Actividades
+                </h3>
+
+                {quests.length > 0 ? (
+                  <div className="grid grid-cols-1 gap-3">
+                    {quests.map(quest => {
+                      const IconComponent = Trophy;
+                      return (
+                        <div
+                          key={quest.id}
+                          onClick={() => !quest.completed && progressQuest(quest.id)}
+                          className={`group border rounded-xl p-4 flex items-center gap-4 transition-all duration-300 ${quest.completed
+                            ? 'border-emerald-500/30 bg-emerald-500/5 cursor-default'
+                            : 'border-zinc-800/80 bg-zinc-950/40 hover:border-emerald-500/50 hover:bg-zinc-900/60 cursor-pointer active:scale-[0.99]'
+                            }`}
+                        >
+                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 transition-colors ${quest.completed
+                            ? 'bg-emerald-500/20 text-emerald-500'
+                            : 'bg-zinc-800/80 text-emerald-500/70 group-hover:text-emerald-500'
+                            }`}>
+                            <IconComponent size={20} strokeWidth={1.5} />
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between mb-1 gap-2">
+                              <h3 className={`font-semibold text-sm truncate transition-colors ${quest.completed ? 'text-zinc-500 line-through' : 'text-zinc-200 group-hover:text-white'}`}>
+                                {quest.title}
+                              </h3>
+                              {quest.completed && (
+                                <span className="text-[10px] uppercase font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-md shrink-0">
+                                  Completada
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-3 mt-1">
+                              <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
+                                Nivel: <span className={
+                                  quest.difficulty === 'Easy' ? 'text-emerald-400' :
+                                    quest.difficulty === 'Medium' ? 'text-amber-400' : 'text-red-400'
+                                }>{quest.difficulty === 'Easy' ? 'Fácil' : quest.difficulty === 'Medium' ? 'Medio' : 'Difícil'}</span>
+                              </span>
+                            </div>
+
+                            {!quest.completed && (
+                              <div className="flex items-center gap-2 mt-3">
+                                <div className="flex-1 h-1 bg-zinc-800 rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full bg-emerald-500 transition-all duration-500 ease-out"
+                                    style={{ width: `${(quest.progress / quest.durationDays) * 100}%` }}
+                                  />
+                                </div>
+                                <span className="text-[10px] text-zinc-500 whitespace-nowrap font-medium">{quest.progress} / {quest.durationDays}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-all duration-300 ease-out ${quest.completed
+                            ? 'bg-emerald-500 border-emerald-500'
+                            : 'border-zinc-700/50 group-hover:border-emerald-500/50'
+                            }`}>
+                            {quest.completed && <CheckCircle2 size={12} className="text-zinc-950" strokeWidth={4} />}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-6 bg-zinc-950/30 rounded-xl border border-dashed border-zinc-800/80">
+                    <p className="text-sm text-zinc-500">Aún no te has suscrito a ninguna actividad.</p>
+                    <p className="text-xs text-zinc-600 mt-1">Explora las misiones disponibles abajo y comienza una nueva.</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Available Quests */}
+              <div className="pt-2">
+                <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                  <Target className="w-4 h-4 text-rose-500/70" />
+                  Nuevas Actividades Disponibles
+                </h3>
+
+                {(() => {
+                  const activeQuestTitles = quests.filter(q => !q.completed).map(q => q.title);
+                  const availableToSubscribe = availableQuests.filter(q => !activeQuestTitles.includes(q.title));
+
+                  if (availableToSubscribe.length === 0) {
+                    return (
+                      <div className="text-center py-6 bg-zinc-950/30 rounded-xl border border-dashed border-zinc-800/80">
+                        <Trophy className="mx-auto w-8 h-8 text-yellow-500/40 mb-2" />
+                        <p className="text-sm text-zinc-400">¡Has completado o tienes activas todas las misiones!</p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {availableToSubscribe.map(quest => {
+                        const IconComponent = quest.icon ? iconMap[quest.icon] : Trophy;
+                        const isSubscribing = subscribingTo === quest.title;
+
+                        return (
+                          <div key={quest.title} className="bg-zinc-950/40 border border-zinc-800/80 rounded-xl p-4 flex flex-col hover:border-zinc-700/80 transition-colors group">
+                            <div className="flex items-start gap-3 mb-2">
+                              <div className="w-10 h-10 rounded-lg bg-zinc-900 flex items-center justify-center text-zinc-400 group-hover:text-rose-400 transition-colors shrink-0">
+                                <IconComponent size={20} strokeWidth={1.5} />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between gap-2">
+                                  <h4 className="font-semibold text-sm truncate text-zinc-200 group-hover:text-white transition-colors">{quest.title}</h4>
+                                  <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md shrink-0 ${quest.difficulty === 'Easy' ? 'bg-emerald-500/10 text-emerald-500' :
+                                    quest.difficulty === 'Medium' ? 'bg-amber-500/10 text-amber-500' :
+                                      'bg-red-500/10 text-red-500'
+                                    }`}>
+                                    {quest.difficulty === 'Easy' ? 'Fácil' : quest.difficulty === 'Medium' ? 'Medio' : 'Difícil'}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-zinc-500 mt-1 line-clamp-2">{quest.description}</p>
+                                <div className="text-[10px] font-semibold text-zinc-600 mt-2 bg-zinc-900 inline-block px-1.5 py-0.5 rounded">
+                                  {quest.durationDays} Días
+                                </div>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => handleSubscribe(quest.title, quest.difficulty, quest.durationDays)}
+                              disabled={subscribingTo !== null}
+                              className="mt-3 w-full py-2 bg-rose-500/10 text-rose-500 text-xs font-bold rounded-lg hover:bg-rose-500 hover:text-white transition-all disabled:opacity-50 disabled:bg-zinc-800 disabled:text-zinc-500 flex items-center justify-center h-8"
+                            >
+                              {isSubscribing ? (
+                                <div className="w-4 h-4 rounded-full border-2 border-white/20 border-t-white animate-spin" />
+                              ) : (
+                                'Suscribirse'
+                              )}
+                            </button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )
+                })()}
+              </div>
+            </div>
           </div>
 
         </div>

@@ -6,10 +6,11 @@ const api = axios.create({
 });
 
 import { InternalAxiosRequestConfig } from 'axios';
+import { useAuthStore } from './useAuthStore';
 
 // Configure interceptor for auth token
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-    const token = localStorage.getItem('token');
+    const token = useAuthStore.getState().token;
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
     }

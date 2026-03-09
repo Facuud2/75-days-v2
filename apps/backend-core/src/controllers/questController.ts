@@ -19,7 +19,7 @@ export const getQuests = async (req: AuthRequest, res: Response) => {
 
 export const getAvailableQuests = async (req: Request, res: Response) => {
     try {
-        const templates = await prisma.sideQuestTemplate.findMany({
+        console.log("HITTING AVAILABLE QUESTS"); const templates = await prisma.sideQuestTemplate.findMany({
             orderBy: { durationDays: 'asc' }
         });
 
