@@ -342,7 +342,7 @@ export default function LogMealModal({ isOpen, onClose, onSaved, date }: LogMeal
 
                                         {hasSearched && searchResults.length === 0 && !isSearching && (
                                             <div className="text-center py-10 text-sm text-zinc-500">
-                                                No se encontraron resultados para "{query}".
+                                                No se encontraron resultados para &quot;{query}&quot;.
                                             </div>
                                         )}
 

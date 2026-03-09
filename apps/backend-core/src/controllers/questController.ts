@@ -17,6 +17,18 @@ export const getQuests = async (req: AuthRequest, res: Response) => {
     }
 };
 
+export const getAvailableQuests = async (req: Request, res: Response) => {
+    try {
+        const templates = await prisma.sideQuestTemplate.findMany({
+            orderBy: { durationDays: 'asc' }
+        });
+
+        res.json(templates);
+    } catch (error) {
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
 const addQuestSchema = z.object({
     title: z.string(),
     difficulty: z.enum(['Easy', 'Medium', 'Hard']),

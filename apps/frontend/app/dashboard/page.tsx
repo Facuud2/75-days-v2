@@ -3,12 +3,16 @@
 import React, { useEffect, useState } from 'react';
 import { useChallengeStore } from '@/store/useChallengeStore';
 import { useAuthStore } from '@/store/useAuthStore';
+import { useQuestStore } from '@/store/useQuestStore';
 import { format, addDays, differenceInDays, startOfMonth, endOfMonth, getDay, isSameDay, subMonths, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Check, Utensils, Dumbbell, Sun, Droplet, Book, Camera, Target, ChevronLeft, ChevronRight, PlusCircle } from 'lucide-react';
+import { Check, Utensils, Dumbbell, Sun, Droplet, Book, Camera, Target, ChevronLeft, ChevronRight, PlusCircle, Trophy } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import DayDetailsModal from '@/components/DayDetailsModal';
+import SideQuestsModal from '@/components/SideQuestsModal';
 import { DEFAULT_GOALS } from '@/lib/constants/plans';
+
+type TabView = 'plan' | 'missions';
 
 const iconMap: Record<string, any> = {
   utensils: Utensils,
@@ -30,8 +34,10 @@ export default function Dashboard() {
     logDailyGoal,
     fetchCurrentChallenge,
     checkDailyReset,
-    isLoading
+    isLoading: isChallengeLoading
   } = useChallengeStore();
+  const { quests, fetchQuests, progressQuest, isLoading: isQuestsLoading } = useQuestStore();
+
   const router = useRouter();
 
   const todayStr = format(new Date(), 'yyyy-MM-dd');
@@ -39,6 +45,9 @@ export default function Dashboard() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [currentMonthDate, setCurrentMonthDate] = useState(new Date());
   const [updatingGoalId, setUpdatingGoalId] = useState<string | null>(null);
+  const [isSideQuestsModalOpen, setIsSideQuestsModalOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<TabView>('plan');
+
   const hasCheckedReset = React.useRef(false);
 
   useEffect(() => {
@@ -54,12 +63,13 @@ export default function Dashboard() {
             fetchCurrentChallenge();
           }
         });
+        fetchQuests();
       }
     }
-  }, [isActive, router, checkDailyReset, fetchCurrentChallenge]);
+  }, [isActive, router, checkDailyReset, fetchCurrentChallenge, fetchQuests]);
 
   // Loading state prevents returning generic null silently
-  if (isLoading || (isActive && !todayLog)) {
+  if (isChallengeLoading || (isActive && !todayLog)) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
         <div className="w-12 h-12 rounded-full border-4 border-white/10 border-t-rose-500 animate-spin" />
@@ -337,54 +347,187 @@ export default function Dashboard() {
 
       {/* Right Column */}
       <div className="lg:col-span-8">
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-8 gap-2">
-          <h2 className="text-2xl font-bold text-rose-500 tracking-tight">Tareas de Hoy</h2>
-          <span className="text-white/50 text-sm font-medium capitalize">
-            {format(now, "EEEE, d 'de' MMMM", { locale: es })}
-          </span>
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-8 gap-4">
+          <div>
+            <h2 className="text-2xl font-bold text-rose-500 tracking-tight">Tareas de Hoy</h2>
+            <span className="text-white/50 text-sm font-medium capitalize">
+              {format(now, "EEEE, d 'de' MMMM", { locale: es })}
+            </span>
+          </div>
+
+          {/* Pills Toggle */}
+          <div className="flex bg-rose-950/20 p-1.5 rounded-2xl border border-rose-950/40">
+            <button
+              onClick={() => setActiveTab('plan')}
+              className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === 'plan'
+                ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/20'
+                : 'text-white/50 hover:text-white hover:bg-white/5'
+                }`}
+            >
+              Plan Activo
+            </button>
+            <button
+              onClick={() => setActiveTab('missions')}
+              className={`px-6 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${activeTab === 'missions'
+                ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/20'
+                : 'text-white/50 hover:text-white hover:bg-white/5'
+                }`}
+            >
+              Misiones
+              {quests.filter(q => !q.completed).length > 0 && (
+                <span className={`w-5 h-5 flex items-center justify-center rounded-full text-[10px] ${activeTab === 'missions' ? 'bg-white text-rose-500' : 'bg-rose-500/20 text-rose-500'
+                  }`}>
+                  {quests.filter(q => !q.completed).length}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
 
-        <div className="space-y-8">
-          {currentPlanName === 'Custom' ? (
-            /* PLAN CUSTOM: all goals are personal */
-            <div>
-              <h3 className="text-sm font-bold tracking-widest text-emerald-600 dark:text-emerald-500 uppercase mb-4 opacity-80 flex items-center gap-2">
-                <PlusCircle size={16} /> Metas Personalizadas
-              </h3>
-              <div className="space-y-3">
-                {todayLog.goals.map(renderGoalItem)}
-              </div>
-            </div>
-          ) : (
+        <div className="space-y-8 min-h-[400px]">
+          {activeTab === 'plan' ? (
+            /* TAB: PLAN ACTIVO */
             <>
-              {/* TAREAS DEL PLAN BASE (Soft / Medium / Hard) */}
-              <div>
-                <h3 className="text-sm font-bold tracking-widest text-rose-500 uppercase mb-4 opacity-80 flex items-center gap-2">
-                  <Target size={16} /> Plan {currentPlanName}
-                </h3>
-                <div className="space-y-3">
-                  {baseGoals.length > 0 ? (
-                    baseGoals.map(renderGoalItem)
-                  ) : (
-                    <p className="text-white/40 text-sm italic p-4 bg-white/5 rounded-2xl border border-white/5">
-                      No hay tareas base para este plan.
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {/* METAS PERSONALIZADAS (extra goals on non-custom plans) */}
-              {customGoals.length > 0 && (
+              {currentPlanName === 'Custom' ? (
+                /* PLAN CUSTOM: all goals are personal */
                 <div>
                   <h3 className="text-sm font-bold tracking-widest text-emerald-600 dark:text-emerald-500 uppercase mb-4 opacity-80 flex items-center gap-2">
                     <PlusCircle size={16} /> Metas Personalizadas
                   </h3>
                   <div className="space-y-3">
-                    {customGoals.map(renderGoalItem)}
+                    {todayLog.goals.map(renderGoalItem)}
                   </div>
                 </div>
+              ) : (
+                <>
+                  {/* TAREAS DEL PLAN BASE (Soft / Medium / Hard) */}
+                  <div>
+                    <h3 className="text-sm font-bold tracking-widest text-rose-500 uppercase mb-4 opacity-80 flex items-center gap-2">
+                      <Target size={16} /> Plan {currentPlanName}
+                    </h3>
+                    <div className="space-y-3">
+                      {baseGoals.length > 0 ? (
+                        baseGoals.map(renderGoalItem)
+                      ) : (
+                        <p className="text-white/40 text-sm italic p-4 bg-white/5 rounded-2xl border border-white/5">
+                          No hay tareas base para este plan.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* METAS PERSONALIZADAS (extra goals on non-custom plans) */}
+                  {customGoals.length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-bold tracking-widest text-emerald-600 dark:text-emerald-500 uppercase mb-4 opacity-80 flex items-center gap-2">
+                        <PlusCircle size={16} /> Metas Personalizadas
+                      </h3>
+                      <div className="space-y-3">
+                        {customGoals.map(renderGoalItem)}
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </>
+          ) : (
+            /* TAB: MISIONES */
+            <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-sm font-bold tracking-widest text-emerald-500 uppercase opacity-80 flex items-center gap-2">
+                  <Trophy size={16} /> Misiones Secundarias
+                </h3>
+                <button
+                  onClick={() => setIsSideQuestsModalOpen(true)}
+                  className="text-xs font-bold text-rose-500 hover:text-white bg-rose-500/10 hover:bg-rose-500 transition-colors px-4 py-2 rounded-xl flex items-center gap-2"
+                >
+                  <PlusCircle size={14} /> Nueva Misión
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {isQuestsLoading && quests.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12">
+                    <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-rose-500 animate-spin mb-4" />
+                    <p className="text-white/50 text-sm">Cargando misiones...</p>
+                  </div>
+                ) : quests.length > 0 ? (
+                  quests.map(quest => (
+                    <div
+                      key={quest.id}
+                      onClick={() => !quest.completed && progressQuest(quest.id)}
+                      className={`group bg-rose-950/20 border rounded-2xl p-5 transition-all duration-300 ${quest.completed
+                        ? 'border-emerald-500/30 bg-emerald-500/5'
+                        : 'border-[#361726] hover:border-emerald-500/50 hover:bg-emerald-950/20 cursor-pointer active:scale-[0.98]'
+                        }`}
+                    >
+                      <div className="flex items-center gap-5">
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${quest.completed
+                          ? 'bg-emerald-500/20 text-emerald-500'
+                          : 'bg-rose-950/60 text-emerald-500/70 group-hover:text-emerald-500'
+                          }`}>
+                          <Trophy size={24} strokeWidth={1.5} />
+                        </div>
+
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h3 className={`font-bold text-lg transition-colors ${quest.completed ? 'text-white/70 line-through' : 'text-white'}`}>
+                              {quest.title}
+                            </h3>
+                            {quest.completed && (
+                              <span className="text-[10px] uppercase font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-md">
+                                Completada
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <span className="text-xs font-semibold text-white/40">
+                              Dificultad: <span className={
+                                quest.difficulty === 'Easy' ? 'text-emerald-400' :
+                                  quest.difficulty === 'Medium' ? 'text-amber-400' : 'text-red-400'
+                              }>{quest.difficulty}</span>
+                            </span>
+                            <span className="text-xs font-semibold text-white/40">
+                              Progreso: <span className="text-white">{quest.progress}</span> / {quest.durationDays}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all duration-300 ease-out ${quest.completed
+                          ? 'bg-emerald-500 border-emerald-500 scale-125 shadow-[0_0_15px_var(--color-emerald-500)]'
+                          : 'border-rose-950/40 group-hover:border-emerald-500/50 group-active:scale-75 scale-100'
+                          }`}>
+                          {quest.completed && <Check size={16} className="text-white" strokeWidth={3} />}
+                        </div>
+                      </div>
+
+                      {/* Progress bar */}
+                      {!quest.completed && (
+                        <div className="mt-4 flex flex-col gap-1.5">
+                          <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-emerald-500 transition-all duration-500 ease-out"
+                              style={{ width: `${(quest.progress / quest.durationDays) * 100}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-12 border border-dashed border-white/10 rounded-2xl bg-white/5">
+                    <Trophy className="mx-auto w-12 h-12 text-white/20 mb-3" />
+                    <p className="text-white/60 mb-4">No tienes misiones activas.</p>
+                    <button
+                      onClick={() => setIsSideQuestsModalOpen(true)}
+                      className="px-6 py-2 bg-rose-500/10 text-rose-500 rounded-xl hover:bg-rose-500/20 transition-colors font-medium border border-rose-500/20"
+                    >
+                      Buscar Nueva Misión
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
           )}
         </div>
       </div>
@@ -393,6 +536,12 @@ export default function Dashboard() {
         <DayDetailsModal
           date={selectedDate}
           onClose={() => setSelectedDate(null)}
+        />
+      )}
+
+      {isSideQuestsModalOpen && (
+        <SideQuestsModal
+          onClose={() => setIsSideQuestsModalOpen(false)}
         />
       )}
     </div>

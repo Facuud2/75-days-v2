@@ -26,9 +26,10 @@ export const logService = {
         });
     },
 
-    checkDailyReset: () => {
+    checkDailyReset: (timezoneOffset: number) => {
         return apiClient<{ message: string; streak: number; currentDay: number; logs: DailyLog[] }>('/logs/check-reset', {
             method: 'POST',
+            body: JSON.stringify({ timezoneOffset }),
         });
     },
 };

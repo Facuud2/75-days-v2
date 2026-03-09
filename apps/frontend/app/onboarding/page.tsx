@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useChallengeStore, Difficulty } from '@/store/useChallengeStore';
+import { useQuestStore } from '@/store/useQuestStore';
 import { useRouter } from 'next/navigation';
 import { ChevronRight, ChevronLeft, SkipForward } from 'lucide-react';
 
@@ -10,7 +11,13 @@ export default function Onboarding() {
   const [step, setStep] = useState(1);
   const { updateProfile, completeOnboarding } = useAuthStore();
   const { startChallenge, addSideQuest } = useChallengeStore();
+  const { availableQuests, fetchAvailableQuests } = useQuestStore();
   const router = useRouter();
+
+  // Load available dynamic quests
+  useEffect(() => {
+    fetchAvailableQuests();
+  }, [fetchAvailableQuests]);
 
   // Step 1: Biometrics
   const [age, setAge] = useState('');
@@ -20,11 +27,6 @@ export default function Onboarding() {
 
   // Step 2: Side Quests
   const [selectedQuests, setSelectedQuests] = useState<string[]>([]);
-  const availableQuests = [
-    { id: 'q1', title: '10k Steps Daily', difficulty: 'Medium' as const, durationDays: 30 },
-    { id: 'q2', title: 'Intermittent Fasting (16:8)', difficulty: 'Hard' as const, durationDays: 14 },
-    { id: 'q3', title: 'Meditation 10m', difficulty: 'Easy' as const, durationDays: 21 },
-  ];
 
   // Step 3: Challenge Selection
   const [difficulty, setDifficulty] = useState<Difficulty>('Medium');
@@ -70,7 +72,8 @@ export default function Onboarding() {
     } else if (step === 2) {
       selectedQuests.forEach(qId => {
         const q = availableQuests.find(aq => aq.id === qId);
-        if (q) addSideQuest({ title: q.title, difficulty: q.difficulty, durationDays: q.durationDays });
+        // Note: Map difficulty back to the ChallengeStore's expected string
+        if (q) addSideQuest({ title: q.title, difficulty: q.difficulty as any, durationDays: q.durationDays });
       });
       setStep(3);
     } else if (step === 3) {

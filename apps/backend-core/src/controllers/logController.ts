@@ -165,8 +165,15 @@ export const updateMetrics = async (req: AuthRequest, res: Response) => {
 export const checkDailyReset = async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user!.id;
-        const today = format(new Date(), 'yyyy-MM-dd');
-        const yesterday = format(subDays(new Date(), 1), 'yyyy-MM-dd');
+        const { timezoneOffset } = req.body || {};
+
+        const now = new Date();
+        const targetDate = typeof timezoneOffset === 'number'
+            ? new Date(now.getTime() - timezoneOffset * 60000)
+            : now;
+
+        const today = format(targetDate, 'yyyy-MM-dd');
+        const yesterday = format(subDays(targetDate, 1), 'yyyy-MM-dd');
 
         const challenge = await prisma.challenge.findFirst({
             where: { userId, isActive: true },
@@ -185,7 +192,11 @@ export const checkDailyReset = async (req: AuthRequest, res: Response) => {
         const todayLog = logs.find((l: any) => l.date === today);
 
         let newStreak = challenge.streak;
-        const currentDayNumber = differenceInCalendarDays(new Date(), new Date(challenge.startDate)) + 1;
+        const start = new Date(challenge.startDate);
+        const localStartDate = typeof timezoneOffset === 'number'
+            ? new Date(start.getTime() - timezoneOffset * 60000)
+            : start;
+        const currentDayNumber = Math.max(1, differenceInCalendarDays(targetDate, localStartDate) + 1);
 
         if (yesterdayLog) {
             if (yesterdayLog.status !== 'success') {

@@ -262,7 +262,8 @@ export const useChallengeStore = create<ChallengeState>()(
       checkDailyReset: async () => {
         set({ isLoading: true, error: null });
         try {
-          const { streak, currentDay, logs } = await logService.checkDailyReset();
+          const timezoneOffset = new Date().getTimezoneOffset();
+          const { streak, currentDay, logs } = await logService.checkDailyReset(timezoneOffset);
           // Convert array of logs from backend to Record map, handling Prisma ISO dates
           const logsRecord = logs.reduce((acc, log) => {
             const dateKey = typeof log.date === 'string' ? log.date.slice(0, 10) : log.date;
