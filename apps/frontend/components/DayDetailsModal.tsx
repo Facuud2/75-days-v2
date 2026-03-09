@@ -86,14 +86,37 @@ export default function DayDetailsModal({ date, onClose }: { date: string, onClo
               <Scale size={16} className="text-rose-500" />
               Peso (kg)
             </label>
-            <input
-              type="number"
-              step="0.1"
-              value={weight}
-              onChange={(e) => setWeight(e.target.value)}
-              placeholder="Ej. 75.5"
-              className="w-full px-4 py-3 rounded-xl bg-[#050505] border border-[#361726] text-white outline-none focus:border-rose-500 transition-colors"
-            />
+            <div className="flex items-center gap-2">
+              <select
+                value={weight === '' ? '' : Math.floor(Number(weight))}
+                onChange={(e) => {
+                  const newInt = e.target.value;
+                  const currentDec = weight === '' ? '0' : Math.round((Number(weight) - Math.floor(Number(weight))) * 10).toString();
+                  setWeight(`${newInt}.${currentDec}`);
+                }}
+                className="flex-1 px-4 py-3 rounded-xl bg-[#050505] border border-[#361726] text-white outline-none focus:border-rose-500 transition-colors appearance-none"
+              >
+                <option value="" disabled>Entero</option>
+                {Array.from({ length: 271 }, (_, i) => i + 30).map((kg) => (
+                  <option key={kg} value={kg}>{kg}</option>
+                ))}
+              </select>
+              <span className="text-xl font-bold text-white/50">.</span>
+              <select
+                value={weight === '' ? '' : Math.round((Number(weight) - Math.floor(Number(weight))) * 10)}
+                onChange={(e) => {
+                  const newDec = e.target.value;
+                  const currentInt = weight === '' ? '75' : Math.floor(Number(weight)).toString();
+                  setWeight(`${currentInt}.${newDec}`);
+                }}
+                className="w-24 px-4 py-3 rounded-xl bg-[#050505] border border-[#361726] text-white outline-none focus:border-rose-500 transition-colors appearance-none text-center"
+              >
+                <option value="" disabled>Gr</option>
+                {Array.from({ length: 10 }, (_, i) => i).map((g) => (
+                  <option key={g} value={g}>{g}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {/* Photo */}

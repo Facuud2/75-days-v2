@@ -201,27 +201,73 @@ export default function EditProfileModal({
                             <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1">
                                 <Weight className="w-3 h-3" /> Peso (kg)
                             </label>
-                            <input
-                                type="number"
-                                value={weight}
-                                onChange={(e) => setWeight(e.target.value)}
-                                placeholder="—"
-                                min={20} step={0.1}
-                                className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-rose-500 transition-colors"
-                            />
+                            <div className="flex items-center gap-1">
+                                <select
+                                    value={weight === '' ? '' : Math.floor(Number(weight))}
+                                    onChange={(e) => {
+                                        const newInt = e.target.value;
+                                        const currentDec = weight === '' ? '0' : Math.round((Number(weight) - Math.floor(Number(weight))) * 10).toString();
+                                        setWeight(`${newInt}.${currentDec}`);
+                                    }}
+                                    className="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-2 py-2.5 text-sm text-zinc-100 focus:outline-none focus:border-rose-500 transition-colors appearance-none"
+                                >
+                                    <option value="" disabled>Kg</option>
+                                    {Array.from({ length: 271 }, (_, i) => i + 30).map((kg) => (
+                                        <option key={kg} value={kg}>{kg}</option>
+                                    ))}
+                                </select>
+                                <span className="text-sm font-bold text-zinc-500">.</span>
+                                <select
+                                    value={weight === '' ? '' : Math.round((Number(weight) - Math.floor(Number(weight))) * 10)}
+                                    onChange={(e) => {
+                                        const newDec = e.target.value;
+                                        const currentInt = weight === '' ? '75' : Math.floor(Number(weight)).toString();
+                                        setWeight(`${currentInt}.${newDec}`);
+                                    }}
+                                    className="w-16 bg-zinc-800 border border-zinc-700 rounded-xl px-2 py-2.5 text-sm text-zinc-100 focus:outline-none focus:border-rose-500 transition-colors appearance-none text-center"
+                                >
+                                    <option value="" disabled>Gr</option>
+                                    {Array.from({ length: 10 }, (_, i) => i).map((g) => (
+                                        <option key={g} value={g}>{g}</option>
+                                    ))}
+                                </select>
+                            </div>
                         </div>
                         <div className="space-y-1.5">
                             <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1">
                                 <Target className="w-3 h-3" /> Meta (kg)
                             </label>
-                            <input
-                                type="number"
-                                value={targetWeight}
-                                onChange={(e) => setTargetWeight(e.target.value)}
-                                placeholder="—"
-                                min={20} step={0.1}
-                                className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-rose-500 transition-colors"
-                            />
+                            <div className="flex items-center gap-1">
+                                <select
+                                    value={targetWeight === '' ? '' : Math.floor(Number(targetWeight))}
+                                    onChange={(e) => {
+                                        const newInt = e.target.value;
+                                        const currentDec = targetWeight === '' ? '0' : Math.round((Number(targetWeight) - Math.floor(Number(targetWeight))) * 10).toString();
+                                        setTargetWeight(`${newInt}.${currentDec}`);
+                                    }}
+                                    className="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-2 py-2.5 text-sm text-zinc-100 focus:outline-none focus:border-rose-500 transition-colors appearance-none"
+                                >
+                                    <option value="" disabled>Kg</option>
+                                    {Array.from({ length: 271 }, (_, i) => i + 30).map((kg) => (
+                                        <option key={kg} value={kg}>{kg}</option>
+                                    ))}
+                                </select>
+                                <span className="text-sm font-bold text-zinc-500">.</span>
+                                <select
+                                    value={targetWeight === '' ? '' : Math.round((Number(targetWeight) - Math.floor(Number(targetWeight))) * 10)}
+                                    onChange={(e) => {
+                                        const newDec = e.target.value;
+                                        const currentInt = targetWeight === '' ? '75' : Math.floor(Number(targetWeight)).toString();
+                                        setTargetWeight(`${currentInt}.${newDec}`);
+                                    }}
+                                    className="w-16 bg-zinc-800 border border-zinc-700 rounded-xl px-2 py-2.5 text-sm text-zinc-100 focus:outline-none focus:border-rose-500 transition-colors appearance-none text-center"
+                                >
+                                    <option value="" disabled>Gr</option>
+                                    {Array.from({ length: 10 }, (_, i) => i).map((g) => (
+                                        <option key={g} value={g}>{g}</option>
+                                    ))}
+                                </select>
+                            </div>
                         </div>
                         <div className="space-y-1.5">
                             <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1">
