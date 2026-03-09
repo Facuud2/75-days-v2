@@ -1,0 +1,116 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Stores per-user caloric and macronutrient goals
+model UserHealthProfile {
+  id               String   @id @default(uuid())
+  userId           String   @unique // references User.id in backend-core (no FK)
+  dailyCalorieGoal Int      @default(2000)
+  proteinGoalG     Float    @default(150)
+  carbGoalG        Float    @default(200)
+  fatGoalG         Float    @default(65)
+  // User weight used for calorie-burn estimation (synced manually or via onboarding)
+  weightKg         Float    @default(70)
+
+  // Strava Integration
+  stravaAccessToken  String?
+  stravaRefreshToken String?
+  stravaTokenExpiresAt Int?
+  stravaAthleteId    String?
+
+  updatedAt        DateTime @updatedAt
+  createdAt        DateTime @default(now())
+}
+
+// Logs food intake per meal slot
+model MealEntry {
+  id        String   @id @default(uuid())
+  userId    String
+  date      String // YYYY-MM-DD
+  mealType  String // breakfast | lunch | dinner | snack
+  name      String
+  calories  Float
+  proteinG  Float    @default(0)
+  carbG     Float    @default(0)
+  fatG      Float    @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([userId, date])
+}
+
+// Logs physical activity sessions
+model WorkoutEntry {
+  id               String   @id @default(uuid())
+  userId           String
+  date             String // YYYY-MM-DD
+  sport            String // strength | running | cycling | yoga | swimming | other
+  durationMin      Int
+  intensity        String // low | medium | high
+  caloriesBurned   Float // auto-calculated or manual override
+  isManualCalories Boolean  @default(false)
+  distanceKm       Float? // optional — for cardio
+  loadVolumeKg     Float? // optional — for strength (sets × reps × weight)
+  notes            String?
+
+  // External Integration
+  source           String   @default("manual") // manual, strava, etc
+  externalId       String?  @unique // ID of the workout in the external service
+
+  createdAt        DateTime @default(now())
+
+  @@index([userId, date])
+}
+
+// Base ingredients pre-defined in the system
+model Ingredient {
+  id              String @id @default(uuid())
+  name            String @unique
+  caloriesPer100g Float
+  proteinPer100g  Float
+  carbPer100g     Float
+  fatPer100g      Float
+
+  customFoodIngredients CustomFoodIngredient[]
+}
+
+// Custom foods created by users (BitePal style/Recipe Builder)
+model CustomFood {
+  id          String  @id @default(uuid())
+  userId      String
+  name        String
+  description String?
+
+  // Macros caculados automáticamente
+  calories Float @default(0)
+  proteinG Float @default(0)
+  carbG    Float @default(0)
+  fatG     Float @default(0)
+
+  servingSize String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  ingredients CustomFoodIngredient[]
+
+  @@index([userId])
+}
+
+// Pivot table: Grams of Ingredient X in CustomFood Y
+model CustomFoodIngredient {
+  id           String @id @default(uuid())
+  customFoodId String
+  ingredientId String
+  weightGrams  Float // e.g. 150g of chicken
+
+  customFood CustomFood @relation(fields: [customFoodId], references: [id], onDelete: Cascade)
+  ingredient Ingredient @relation(fields: [ingredientId], references: [id])
+
+  @@index([customFoodId])
+  @@index([ingredientId])
+}
