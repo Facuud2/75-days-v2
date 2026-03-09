@@ -109,14 +109,14 @@ export default function PlansModal() {
       onClick={closePlansModal}
     >
       <div
-        className="bg-[#130a10] border border-[#2e1424] rounded-2xl w-full max-w-5xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] animate-in slide-in-from-bottom-4 duration-300"
+        className="bg-zinc-950 border border-white/10 rounded-2xl w-full max-w-5xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] animate-in slide-in-from-bottom-4 duration-300"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-8 py-5 border-b border-white/5">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-rose-500/20 flex items-center justify-center">
-              <Target className="text-rose-400 w-4 h-4" />
+              <Target className="text-rose-500 w-4 h-4" />
             </div>
             <h2 className="text-xl font-bold text-white tracking-tight">Seleccionar Plan de Desafío</h2>
           </div>
@@ -132,12 +132,13 @@ export default function PlansModal() {
         <div className="p-8 overflow-y-auto flex-1">
           {!onboardingCompleted ? (
             <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
-              <div className="w-16 h-16 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center">
-                <ClipboardList size={28} className="text-rose-400" />
+              <div className="w-16 h-16 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center relative overflow-hidden">
+                <div className="absolute inset-0 bg-rose-500/5" />
+                <ClipboardList size={28} className="text-rose-500 relative z-10" />
               </div>
               <div>
-                <p className="text-white font-semibold text-lg mb-1">¡Completa el Sobre Vos para generar tu plan!</p>
-                <p className="text-white/50 text-sm max-w-xs">
+                <p className="text-white font-bold text-lg mb-1">¡Completa el Sobre Vos para generar tu plan!</p>
+                <p className="text-white/50 text-sm max-w-xs mx-auto">
                   Necesitás finalizar el proceso de configuración inicial antes de seleccionar un plan.
                 </p>
               </div>
@@ -173,22 +174,22 @@ export default function PlansModal() {
                       {/* Duration badge */}
                       <div className="flex items-center gap-1.5 text-xs text-white/40">
                         <Calendar className="w-3.5 h-3.5" />
-                        <span>75 días</span>
+                        <span className="font-medium">75 días</span>
                       </div>
 
                       {/* Tasks */}
                       <div className="space-y-2">
-                        <p className="text-white/50 text-[11px] font-semibold uppercase tracking-wider">Tareas Diarias:</p>
+                        <p className="text-white/50 text-[11px] font-bold uppercase tracking-wider">Tareas Diarias:</p>
                         <ul className="space-y-1.5">
                           {previewTasks.map((task, i) => (
-                            <li key={i} className="flex items-center gap-2 text-xs text-white/70">
+                            <li key={i} className="flex items-center gap-2 text-xs text-white/70 font-medium">
                               {task.icon}
                               <span className="leading-snug">{task.label}</span>
                             </li>
                           ))}
                         </ul>
                         {extraCount > 0 && (
-                          <p className="text-[11px] text-white/30 italic">+{extraCount} más...</p>
+                          <p className="text-[11px] text-white/30 italic font-medium">+{extraCount} más...</p>
                         )}
                       </div>
                     </div>
@@ -199,7 +200,7 @@ export default function PlansModal() {
               {/* Custom goals editor */}
               {difficulty === 'Custom' && (
                 <div className="mt-6 space-y-3 animate-in fade-in slide-in-from-top-2 p-5 bg-white/[0.02] border border-emerald-500/20 rounded-xl">
-                  <h4 className="font-semibold text-white text-sm">Personaliza tus Metas</h4>
+                  <h4 className="font-bold text-white text-sm">Personaliza tus Metas</h4>
                   {customGoals.map((goal, i) => (
                     <div key={i} className="flex gap-2">
                       <input
@@ -211,7 +212,7 @@ export default function PlansModal() {
                           setCustomGoals(newGoals);
                         }}
                         placeholder="Nombre de la meta..."
-                        className="flex-1 px-4 py-2.5 rounded-lg bg-white/5 border border-white/10 text-white text-sm outline-none focus:border-emerald-500/50 transition-colors placeholder:text-white/20"
+                        className="flex-1 px-4 py-2.5 rounded-lg bg-white/5 border border-white/10 text-white font-medium text-sm outline-none focus:border-emerald-500/50 transition-all placeholder:text-white/20"
                       />
                       <button
                         onClick={() => setCustomGoals(customGoals.filter((_, index) => index !== i))}
@@ -223,7 +224,7 @@ export default function PlansModal() {
                   ))}
                   <button
                     onClick={() => setCustomGoals([...customGoals, ''])}
-                    className="text-sm font-medium text-emerald-400 hover:text-emerald-300 transition-colors"
+                    className="text-sm font-bold text-emerald-500 hover:text-emerald-400 transition-colors"
                   >
                     + Añadir Meta
                   </button>
@@ -234,12 +235,12 @@ export default function PlansModal() {
         </div>
 
         {/* Footer */}
-        <div className="px-8 py-4 border-t border-white/5 flex items-center justify-between bg-[#0d0508]">
-          <span className="text-sm text-white/40">
+        <div className="px-8 py-4 border-t border-white/5 flex items-center justify-between bg-zinc-900">
+          <span className="text-sm text-white/40 font-medium">
             {selectedPlan ? (
               <span>
                 Plan seleccionado:{' '}
-                <span className={`font-semibold ${selectedPlan.color}`}>{selectedPlan.title}</span>
+                <span className={`font-bold ${selectedPlan.color}`}>{selectedPlan.title}</span>
               </span>
             ) : (
               'No hay plan seleccionado'
@@ -248,14 +249,14 @@ export default function PlansModal() {
           <div className="flex items-center gap-3">
             <button
               onClick={closePlansModal}
-              className="px-5 py-2.5 rounded-lg font-medium text-sm text-white/60 hover:text-white hover:bg-white/5 transition-colors border border-white/10"
+              className="px-5 py-2.5 rounded-xl font-bold text-sm text-white/60 hover:text-white hover:bg-white/5 transition-colors border border-white/10"
             >
               Cancelar
             </button>
             {onboardingCompleted && (
               <button
                 onClick={handleStart}
-                className="px-6 py-2.5 bg-rose-500 text-white rounded-lg font-bold text-sm hover:bg-rose-600 transition-colors shadow-[0_0_15px_rgba(244,63,94,0.25)]"
+                className="px-6 py-2.5 bg-rose-500 text-white rounded-xl font-bold text-sm hover:bg-rose-600 transition-all shadow-[0_0_15px_rgba(244,63,94,0.25)] hover:shadow-[0_0_20px_rgba(244,63,94,0.4)]"
               >
                 {isActive ? 'Reiniciar Desafío' : 'Comenzar Desafío'}
               </button>

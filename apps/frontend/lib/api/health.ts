@@ -216,4 +216,30 @@ export const healthService = {
         healthClient<void>(`/nutrition/custom-foods/${id}`, {
             method: 'DELETE'
         }),
+
+    // Strava Integration
+    getStravaAuthUrl: () =>
+        healthClient<{ url: string }>('/strava/auth'),
+    getStravaStatus: () =>
+        healthClient<{ connected: boolean }>('/strava/status'),
+    syncStravaWorkouts: () =>
+        healthClient<{ success: boolean; message: string; count: number }>('/strava/sync', { method: 'POST' }),
+
+    // Workouts (general)
+    logWorkout: (payload: any) =>
+        healthClient<{ id: string }>('/workouts', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        }),
+    updateWorkout: (id: string, payload: any) =>
+        healthClient<{ id: string }>(`/workouts/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(payload)
+        }),
+    deleteWorkout: (id: string) =>
+        healthClient<{ message: string }>(`/workouts/${id}`, {
+            method: 'DELETE'
+        }),
+    getWorkoutsForDay: (date: string) =>
+        healthClient<{ workouts: any[]; totals: any }>(`/workouts/${date}`),
 };

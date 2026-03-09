@@ -103,3 +103,45 @@ export const deleteWorkout = async (req: AuthRequest, res: Response) => {
     await prisma.workoutEntry.delete({ where: { id } });
     return res.json({ message: 'Workout deleted successfully' });
 };
+
+/**
+ * PUT /api/workouts/:id
+ * Update an existing workout entry.
+ */
+export const updateWorkout = async (req: AuthRequest, res: Response) => {
+    const userId = req.user!.id;
+    const id = String(req.params.id);
+
+    const workout = await prisma.workoutEntry.findUnique({ where: { id } });
+
+    if (!workout) return res.status(404).json({ error: 'Workout not found' });
+    if (workout.userId !== userId) return res.status(403).json({ error: 'Forbidden' });
+
+    const parsed = WorkoutSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.flatten() });
+    }
+
+    const { caloriesBurned: manualCalories, ...data } = parsed.data;
+    const isManualCalories = manualCalories !== undefined;
+
+    // Look up user's weight for a more accurate estimate
+    const profile = await prisma.userHealthProfile.findUnique({ where: { userId } });
+    const weightKg = profile?.weightKg ?? 70;
+
+    const caloriesBurned = isManualCalories
+        ? manualCalories!
+        : estimateCaloriesBurned(data.sport, data.durationMin, data.intensity, weightKg);
+
+    const updatedWorkout = await prisma.workoutEntry.update({
+        where: { id },
+        data: {
+            caloriesBurned,
+            isManualCalories,
+            ...data,
+        },
+    });
+
+    return res.json(updatedWorkout);
+};

@@ -226,7 +226,7 @@ export default function Dashboard() {
                   strokeWidth="2"
                 />
                 <path
-                  className={`transition-all duration-1000 ease-out ${progress === 100 ? 'text-emerald-500' : 'text-rose-500'}`}
+                  className={`transition-all duration-1000 ease-out ${progress === 100 ? 'text-emerald-600 dark:text-emerald-500' : 'text-rose-500'}`}
                   strokeDasharray={`${progress}, 100`}
                   d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                   fill="none"
@@ -234,7 +234,7 @@ export default function Dashboard() {
                   strokeWidth="2"
                 />
               </svg>
-              <span className={`absolute text-sm font-bold ${progress === 100 ? 'text-emerald-500' : 'text-white'}`}>
+              <span className={`absolute text-sm font-bold ${progress === 100 ? 'text-emerald-600 dark:text-emerald-500' : 'text-zinc-900 dark:text-white'}`}>
                 {progress}%
               </span>
             </div>
@@ -286,10 +286,10 @@ export default function Dashboard() {
               let dotColor = 'bg-rose-500';
 
               if (day.status === 'success') {
-                bg = 'bg-emerald-500/20';
-                border = 'border-emerald-500/50';
-                text = 'text-emerald-500 font-bold';
-                dotColor = 'bg-emerald-500';
+                bg = 'bg-emerald-500/10 dark:bg-emerald-500/20';
+                border = 'border-emerald-600/30 dark:border-emerald-500/50';
+                text = 'text-emerald-700 dark:text-emerald-500 font-bold';
+                dotColor = 'bg-emerald-600 dark:bg-emerald-500';
               } else if (day.status === 'fail') {
                 bg = 'bg-red-500/10';
                 border = 'border-red-500/30';
@@ -320,9 +320,9 @@ export default function Dashboard() {
             })}
           </div>
 
-          <div className="flex items-center justify-between mt-6 pt-4 border-t border-white/5 text-[10px] text-white/50 font-medium">
+          <div className="flex items-center justify-between mt-6 pt-4 border-t border-zinc-200 dark:border-white/5 text-[10px] text-zinc-500 dark:text-white/50 font-medium">
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-emerald-500" /> Completado
+              <div className="w-2 h-2 rounded-full bg-emerald-600 dark:bg-emerald-500" /> Completado
             </div>
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-red-500" /> Fallido
@@ -348,7 +348,7 @@ export default function Dashboard() {
           {currentPlanName === 'Custom' ? (
             /* PLAN CUSTOM: all goals are personal */
             <div>
-              <h3 className="text-sm font-bold tracking-widest text-emerald-500 uppercase mb-4 opacity-80 flex items-center gap-2">
+              <h3 className="text-sm font-bold tracking-widest text-emerald-600 dark:text-emerald-500 uppercase mb-4 opacity-80 flex items-center gap-2">
                 <PlusCircle size={16} /> Metas Personalizadas
               </h3>
               <div className="space-y-3">
@@ -376,7 +376,7 @@ export default function Dashboard() {
               {/* METAS PERSONALIZADAS (extra goals on non-custom plans) */}
               {customGoals.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-bold tracking-widest text-emerald-500 uppercase mb-4 opacity-80 flex items-center gap-2">
+                  <h3 className="text-sm font-bold tracking-widest text-emerald-600 dark:text-emerald-500 uppercase mb-4 opacity-80 flex items-center gap-2">
                     <PlusCircle size={16} /> Metas Personalizadas
                   </h3>
                   <div className="space-y-3">

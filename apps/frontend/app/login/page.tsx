@@ -26,7 +26,9 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
-      <div className="w-full max-w-xl bg-white dark:bg-zinc-900 rounded-3xl shadow-xl p-10">
+      <div className="w-full max-w-xl bg-white dark:bg-zinc-950 rounded-3xl p-10 relative border border-zinc-200 dark:border-rose-500/20 shadow-2xl dark:shadow-[0_0_50px_-12px_rgba(244,63,94,0.15)] overflow-hidden">
+        {/* Neon top glow line */}
+        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-rose-600 via-rose-400 to-rose-600 opacity-80"></div>
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold tracking-tight mb-3">Welcome Back</h1>
           <p className="text-lg text-zinc-500 dark:text-zinc-400">Continue your 75 Days journey</p>
@@ -46,25 +48,27 @@ export default function Login() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-800 border-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-100 outline-none transition-all"
+              className="w-full px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 focus:ring-2 focus:ring-rose-500/30 focus:border-rose-500 outline-none transition-all dark:text-white"
               placeholder="you@example.com"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Password</label>
+            <label className="block text-sm font-medium mb-1 flex items-center justify-between">
+              <span>Password</span>
+            </label>
             <input
               type="password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-800 border-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-100 outline-none transition-all"
+              className="w-full px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 focus:ring-2 focus:ring-rose-500/30 focus:border-rose-500 outline-none transition-all dark:text-white"
               placeholder="••••••••"
             />
           </div>
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full py-3 px-4 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-xl font-medium hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors mt-6 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full py-3 px-4 bg-rose-500 text-white rounded-xl font-bold hover:bg-rose-600 focus:ring-4 focus:ring-rose-500/30 transition-all mt-6 disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(244,63,94,0.3)] hover:shadow-[0_0_25px_rgba(244,63,94,0.45)]"
           >
             {isLoading ? 'Signing In...' : 'Sign In'}
           </button>
@@ -72,7 +76,7 @@ export default function Login() {
 
         <p className="text-center mt-6 text-sm text-zinc-500 dark:text-zinc-400">
           Don&apos;t have an account?{' '}
-          <Link href="/register" className="text-zinc-900 dark:text-zinc-100 font-medium hover:underline">
+          <Link href="/register" className="text-rose-600 dark:text-rose-400 font-bold hover:text-rose-500 transition-colors">
             Sign up
           </Link>
         </p>

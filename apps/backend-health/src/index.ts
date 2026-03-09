@@ -9,6 +9,7 @@ import statsRoutes from './routes/stats';
 import internalRoutes from './routes/internal';
 import fatsecretRoutes from './routes/fatsecret';
 import customFoodsRoutes from './routes/customFoods';
+import stravaRoutes from './routes/strava';
 
 const app = express();
 const port = process.env.PORT || 3002;
@@ -31,6 +32,7 @@ app.use('/api/nutrition', nutritionRoutes);
 app.use('/api/workouts', workoutRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/fatsecret', fatsecretRoutes);
+app.use('/api/strava', stravaRoutes);
 
 // ── Internal Routes (API-key-protected) ──────────────────────────────────────
 

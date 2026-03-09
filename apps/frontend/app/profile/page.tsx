@@ -6,12 +6,13 @@ import { useChallengeStore } from '@/store/useChallengeStore';
 import { userService, UserProfileResponse } from '@/lib/api/users';
 import { healthService, DailyStats } from '@/lib/api/health';
 import { format } from 'date-fns';
-import { Trophy, Calendar, Scale, Award, Flame, Target, ChevronRight, CheckCircle2, Lock, Activity, BarChart3, Footprints, Clock, Zap, Pencil, PieChart as PieChartIcon } from 'lucide-react';
+import { Trophy, Calendar, Scale, Award, Flame, Target, ChevronRight, CheckCircle2, Lock, Activity, BarChart3, Footprints, Clock, Zap, Pencil, PieChart as PieChartIcon, RefreshCw } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, PieChart, Pie, Cell, Legend } from 'recharts';
 import AchievementsModal from '@/components/AchievementsModal';
 import EditProfileModal from '@/components/EditProfileModal';
 import LogMealModal from '@/components/LogMealModal';
 import EditMealModal from '@/components/EditMealModal';
+import LogWorkoutModal from '@/components/LogWorkoutModal';
 import { Meal } from '@/lib/api/health';
 
 export default function Profile() {
@@ -34,18 +35,30 @@ export default function Profile() {
   const [isAchievementsModalOpen, setIsAchievementsModalOpen] = useState(false);
   const [isEditProfileModalOpen, setIsEditProfileModalOpen] = useState(false);
   const [isLogMealModalOpen, setIsLogMealModalOpen] = useState(false);
+  const [isLogWorkoutModalOpen, setIsLogWorkoutModalOpen] = useState(false);
   const [editingMeal, setEditingMeal] = useState<Meal | null>(null);
+  const [editingWorkout, setEditingWorkout] = useState<any | null>(null);
+
+  // Strava State
+  const [isStravaConnected, setIsStravaConnected] = useState(false);
+  const [syncingStrava, setSyncingStrava] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [recentWorkouts, setRecentWorkouts] = useState<any[]>([]);
 
   const fetchProfile = useCallback(() => {
     if (user) {
       const today = format(new Date(), 'yyyy-MM-dd');
       Promise.all([
         userService.getProfile(),
-        healthService.getDailyStats(today).catch(() => null)
+        healthService.getDailyStats(today).catch(() => null),
+        healthService.getStravaStatus().catch(() => ({ connected: false })),
+        healthService.getWorkoutsForDay(today).catch(() => ({ workouts: [] }))
       ])
-        .then(([profile, healthData]) => {
+        .then(([profile, healthData, stravaStatus, workoutsData]) => {
           setProfileData(profile);
           setDailyStats(healthData);
+          setIsStravaConnected(stravaStatus.connected);
+          setRecentWorkouts(workoutsData?.workouts || []);
           setLoadingProfile(false);
         })
         .catch(err => {
@@ -57,7 +70,43 @@ export default function Profile() {
 
   useEffect(() => {
     fetchProfile();
+
+    // Check for OAuth callbacks in URL
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('strava') === 'success') {
+      setIsStravaConnected(true);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (urlParams.get('strava') === 'error') {
+      setAuthError('Error al conectar con Strava');
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
   }, [fetchProfile]);
+
+  const handleConnectStrava = async () => {
+    try {
+      const { url } = await healthService.getStravaAuthUrl();
+      window.location.href = url;
+    } catch (error) {
+      console.error('Failed to get Strava auth URL', error);
+      setAuthError('No se pudo iniciar la conexión con Strava.');
+    }
+  };
+
+  const handleSyncStrava = async () => {
+    if (syncingStrava) return;
+    setSyncingStrava(true);
+    try {
+      const result = await healthService.syncStravaWorkouts();
+      // Refetch profile to update stats (assuming workouts affect daily stats if today)
+      fetchProfile();
+      alert(result.message);
+    } catch (error) {
+      console.error('Error syncing strava', error);
+      alert('Error sincronizando entrenamientos.');
+    } finally {
+      setSyncingStrava(false);
+    }
+  };
 
   if (!user || loadingProfile) return <div className="p-8 text-center text-zinc-400 min-h-screen bg-zinc-950">Cargando perfil...</div>;
 
@@ -511,49 +560,101 @@ export default function Profile() {
             )}
           </div>
 
-          {/* Recent Activity Widget
-          <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6">
-            <h3 className="text-sm font-semibold flex items-center gap-2 mb-5 text-zinc-300">
-              <BarChart3 className="w-4 h-4 text-rose-400" />
-              Actividad Reciente
-            </h3>
+          {/* Sports Activity Widget */}
+          <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6 relative overflow-hidden group">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold flex items-center gap-2 text-zinc-300">
+                <Footprints className="w-4 h-4 text-[#fc4c02]" />
+                Actividad Deportiva
+              </h3>
 
-            Refactored Mock bar chart
-            <div className="flex items-end justify-between h-20 mb-6 gap-1">
-              {[40, 60, 45, 80, 50, 90, 100].map((height, i) => (
-                <div key={i} className="flex-1 bg-rose-500/20 hover:bg-rose-500/40 transition-colors rounded-t-sm relative group cursor-pointer" style={{ height: `${height}%` }}>
-                  <div className="absolute opacity-0 group-hover:opacity-100 -top-8 left-1/2 -translate-x-1/2 bg-zinc-800 text-[10px] px-2 py-1 rounded shadow-lg transition-opacity whitespace-nowrap z-10">
-                    Día {i + 1}
-                  </div>
-                </div>
-              ))}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setEditingWorkout(null);
+                    setIsLogWorkoutModalOpen(true);
+                  }}
+                  className="text-xs font-bold text-zinc-400 hover:text-white transition-colors flex items-center gap-1 bg-zinc-800/50 px-2 py-1.5 rounded-md border border-zinc-700/50"
+                  title="Registrar Actividad Manual"
+                >
+                  + Registrar
+                </button>
+                {isStravaConnected ? (
+                  <button
+                    onClick={handleSyncStrava}
+                    disabled={syncingStrava}
+                    className="text-xs font-bold text-zinc-400 hover:text-white transition-colors flex items-center gap-1 bg-zinc-800/50 px-2 py-1.5 rounded-md border border-zinc-700/50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${syncingStrava ? 'animate-spin' : ''}`} />
+                    {syncingStrava ? 'Sincronizando...' : 'Strava'}
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleConnectStrava}
+                    className="text-xs font-bold text-[#fc4c02] hover:text-[#e34402] transition-colors flex items-center gap-1"
+                  >
+                    + Conectar Strava
+                  </button>
+                )}
+              </div>
             </div>
 
-            <div className="space-y-3 text-sm">
-              <div className="flex items-center justify-between border-b border-zinc-800/50 pb-2">
-                <div className="flex items-center gap-2 text-zinc-400">
-                  <Calendar className="w-3.5 h-3.5" />
-                  <span>Esta Semana</span>
+            <div className="space-y-4">
+              {!isStravaConnected ? (
+                <div className="bg-zinc-950/50 rounded-xl p-4 text-center border border-zinc-800 border-dashed">
+                  <p className="text-xs text-zinc-400 mb-3">Conecta tu cuenta de Strava para sincronizar tus entrenamientos automáticamente.</p>
+                  <div className="flex justify-center flex-col items-center gap-2">
+                    {authError && <p className="text-xs text-red-400 font-semibold mb-1">{authError}</p>}
+                    <button
+                      onClick={handleConnectStrava}
+                      className="px-4 py-2 bg-[#fc4c02]/10 hover:bg-[#fc4c02]/20 text-[#fc4c02] border border-[#fc4c02]/30 text-xs font-bold rounded-lg transition-all flex items-center gap-2"
+                    >
+                      <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+                        <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" />
+                      </svg>
+                      Conectar con Strava
+                    </button>
+                  </div>
                 </div>
-                <span className="font-medium">{mockWeeklyWorkouts} entrenamientos</span>
-              </div>
-              <div className="flex items-center justify-between border-b border-zinc-800/50 pb-2">
-                <div className="flex items-center gap-2 text-zinc-400">
-                  <Flame className="w-3.5 h-3.5" />
-                  <span>Calorías</span>
-                </div>
-                <span className="font-medium">{mockWeeklyCals.toLocaleString()} kcal</span>
-              </div>
-              <div className="flex items-center justify-between pb-1">
-                <div className="flex items-center gap-2 text-zinc-400">
-                  <Clock className="w-3.5 h-3.5" />
-                  <span>Tiempo Total</span>
-                </div>
-                <span className="font-medium">{mockWeeklyHours} hrs</span>
+              ) : null}
+
+              <div className="pt-2 border-t border-zinc-800/80">
+                <h4 className="text-xs font-semibold text-zinc-400 mb-3 uppercase tracking-wider">Historial Reciente</h4>
+                {!recentWorkouts || recentWorkouts.length === 0 ? (
+                  <div className="text-center text-xs text-zinc-500 py-4 bg-zinc-950/30 rounded-lg">
+                    No hay entrenamientos registrados hoy.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {recentWorkouts.map((workout: any, i: number) => (
+                      <button
+                        key={workout.id || i}
+                        onClick={() => {
+                          setEditingWorkout(workout);
+                          setIsLogWorkoutModalOpen(true);
+                        }}
+                        className="w-full text-left flex justify-between items-center bg-zinc-950/40 border border-zinc-800/50 p-3 rounded-xl hover:border-zinc-700 hover:bg-zinc-900/50 transition-colors group"
+                      >
+                        <div className="flex flex-col">
+                          <span className="text-sm font-semibold text-zinc-200 group-hover:text-white transition-colors">{workout.notes || workout.sport}</span>
+                          <span className="text-[10px] text-zinc-500 uppercase font-medium">
+                            {workout.sport} • {workout.durationMin} min
+                          </span>
+                        </div>
+                        <div className="text-sm font-bold text-[#fc4c02] flex items-center gap-1">
+                          {workout.caloriesBurned ? Math.round(workout.caloriesBurned) : 0} <span className="text-[10px] text-zinc-500 font-normal">kcal</span>
+                          {workout.distanceKm && workout.distanceKm > 0 && (
+                            <span className="text-[10px] text-zinc-400 font-normal ml-1">({workout.distanceKm} km)</span>
+                          )}
+                          <Pencil className="w-3.5 h-3.5 text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity ml-1" />
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>
-          */}
 
           {/* Global Stats Widget
           <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6">
@@ -676,6 +777,25 @@ export default function Profile() {
         onSaved={() => {
           fetchProfile();
           setEditingMeal(null);
+        }}
+      />
+
+      <LogWorkoutModal
+        isOpen={isLogWorkoutModalOpen}
+        onClose={() => {
+          setIsLogWorkoutModalOpen(false);
+          setEditingWorkout(null);
+        }}
+        date={format(new Date(), 'yyyy-MM-dd')}
+        initialData={editingWorkout}
+        onDelete={(deletedId) => {
+          setRecentWorkouts(prev => prev.filter(w => w.id !== deletedId));
+          // Refetch to update totals
+          fetchProfile();
+        }}
+        onSaved={() => {
+          fetchProfile();
+          setEditingWorkout(null);
         }}
       />
     </div>

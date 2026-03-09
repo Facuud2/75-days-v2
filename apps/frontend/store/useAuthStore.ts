@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { authService, LoginData, RegisterData } from '../lib/api/auth';
+import { useThemeStore } from './useThemeStore';
 
 export interface User {
   id: string;
@@ -61,6 +62,7 @@ export const useAuthStore = create<AuthState>()(
 
       logout: () => {
         set({ user: null, token: null, isAuthenticated: false });
+        useThemeStore.getState().resetTheme();
         // Optionally redirect or clear other stores here if needed outside context
       },
 

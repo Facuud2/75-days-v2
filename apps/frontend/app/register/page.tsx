@@ -42,7 +42,9 @@ export default function Register() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
-      <div className="w-full max-w-xl bg-white dark:bg-zinc-900 rounded-3xl shadow-xl p-10">
+      <div className="w-full max-w-xl bg-white dark:bg-zinc-950 rounded-3xl p-10 relative border border-zinc-200 dark:border-rose-500/20 shadow-2xl dark:shadow-[0_0_50px_-12px_rgba(244,63,94,0.15)] overflow-hidden">
+        {/* Neon top glow line */}
+        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-rose-600 via-rose-400 to-rose-600 opacity-80"></div>
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold tracking-tight mb-3">Create Account</h1>
           <p className="text-lg text-zinc-500 dark:text-zinc-400">Start your 75 Days challenge today</p>
@@ -62,9 +64,9 @@ export default function Register() {
             <input
               type="text"
               {...register('name')}
-              className={`w-full px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-800 border focus:ring-2 outline-none transition-all ${errors.name
+              className={`w-full px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/50 border focus:ring-2 outline-none transition-all dark:text-white ${errors.name
                 ? 'border-red-400 focus:ring-red-300'
-                : 'border-transparent focus:ring-zinc-900 dark:focus:ring-zinc-100'
+                : 'border-zinc-200 dark:border-zinc-800 focus:border-rose-500 dark:focus:border-rose-500 focus:ring-rose-500/30'
                 }`}
               placeholder="Tu nombre"
             />
@@ -79,9 +81,9 @@ export default function Register() {
             <input
               type="email"
               {...register('email')}
-              className={`w-full px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-800 border focus:ring-2 outline-none transition-all ${errors.email
+              className={`w-full px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/50 border focus:ring-2 outline-none transition-all dark:text-white ${errors.email
                 ? 'border-red-400 focus:ring-red-300'
-                : 'border-transparent focus:ring-zinc-900 dark:focus:ring-zinc-100'
+                : 'border-zinc-200 dark:border-zinc-800 focus:border-rose-500 dark:focus:border-rose-500 focus:ring-rose-500/30'
                 }`}
               placeholder="tu@correo.com"
             />
@@ -96,9 +98,9 @@ export default function Register() {
             <input
               type="password"
               {...register('password')}
-              className={`w-full px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-800 border focus:ring-2 outline-none transition-all ${errors.password
+              className={`w-full px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/50 border focus:ring-2 outline-none transition-all dark:text-white ${errors.password
                 ? 'border-red-400 focus:ring-red-300'
-                : 'border-transparent focus:ring-zinc-900 dark:focus:ring-zinc-100'
+                : 'border-zinc-200 dark:border-zinc-800 focus:border-rose-500 dark:focus:border-rose-500 focus:ring-rose-500/30'
                 }`}
               placeholder="Mínimo 6 caracteres"
             />
@@ -113,11 +115,11 @@ export default function Register() {
               <input
                 type="checkbox"
                 {...register('acceptTerms')}
-                className="mt-1 h-4 w-4 rounded border-zinc-300 dark:border-zinc-600 accent-zinc-900 dark:accent-zinc-100 cursor-pointer flex-shrink-0"
+                className="mt-1 h-4 w-4 rounded border-zinc-300 dark:border-zinc-600 accent-rose-500 cursor-pointer flex-shrink-0"
               />
               <span className="text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed">
                 Acepto los{' '}
-                <a href="#" className="text-zinc-900 dark:text-zinc-100 font-medium underline underline-offset-2 hover:opacity-70 transition-opacity">
+                <a href="#" className="text-rose-600 dark:text-rose-400 font-bold underline underline-offset-2 hover:opacity-70 transition-opacity">
                   Términos y Condiciones
                 </a>{' '}de uso de la aplicación.
               </span>
@@ -130,7 +132,7 @@ export default function Register() {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full py-3 px-4 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-xl font-medium hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors mt-6 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full py-3 px-4 bg-rose-500 text-white rounded-xl font-bold hover:bg-rose-600 focus:ring-4 focus:ring-rose-500/30 transition-all mt-6 disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(244,63,94,0.3)] hover:shadow-[0_0_25px_rgba(244,63,94,0.45)]"
           >
             {isLoading ? 'Creando cuenta...' : 'Crear cuenta'}
           </button>
@@ -138,7 +140,7 @@ export default function Register() {
 
         <p className="text-center mt-6 text-sm text-zinc-500 dark:text-zinc-400">
           ¿Ya tienes cuenta?{' '}
-          <Link href="/login" className="text-zinc-900 dark:text-zinc-100 font-medium hover:underline">
+          <Link href="/login" className="text-rose-600 dark:text-rose-400 font-bold hover:text-rose-500 transition-colors">
             Iniciar sesión
           </Link>
         </p>

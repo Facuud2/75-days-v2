@@ -3,6 +3,7 @@
 import { useAuthStore } from '@/store/useAuthStore';
 import { useThemeStore } from '@/store/useThemeStore';
 import { useUIStore } from '@/store/useUIStore';
+import { useChallengeStore } from '@/store/useChallengeStore';
 import PlansModal from '@/components/PlansModal';
 import { Home, Calendar, User, Settings, LogOut, Moon, Sun, Flame, Target, Trophy } from 'lucide-react';
 import Link from 'next/link';
@@ -14,6 +15,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, logout } = useAuthStore();
   const { appearance, colorPalette, customPalette, setAppearance } = useThemeStore();
   const { openPlansModal } = useUIStore();
+  const { difficulty } = useChallengeStore();
   const pathname = usePathname();
   const router = useRouter();
 
@@ -90,7 +92,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="flex items-center gap-2">
           <Flame className="text-rose-500" fill="currentColor" />
           <span className="font-bold text-xl tracking-wider hidden sm:inline">75 DAYS</span>
-          <span className="text-rose-500 italic font-bold text-xl">HARD</span>
+          <span className="text-rose-500 italic font-bold text-xl">
+            {isAuthenticated ? (difficulty?.toUpperCase() || 'HARD') : 'APP'}
+          </span>
         </div>
 
         <div className="flex items-center gap-4 md:gap-6">
@@ -113,37 +117,45 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           )}
 
           {/* Nav - Only visible if logged in */}
-          {isAuthenticated && (
-            <nav className="flex items-center gap-1 md:gap-2">
-              <Link href="/dashboard" className={`flex flex-col items-center p-2 transition-colors ${pathname === '/dashboard' ? 'text-white' : 'text-white/50 hover:text-white'}`}>
-                <Home size={20} />
-                <span className="text-[10px] mt-1 hidden sm:block">Inicio</span>
-              </Link>
-              <button onClick={openPlansModal} className={`flex flex-col items-center p-2 transition-colors text-white/50 hover:text-white`}>
-                <Target size={20} />
-                <span className="text-[10px] mt-1 hidden sm:block">Planes</span>
-              </button>
-              <Link href="/profile" className={`flex flex-col items-center p-2 transition-colors ${pathname === '/profile' ? 'text-white' : 'text-white/50 hover:text-white'}`}>
-                <User size={20} />
-                <span className="text-[10px] mt-1 hidden sm:block">Perfil</span>
-              </Link>
-              <Link href="/settings" className={`flex flex-col items-center p-2 transition-colors ${pathname === '/settings' ? 'text-white' : 'text-white/50 hover:text-white'}`}>
-                <Settings size={20} />
-                <span className="text-[10px] mt-1 hidden sm:block">Ajustes</span>
-              </Link>
-              <button onClick={(e) => toggleTheme(e)} className="p-2 text-white/50 hover:text-white transition-colors rounded-full border border-white/10 ml-2 hidden sm:block relative overflow-hidden" title={appearance === 'dark' ? 'Cambiar a claro' : 'Cambiar a oscuro'}>
-                <span className={`block transition-all duration-300 ${appearance === 'dark' ? 'rotate-0 scale-100' : 'rotate-90 scale-0 absolute'}`}>
-                  <Sun size={18} />
-                </span>
-                <span className={`block transition-all duration-300 ${appearance === 'dark' ? '-rotate-90 scale-0 absolute' : 'rotate-0 scale-100'}`}>
-                  <Moon size={18} />
-                </span>
-              </button>
+          <nav className="flex items-center gap-1 md:gap-2">
+            {isAuthenticated && (
+              <>
+                <Link href="/dashboard" className={`flex flex-col items-center p-2 transition-colors ${pathname === '/dashboard' ? 'text-white' : 'text-white/50 hover:text-white'}`}>
+                  <Home size={20} />
+                  <span className="text-[10px] mt-1 hidden sm:block">Inicio</span>
+                </Link>
+                <button onClick={openPlansModal} className={`flex flex-col items-center p-2 transition-colors text-white/50 hover:text-white`}>
+                  <Target size={20} />
+                  <span className="text-[10px] mt-1 hidden sm:block">Planes</span>
+                </button>
+                <Link href="/profile" className={`flex flex-col items-center p-2 transition-colors ${pathname === '/profile' ? 'text-white' : 'text-white/50 hover:text-white'}`}>
+                  <User size={20} />
+                  <span className="text-[10px] mt-1 hidden sm:block">Perfil</span>
+                </Link>
+                <Link href="/settings" className={`flex flex-col items-center p-2 transition-colors ${pathname === '/settings' ? 'text-white' : 'text-white/50 hover:text-white'}`}>
+                  <Settings size={20} />
+                  <span className="text-[10px] mt-1 hidden sm:block">Ajustes</span>
+                </Link>
+              </>
+            )}
+
+            {/* Always visible theme toggle */}
+            <button onClick={(e) => toggleTheme(e)} className="p-2 text-white/50 hover:text-white transition-colors rounded-full border border-white/10 ml-2 hidden sm:block relative overflow-hidden" title={appearance === 'dark' ? 'Cambiar a claro' : 'Cambiar a oscuro'}>
+              <span className={`block transition-all duration-300 ${appearance === 'dark' ? 'rotate-0 scale-100' : 'rotate-90 scale-0 absolute'}`}>
+                <Sun size={18} />
+              </span>
+              <span className={`block transition-all duration-300 ${appearance === 'dark' ? '-rotate-90 scale-0 absolute' : 'rotate-0 scale-100'}`}>
+                <Moon size={18} />
+              </span>
+            </button>
+
+            {/* Logout button */}
+            {isAuthenticated && (
               <button onClick={() => { logout(); router.push('/login'); }} className="p-2 text-white/50 hover:text-white transition-colors rounded-full border border-white/10 ml-2">
                 <LogOut size={18} />
               </button>
-            </nav>
-          )}
+            )}
+          </nav>
         </div>
       </header>
 

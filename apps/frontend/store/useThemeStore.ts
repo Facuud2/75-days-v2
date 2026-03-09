@@ -56,6 +56,7 @@ interface ThemeState {
   setAppearance: (mode: AppearanceMode) => void;
   setColorPalette: (palette: ColorPalette) => void;
   setCustomPalette: (colors: Partial<{ primary: string; secondary: string; accent: string }>) => void;
+  resetTheme: () => void;
 
   // ── legacy compat ─────────────────────────────────────────────────────────
   /** @deprecated use appearance instead */
@@ -77,6 +78,8 @@ export const useThemeStore = create<ThemeState>()(
       setColorPalette: (palette) => set({ colorPalette: palette }),
       setCustomPalette: (colors) =>
         set((state) => ({ customPalette: { ...state.customPalette, ...colors } })),
+      resetTheme: () =>
+        set({ appearance: 'dark', colorPalette: 'pink-neon', theme: 'dark' }),
 
       // ── legacy compat ──────────────────────────────────────────────────────
       theme: 'dark',
