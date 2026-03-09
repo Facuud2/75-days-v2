@@ -553,7 +553,7 @@ export default function LogMealModal({ isOpen, onClose, onSaved, date }: LogMeal
                                                                 min="1"
                                                                 value={item.weightGrams}
                                                                 onChange={(e) => updateIngredientWeight(index, Number(e.target.value))}
-                                                                className="w-16 bg-zinc-900 border border-zinc-700 rounded-md px-2 py-1 text-xs text-right text-zinc-200 focus:border-orange-500 focus:outline-none"
+                                                                className="w-16 bg-zinc-900 border border-zinc-700 rounded-md py-1 pl-2 pr-6 text-xs text-right text-zinc-200 focus:border-orange-500 focus:outline-none"
                                                             />
                                                             <span className="absolute right-2 top-1.5 text-xs text-zinc-500 pointer-events-none">g</span>
                                                         </div>
