@@ -9,6 +9,7 @@ import { healthService, DailyStats } from '@/lib/api/health';
 import { format } from 'date-fns';
 import { Trophy, Calendar, Scale, Award, Flame, Target, ChevronRight, CheckCircle2, Lock, Activity, BarChart3, Footprints, Clock, Zap, Pencil, PieChart as PieChartIcon, RefreshCw, Sun, Moon, Dumbbell, Book, Droplet } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, PieChart, Pie, Cell, Legend } from 'recharts';
+import toast from 'react-hot-toast';
 import AchievementsModal from '@/components/AchievementsModal';
 import EditProfileModal from '@/components/EditProfileModal';
 import LogMealModal from '@/components/LogMealModal';
@@ -72,7 +73,7 @@ export default function Profile() {
         userService.getProfile(),
         healthService.getDailyStats(today).catch(() => null),
         healthService.getStravaStatus().catch(() => ({ connected: false })),
-        healthService.getWorkoutsForDay(today).catch(() => ({ workouts: [] }))
+        healthService.getRecentWorkouts().catch(() => ({ workouts: [] }))
       ])
         .then(([profile, healthData, stravaStatus, workoutsData]) => {
           setProfileData(profile);
@@ -121,10 +122,10 @@ export default function Profile() {
       const result = await healthService.syncStravaWorkouts();
       // Refetch profile to update stats (assuming workouts affect daily stats if today)
       fetchProfile();
-      alert(result.message);
+      toast.success(result.message);
     } catch (error) {
       console.error('Error syncing strava', error);
-      alert('Error sincronizando entrenamientos.');
+      toast.error('Error sincronizando entrenamientos.');
     } finally {
       setSyncingStrava(false);
     }
@@ -818,7 +819,7 @@ export default function Profile() {
                 <h4 className="text-xs font-semibold text-zinc-400 mb-3 uppercase tracking-wider">Historial Reciente</h4>
                 {!recentWorkouts || recentWorkouts.length === 0 ? (
                   <div className="text-center text-xs text-zinc-500 py-4 bg-zinc-950/30 rounded-lg">
-                    No hay entrenamientos registrados hoy.
+                    No hay entrenamientos registrados recientemente.
                   </div>
                 ) : (
                   <div className="space-y-2">

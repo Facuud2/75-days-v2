@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middlewares/auth';
-import { searchFoods, getFoodDetails } from '../lib/fatsecret';
+import { getFoodDetails, searchFoods } from '../lib/fatsecret';
+import prisma from '../lib/prisma';
 
 export const searchFoodController = async (req: AuthRequest, res: Response) => {
     try {
@@ -86,5 +87,74 @@ export const getFoodController = async (req: AuthRequest, res: Response) => {
     } catch (error: any) {
         console.error('FatSecret Get Food Error:', error.message);
         res.status(500).json({ error: 'Error al obtener detalle del alimento.' });
+    }
+};
+
+export const importFoodController = async (req: AuthRequest, res: Response) => {
+    try {
+        const foodId = req.params.id as string;
+        if (!foodId) return res.status(400).json({ error: 'ID de alimento requerido.' });
+
+        const data = await getFoodDetails(foodId);
+        const food = data?.food;
+
+        if (!food) return res.status(404).json({ error: 'Alimento no encontrado.' });
+
+        let servings: any[] = [];
+        if (food.servings && food.servings.serving) {
+            servings = Array.isArray(food.servings.serving) ? food.servings.serving : [food.servings.serving];
+        }
+
+        let selectedServing = servings.find(s => s.metric_serving_unit === 'g' && parseFloat(s.metric_serving_amount || '0') > 0);
+
+        if (!selectedServing) {
+            selectedServing = servings.find(s => s.metric_serving_unit === 'ml' && parseFloat(s.metric_serving_amount || '0') > 0);
+        }
+
+        if (!selectedServing) {
+            selectedServing = servings[0];
+        }
+
+        if (!selectedServing) {
+            return res.status(400).json({ error: 'No se encontraron porciones válidas para este alimento.' });
+        }
+
+        const metricAmount = parseFloat(selectedServing.metric_serving_amount || '0');
+        let multiplier = 1;
+
+        if (metricAmount > 0 && ['g', 'ml'].includes(selectedServing.metric_serving_unit?.toLowerCase())) {
+            multiplier = 100 / metricAmount;
+        } else {
+            multiplier = 100 / (metricAmount > 0 ? metricAmount : 100);
+        }
+
+        const caloriesPer100g = parseFloat(selectedServing.calories || '0') * multiplier;
+        const proteinPer100g = parseFloat(selectedServing.protein || '0') * multiplier;
+        const carbPer100g = parseFloat(selectedServing.carbohydrate || '0') * multiplier;
+        const fatPer100g = parseFloat(selectedServing.fat || '0') * multiplier;
+
+        const ingredientName = `${food.food_name}${food.brand_name ? ` (${food.brand_name})` : ''}`;
+
+        const ingredient = await prisma.ingredient.upsert({
+            where: { name: ingredientName },
+            update: {
+                caloriesPer100g,
+                proteinPer100g,
+                carbPer100g,
+                fatPer100g
+            },
+            create: {
+                name: ingredientName,
+                caloriesPer100g,
+                proteinPer100g,
+                carbPer100g,
+                fatPer100g
+            }
+        });
+
+        return res.json(ingredient);
+    } catch (error: any) {
+        console.error('FatSecret Import Error:', error.message);
+        res.status(500).json({ error: 'Error al importar el alimento.' });
     }
 };

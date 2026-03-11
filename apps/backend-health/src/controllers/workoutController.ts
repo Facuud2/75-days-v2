@@ -57,6 +57,22 @@ export const logWorkout = async (req: AuthRequest, res: Response) => {
 };
 
 /**
+ * GET /api/workouts/recent
+ * List the 10 most recent workouts logged by the authenticated user across any date.
+ */
+export const getRecentWorkouts = async (req: AuthRequest, res: Response) => {
+    const userId = req.user!.id;
+
+    const workouts = await prisma.workoutEntry.findMany({
+        where: { userId },
+        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+        take: 10,
+    });
+
+    return res.json({ workouts });
+};
+
+/**
  * GET /api/workouts/:date
  * List all workouts logged by the authenticated user on a given date.
  */

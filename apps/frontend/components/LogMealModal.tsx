@@ -15,6 +15,13 @@ type Tab = 'SEARCH' | 'CUSTOM';
 type Step = 'MAIN' | 'DETAILS' | 'CREATE_CUSTOM';
 type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 
+const MEAL_SUGGESTIONS: Record<MealType, string[]> = {
+    breakfast: ['Avena', 'Huevo', 'Pan Integral', 'Café', 'Plátano', 'Leche'],
+    lunch: ['Pechuga de Pollo', 'Arroz', 'Fideos', 'Atún', 'Ensalada'],
+    snack: ['Yogur', 'Almendras', 'Manzana', 'Proteína en Polvo', 'Barrita'],
+    dinner: ['Pescado', 'Pollo', 'Huevo', 'Ensalada', 'Sopa']
+};
+
 export default function LogMealModal({ isOpen, onClose, onSaved, date }: LogMealModalProps) {
     const [activeTab, setActiveTab] = useState<Tab>('SEARCH');
     const [step, setStep] = useState<Step>('MAIN');
@@ -40,6 +47,9 @@ export default function LogMealModal({ isOpen, onClose, onSaved, date }: LogMeal
     const [recipeIngredients, setRecipeIngredients] = useState<{ ingredientId: string; weightGrams: number, ingredient?: Ingredient }[]>([]);
     const [ingredientSearch, setIngredientSearch] = useState('');
     const [isSelectingIngredient, setIsSelectingIngredient] = useState(false);
+    const [ingredientSearchResults, setIngredientSearchResults] = useState<FatSecretFoodItem[]>([]);
+    const [isSearchingIngredient, setIsSearchingIngredient] = useState(false);
+    const [isImporting, setIsImporting] = useState(false);
 
     // Detail state
     const [selectedFoodId, setSelectedFoodId] = useState<string | null>(null);
@@ -65,6 +75,7 @@ export default function LogMealModal({ isOpen, onClose, onSaved, date }: LogMeal
             setRecipeIngredients([]);
             setIsSelectingIngredient(false);
             setIngredientSearch('');
+            setIngredientSearchResults([]);
             fetchCustomFoods();
             fetchSystemIngredients();
         }
@@ -93,14 +104,19 @@ export default function LogMealModal({ isOpen, onClose, onSaved, date }: LogMeal
 
     if (!isOpen) return null;
 
-    const handleSearch = async (e?: React.FormEvent) => {
+    const handleSearch = async (e?: React.FormEvent, directQuery?: string) => {
         if (e) e.preventDefault();
-        if (!query.trim()) return;
+        const searchTerm = directQuery || query;
+        if (!searchTerm.trim()) return;
+
+        if (directQuery) {
+            setQuery(directQuery);
+        }
 
         setIsSearching(true);
         setHasSearched(true);
         try {
-            const res = await healthService.searchFood(query);
+            const res = await healthService.searchFood(searchTerm);
             setSearchResults(res.results || []);
         } catch (error) {
             console.error('Failed to search food:', error);
@@ -130,6 +146,34 @@ export default function LogMealModal({ isOpen, onClose, onSaved, date }: LogMeal
     };
 
     // Recipe Builder Handlers
+    const handleIngredientSearch = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
+        if (!ingredientSearch.trim()) return;
+
+        setIsSearchingIngredient(true);
+        try {
+            const res = await healthService.searchFood(ingredientSearch);
+            setIngredientSearchResults(res.results || []);
+        } catch (error) {
+            console.error('Failed to search ingredients:', error);
+        } finally {
+            setIsSearchingIngredient(false);
+        }
+    };
+
+    const handleSelectIngredientFromSearch = async (item: FatSecretFoodItem) => {
+        setIsImporting(true);
+        try {
+            const ingredient = await healthService.importFatSecretFood(item.id);
+            addIngredientToRecipe(ingredient);
+            setIngredientSearchResults([]);
+        } catch (error) {
+            console.error('Failed to import ingredient:', error);
+        } finally {
+            setIsImporting(false);
+        }
+    };
+
     const addIngredientToRecipe = (ingredient: Ingredient) => {
         setRecipeIngredients(prev => [...prev, { ingredientId: ingredient.id, weightGrams: 100, ingredient }]);
         setIsSelectingIngredient(false);
@@ -298,7 +342,12 @@ export default function LogMealModal({ isOpen, onClose, onSaved, date }: LogMeal
                                 ] as const).map(type => (
                                     <button
                                         key={type.id}
-                                        onClick={() => setMealType(type.id)}
+                                        onClick={() => {
+                                            setMealType(type.id);
+                                            setQuery('');
+                                            setSearchResults([]);
+                                            setHasSearched(false);
+                                        }}
                                         className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-colors ${mealType === type.id
                                             ? 'bg-zinc-800 text-zinc-100 shadow-sm'
                                             : 'text-zinc-500 hover:text-zinc-300'
@@ -319,7 +368,13 @@ export default function LogMealModal({ isOpen, onClose, onSaved, date }: LogMeal
                                         <input
                                             type="text"
                                             value={query}
-                                            onChange={(e) => setQuery(e.target.value)}
+                                            onChange={(e) => {
+                                                setQuery(e.target.value);
+                                                if (e.target.value === '') {
+                                                    setSearchResults([]);
+                                                    setHasSearched(false);
+                                                }
+                                            }}
                                             className="block w-full pl-10 pr-12 py-3 border border-zinc-700 rounded-xl leading-5 bg-zinc-950 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 sm:text-sm transition-colors"
                                             placeholder="Buscar alimento (ej: Manzana, Pollo...)"
                                         />
@@ -335,8 +390,22 @@ export default function LogMealModal({ isOpen, onClose, onSaved, date }: LogMeal
                                     {/* Results List */}
                                     <div className="space-y-2">
                                         {!hasSearched && !isSearching && (
-                                            <div className="text-center py-10 text-sm text-zinc-500">
-                                                Busca un alimento para agregarlo a tu registro nutricional de hoy.
+                                            <div className="py-6">
+                                                <p className="text-xs text-zinc-500 font-semibold mb-3 uppercase tracking-wider text-center">
+                                                    Sugerencias rápidas para {mealType === 'breakfast' ? 'Desayuno' : mealType === 'lunch' ? 'Almuerzo' : mealType === 'dinner' ? 'Cena' : 'Snack'}
+                                                </p>
+                                                <div className="flex flex-wrap justify-center gap-2">
+                                                    {MEAL_SUGGESTIONS[mealType].map(item => (
+                                                        <button
+                                                            key={item}
+                                                            type="button"
+                                                            onClick={() => handleSearch(undefined, item)}
+                                                            className="px-3 py-1.5 bg-zinc-950/50 border border-zinc-800 text-zinc-400 text-xs font-semibold rounded-lg hover:bg-zinc-800 hover:text-orange-400 transition-colors"
+                                                        >
+                                                            {item}
+                                                        </button>
+                                                    ))}
+                                                </div>
                                             </div>
                                         )}
 
@@ -595,28 +664,53 @@ export default function LogMealModal({ isOpen, onClose, onSaved, date }: LogMeal
                                                 <p className="text-xs text-zinc-400 font-bold">Buscar ingrediente base</p>
                                                 <button type="button" onClick={() => setIsSelectingIngredient(false)}><X className="w-4 h-4 text-zinc-500 hover:text-white" /></button>
                                             </div>
-                                            <input
-                                                type="text"
-                                                autoFocus
-                                                value={ingredientSearch}
-                                                onChange={e => setIngredientSearch(e.target.value)}
-                                                placeholder="Ej: Huevo, Pollo..."
-                                                className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 mb-2 focus:border-orange-500 focus:outline-none"
-                                            />
+                                            <div className="flex gap-2">
+                                                <input
+                                                    type="text"
+                                                    autoFocus
+                                                    value={ingredientSearch}
+                                                    onChange={e => {
+                                                        setIngredientSearch(e.target.value);
+                                                        if (e.target.value === '') setIngredientSearchResults([]);
+                                                    }}
+                                                    onKeyDown={e => {
+                                                        if (e.key === 'Enter') {
+                                                            e.preventDefault();
+                                                            handleIngredientSearch();
+                                                        }
+                                                    }}
+                                                    placeholder="Ej: Huevo, Pollo..."
+                                                    className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 mb-2 focus:border-orange-500 focus:outline-none"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={handleIngredientSearch}
+                                                    disabled={isSearchingIngredient || !ingredientSearch.trim()}
+                                                    className="mb-2 px-3 bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold rounded-lg disabled:opacity-50 transition-colors flex items-center justify-center shrink-0"
+                                                >
+                                                    {isSearchingIngredient ? <Loader2 className="w-4 h-4 animate-spin text-zinc-400" /> : <Search className="w-4 h-4 text-zinc-400" />}
+                                                </button>
+                                            </div>
                                             <div className="max-h-40 overflow-y-auto space-y-1 scrollbar-thin scrollbar-thumb-zinc-700">
-                                                {systemIngredients
-                                                    .filter(i => i.name.toLowerCase().includes(ingredientSearch.toLowerCase()))
-                                                    .map(ing => (
+                                                {isImporting ? (
+                                                    <div className="py-4 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-orange-500" /></div>
+                                                ) : ingredientSearchResults.length > 0 ? (
+                                                    ingredientSearchResults.map(item => (
                                                         <button
-                                                            key={ing.id}
+                                                            key={item.id}
                                                             type="button"
-                                                            onClick={() => addIngredientToRecipe(ing)}
-                                                            className="w-full text-left p-2 hover:bg-zinc-800 rounded-lg flex justify-between items-center group"
+                                                            onClick={() => handleSelectIngredientFromSearch(item)}
+                                                            className="w-full text-left p-2 hover:bg-zinc-800 rounded-lg flex flex-col group overflow-hidden"
                                                         >
-                                                            <span className="text-sm text-zinc-300 group-hover:text-white">{ing.name}</span>
-                                                            <span className="text-[10px] text-zinc-500 bg-zinc-950 px-2 py-0.5 rounded">{ing.caloriesPer100g} kcal/100g</span>
+                                                            <span className="text-sm font-semibold text-zinc-300 group-hover:text-white truncate w-full">{item.name} {item.brand && <span className="text-xs text-zinc-500 font-normal">({item.brand})</span>}</span>
+                                                            <span className="text-xs text-zinc-500 truncate w-full">{item.description}</span>
                                                         </button>
-                                                    ))}
+                                                    ))
+                                                ) : ingredientSearch ? (
+                                                    <div className="text-xs text-center text-zinc-500 py-2">Busca para ver resultados de FatSecret</div>
+                                                ) : (
+                                                    <div className="text-xs text-center text-zinc-600 py-2">Ingresa el nombre del alimento y busca</div>
+                                                )}
                                             </div>
                                         </div>
                                     )}

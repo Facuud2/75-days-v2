@@ -9,17 +9,19 @@ const STRAVA_CLIENT_ID = process.env.STRAVA_CLIENT_ID;
 const STRAVA_CLIENT_SECRET = process.env.STRAVA_CLIENT_SECRET;
 const STRAVA_REDIRECT_URI = process.env.STRAVA_REDIRECT_URI || 'http://localhost:3002/api/strava/callback';
 
-export const connectStrava = (req: Request, res: Response) => {
+export const connectStrava = (req: AuthRequest, res: Response) => {
     try {
         if (!STRAVA_CLIENT_ID) {
             return res.status(500).json({ error: 'Strava Client ID no configurado en el servidor' });
         }
 
+        const userId = req.user?.id;
+        if (!userId) {
+            return res.status(401).json({ error: 'No autorizado' });
+        }
+
         // State can be the user ID so we know who authorized it in the callback
-        // The user ID comes from the authenticate middleware, but here since it's a redirect, we might need a frontend approach
-        // Often, the frontend fetching this endpoint gets a URL and then redirects the browser
-        // For simplicity, we'll return the URL
-        const authUrl = `https://www.strava.com/oauth/authorize?client_id=${STRAVA_CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(STRAVA_REDIRECT_URI)}&approval_prompt=force&scope=read,activity:read_all`;
+        const authUrl = `https://www.strava.com/oauth/authorize?client_id=${STRAVA_CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(STRAVA_REDIRECT_URI)}&approval_prompt=force&scope=read,activity:read_all&state=${userId}`;
 
         res.json({ url: authUrl });
     } catch (error) {
@@ -201,7 +203,7 @@ export const syncStravaWorkouts = async (req: AuthRequest, res: Response) => {
                         intensity,
                         caloriesBurned: activity.kilojoules ? (activity.kilojoules * 0.239006) : 0, // Aprox if kilojoules are present. Real calories req. detailed stream or effort. Wait, strava directly returns 'calories' sometimes on the detailed activity endpoint. If not, we estimate. Strava sometimes doesn't send cals in summary. Let's try to grab 'calories' field if it exists.
                         isManualCalories: false,
-                        distanceKm: (activity.distance / 1000).toFixed(2) as any as number,
+                        distanceKm: Number((activity.distance / 1000).toFixed(2)),
                         source: 'strava',
                         externalId: externalId,
                         notes: activity.name,

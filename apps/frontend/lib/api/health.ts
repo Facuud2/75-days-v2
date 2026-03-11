@@ -183,6 +183,8 @@ export const healthService = {
         healthClient<{ results: FatSecretFoodItem[], page: number, total_results: number }>(`/fatsecret/search?query=${encodeURIComponent(query)}&page=${page}`),
     getFoodDetails: (id: string) =>
         healthClient<FatSecretFoodDetails>(`/fatsecret/food/${id}`),
+    importFatSecretFood: (id: string) =>
+        healthClient<Ingredient>(`/fatsecret/import/${id}`, { method: 'POST' }),
     logMeal: (payload: LogMealPayload) =>
         healthClient<{ id: string }>('/nutrition/meals', {
             method: 'POST',
@@ -240,6 +242,8 @@ export const healthService = {
         healthClient<{ message: string }>(`/workouts/${id}`, {
             method: 'DELETE'
         }),
+    getRecentWorkouts: () =>
+        healthClient<{ workouts: any[] }>('/workouts/recent'),
     getWorkoutsForDay: (date: string) =>
         healthClient<{ workouts: any[]; totals: any }>(`/workouts/${date}`),
 };

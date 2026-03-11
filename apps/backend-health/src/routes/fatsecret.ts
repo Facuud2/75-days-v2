@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '../middlewares/auth';
-import { searchFoodController, getFoodController } from '../controllers/fatsecretController';
+import { getFoodController, importFoodController, searchFoodController } from '../controllers/fatsecretController';
 
 const router = Router();
 
@@ -12,5 +12,8 @@ router.get('/search', searchFoodController);
 
 // GET /api/fatsecret/food/:id
 router.get('/food/:id', getFoodController);
+
+// POST /api/fatsecret/import/:id
+router.post('/import/:id', importFoodController);
 
 export default router;

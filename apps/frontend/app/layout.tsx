@@ -22,6 +22,8 @@ import AuthGuard from '@/components/AuthGuard';
 
 // ... other imports ...
 
+import { Toaster } from 'react-hot-toast';
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
@@ -29,6 +31,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AuthGuard>
           <AppLayout>{children}</AppLayout>
         </AuthGuard>
+        <Toaster position="bottom-right" toastOptions={{
+          style: {
+            background: '#18181b', // hover:bg-zinc-900 equivalent mostly
+            color: '#f4f4f5',
+            border: '1px solid #27272a',
+          }
+        }} />
       </body>
     </html>
   );
