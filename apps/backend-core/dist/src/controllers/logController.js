@@ -146,8 +146,13 @@ exports.updateMetrics = updateMetrics;
 const checkDailyReset = async (req, res) => {
     try {
         const userId = req.user.id;
-        const today = (0, date_fns_1.format)(new Date(), 'yyyy-MM-dd');
-        const yesterday = (0, date_fns_1.format)((0, date_fns_1.subDays)(new Date(), 1), 'yyyy-MM-dd');
+        const { timezoneOffset } = req.body || {};
+        const now = new Date();
+        const targetDate = typeof timezoneOffset === 'number'
+            ? new Date(now.getTime() - timezoneOffset * 60000)
+            : now;
+        const today = (0, date_fns_1.format)(targetDate, 'yyyy-MM-dd');
+        const yesterday = (0, date_fns_1.format)((0, date_fns_1.subDays)(targetDate, 1), 'yyyy-MM-dd');
         const challenge = await prisma_1.prisma.challenge.findFirst({
             where: { userId, isActive: true },
             include: { customGoalsTemplate: true }
@@ -161,7 +166,11 @@ const checkDailyReset = async (req, res) => {
         const yesterdayLog = logs.find((l) => l.date === yesterday);
         const todayLog = logs.find((l) => l.date === today);
         let newStreak = challenge.streak;
-        const currentDayNumber = (0, date_fns_1.differenceInDays)(new Date(), new Date(challenge.startDate)) + 1;
+        const start = new Date(challenge.startDate);
+        const localStartDate = typeof timezoneOffset === 'number'
+            ? new Date(start.getTime() - timezoneOffset * 60000)
+            : start;
+        const currentDayNumber = Math.max(1, (0, date_fns_1.differenceInCalendarDays)(targetDate, localStartDate) + 1);
         if (yesterdayLog) {
             if (yesterdayLog.status !== 'success') {
                 newStreak = 0;
@@ -173,7 +182,7 @@ const checkDailyReset = async (req, res) => {
                 }
             }
         }
-        else if ((0, date_fns_1.differenceInDays)(new Date(), new Date(challenge.startDate)) > 0) {
+        else if ((0, date_fns_1.differenceInCalendarDays)(new Date(), new Date(challenge.startDate)) > 0) {
             newStreak = 0;
         }
         if (challenge.streak !== newStreak || challenge.currentDay !== currentDayNumber) {
@@ -199,11 +208,17 @@ const checkDailyReset = async (req, res) => {
                     }
                 }
             });
-            return res.status(201).json({ message: 'New daily log created', streak: newStreak });
         }
-        res.json({ message: 'Checked', streak: newStreak });
+        // Return the full updated log array for the store
+        const updatedLogs = await prisma_1.prisma.dailyLog.findMany({
+            where: { challengeId: challenge.id },
+            include: { goals: true },
+            orderBy: { date: 'asc' }
+        });
+        res.json({ message: 'Checked', streak: newStreak, currentDay: currentDayNumber, logs: updatedLogs });
     }
     catch (error) {
+        console.error('Error in checkDailyReset:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 };

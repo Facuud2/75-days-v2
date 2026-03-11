@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.progressQuest = exports.addQuest = exports.getQuests = void 0;
+exports.progressQuest = exports.addQuest = exports.getAvailableQuests = exports.getQuests = void 0;
 const prisma_1 = require("../utils/prisma");
 const zod_1 = require("zod");
 const getQuests = async (req, res) => {
@@ -17,6 +17,19 @@ const getQuests = async (req, res) => {
     }
 };
 exports.getQuests = getQuests;
+const getAvailableQuests = async (req, res) => {
+    try {
+        console.log("HITTING AVAILABLE QUESTS");
+        const templates = await prisma_1.prisma.sideQuestTemplate.findMany({
+            orderBy: { durationDays: 'asc' }
+        });
+        res.json(templates);
+    }
+    catch (error) {
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+exports.getAvailableQuests = getAvailableQuests;
 const addQuestSchema = zod_1.z.object({
     title: zod_1.z.string(),
     difficulty: zod_1.z.enum(['Easy', 'Medium', 'Hard']),
