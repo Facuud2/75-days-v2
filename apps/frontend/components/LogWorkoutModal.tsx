@@ -224,20 +224,22 @@ export default function LogWorkoutModal({ isOpen, onClose, date, onSaved, initia
                                 </div>
 
                                 {/* Distance */}
-                                <div>
-                                    <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5 ml-1 flex items-center justify-between">
-                                        <span>Distancia (km) (Opcional)</span>
-                                    </label>
-                                    <input
-                                        type="number"
-                                        step="0.1"
-                                        min="0.1"
-                                        placeholder="0.0"
-                                        value={distanceKm}
-                                        onChange={(e) => setDistanceKm(e.target.value)}
-                                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#fc4c02]/50 placeholder:text-zinc-600"
-                                    />
-                                </div>
+                                {sport !== 'strength' && sport !== 'yoga' && (
+                                    <div>
+                                        <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5 ml-1 flex items-center justify-between">
+                                            <span>Distancia (km) (Opcional)</span>
+                                        </label>
+                                        <input
+                                            type="number"
+                                            step="0.1"
+                                            min="0.1"
+                                            placeholder="0.0"
+                                            value={distanceKm}
+                                            onChange={(e) => setDistanceKm(e.target.value)}
+                                            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#fc4c02]/50 placeholder:text-zinc-600"
+                                        />
+                                    </div>
+                                )}
                             </div>
 
                             {/* Notes */}

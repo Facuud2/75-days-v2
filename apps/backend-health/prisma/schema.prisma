@@ -17,6 +17,7 @@ model UserHealthProfile {
   fatGoalG         Float    @default(65)
   // User weight used for calorie-burn estimation (synced manually or via onboarding)
   weightKg         Float    @default(70)
+  heightCm         Float    @default(170) // Added for stride/leg-length calculation
 
   // Strava Integration
   stravaAccessToken  String?

@@ -36,13 +36,15 @@ export const logWorkout = async (req: AuthRequest, res: Response) => {
     const { caloriesBurned: manualCalories, ...data } = parsed.data;
     const isManualCalories = manualCalories !== undefined;
 
-    // Look up user's weight for a more accurate estimate
+    // Look up user's weight and height for a more accurate estimate
     const profile = await prisma.userHealthProfile.findUnique({ where: { userId } });
     const weightKg = profile?.weightKg ?? 70;
+    // @ts-ignore: Bypass IDE Prisma cache
+    const heightCm = (profile as any)?.heightCm ?? 170;
 
     const caloriesBurned = isManualCalories
         ? manualCalories!
-        : estimateCaloriesBurned(data.sport, data.durationMin, data.intensity, weightKg);
+        : estimateCaloriesBurned(data.sport, data.durationMin, data.intensity, weightKg, heightCm);
 
     const workout = await prisma.workoutEntry.create({
         data: {
@@ -142,13 +144,15 @@ export const updateWorkout = async (req: AuthRequest, res: Response) => {
     const { caloriesBurned: manualCalories, ...data } = parsed.data;
     const isManualCalories = manualCalories !== undefined;
 
-    // Look up user's weight for a more accurate estimate
+    // Look up user's weight and height for a more accurate estimate
     const profile = await prisma.userHealthProfile.findUnique({ where: { userId } });
     const weightKg = profile?.weightKg ?? 70;
+    // @ts-ignore: Bypass IDE Prisma cache
+    const heightCm = (profile as any)?.heightCm ?? 170;
 
     const caloriesBurned = isManualCalories
         ? manualCalories!
-        : estimateCaloriesBurned(data.sport, data.durationMin, data.intensity, weightKg);
+        : estimateCaloriesBurned(data.sport, data.durationMin, data.intensity, weightKg, heightCm);
 
     const updatedWorkout = await prisma.workoutEntry.update({
         where: { id },

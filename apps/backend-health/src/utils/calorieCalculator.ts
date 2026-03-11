@@ -29,16 +29,35 @@ const INTENSITY_FACTORS: Record<string, number> = {
  * @param durationMin - Duration of the workout in minutes
  * @param intensity  - Effort level: 'low' | 'medium' | 'high'
  * @param weightKg   - Body weight of the user in kilograms (default: 70)
+ * @param heightCm   - Body height in centimeters (default: 170)
  * @returns Estimated calories burned, rounded to 1 decimal place
  */
 export function estimateCaloriesBurned(
     sport: string,
     durationMin: number,
     intensity: string,
-    weightKg: number = 70
+    weightKg: number = 70,
+    heightCm: number = 170
 ): number {
     const met = MET_VALUES[sport] ?? MET_VALUES['other'];
     const intensityFactor = INTENSITY_FACTORS[intensity] ?? INTENSITY_FACTORS['medium'];
-    const calories = met * weightKg * (durationMin / 60) * intensityFactor;
+
+    // Biomechanics Adjustment based on Leg Length (approx 45% of height)
+    const legLengthCm = heightCm * 0.45;
+
+    // Base standard leg length for an average 170cm height person
+    const standardLegLength = 170 * 0.45;
+
+    let biomechanicFactor = 1.0;
+
+    // For gait-based sports, shorter legs require more steps (higher effort) for the same intensity
+    // Longer legs have more efficient strides (lower relative effort)
+    if (sport === 'running' || sport === 'walking' || sport === 'cycling') {
+        const diffCm = standardLegLength - legLengthCm;
+        // Adjust ~3% per 10cm difference from standard leg length
+        biomechanicFactor = 1.0 + (diffCm / 10) * 0.03;
+    }
+
+    const calories = met * weightKg * (durationMin / 60) * intensityFactor * biomechanicFactor;
     return Math.round(calories * 10) / 10;
 }

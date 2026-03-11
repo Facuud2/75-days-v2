@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import axios from 'axios';
 import { AuthRequest } from '../middlewares/auth';
+import { estimateCaloriesBurned } from '../utils/calorieCalculator';
 
 const prisma = new PrismaClient();
 
@@ -194,14 +195,23 @@ export const syncStravaWorkouts = async (req: AuthRequest, res: Response) => {
                     else if (activity.suffer_score < 30) intensity = 'low';
                 }
 
+                const durationMin = Math.round(activity.moving_time / 60);
+
+                const profile = await prisma.userHealthProfile.findUnique({ where: { userId } });
+                const weightKg = profile?.weightKg ?? 70;
+                // @ts-ignore: Bypass IDE Prisma cache
+                const heightCm = (profile as any)?.heightCm ?? 170;
+
+                const estimatedCals = estimateCaloriesBurned(sport, durationMin, intensity, weightKg, heightCm);
+
                 await prisma.workoutEntry.create({
                     data: {
                         userId,
                         date: activity.start_date_local.split('T')[0],
                         sport,
-                        durationMin: Math.round(activity.moving_time / 60),
+                        durationMin,
                         intensity,
-                        caloriesBurned: activity.kilojoules ? (activity.kilojoules * 0.239006) : 0, // Aprox if kilojoules are present. Real calories req. detailed stream or effort. Wait, strava directly returns 'calories' sometimes on the detailed activity endpoint. If not, we estimate. Strava sometimes doesn't send cals in summary. Let's try to grab 'calories' field if it exists.
+                        caloriesBurned: activity.kilojoules ? (activity.kilojoules * 0.239006) : estimatedCals,
                         isManualCalories: false,
                         distanceKm: Number((activity.distance / 1000).toFixed(2)),
                         source: 'strava',
