@@ -52,7 +52,12 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!isActive) {
-      router.push('/onboarding');
+      // Only redirect to onboarding if the user hasn't completed it yet.
+      // A user with onboardingCompleted=true but no active challenge has simply
+      // reset/abandoned their challenge — they should NOT be sent back to onboarding.
+      if (user?.onboardingCompleted !== true) {
+        router.push('/onboarding');
+      }
     } else {
       // Always run daily reset check when visiting dashboard if active, but only once per mount
       if (!hasCheckedReset.current) {
@@ -66,7 +71,7 @@ export default function Dashboard() {
         fetchQuests();
       }
     }
-  }, [isActive, router, checkDailyReset, fetchCurrentChallenge, fetchQuests]);
+  }, [isActive, user, router, checkDailyReset, fetchCurrentChallenge, fetchQuests]);
 
   // Loading state prevents returning generic null silently
   if (isChallengeLoading || (isActive && !todayLog)) {

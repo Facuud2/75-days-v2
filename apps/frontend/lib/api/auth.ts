@@ -44,4 +44,8 @@ export const authService = {
             body: data ? JSON.stringify(data) : undefined,
         });
     },
+
+    getOnboardingStatus: () => {
+        return apiClient<{ onboardingCompleted: boolean }>('/auth/onboarding-status');
+    },
 };
