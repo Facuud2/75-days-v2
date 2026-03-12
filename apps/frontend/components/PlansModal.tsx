@@ -25,9 +25,10 @@ export const PLANS: {
       glowColor: 'shadow-sky-500/20',
       tasks: [
         { icon: <Utensils className="w-3.5 h-3.5 text-sky-400" />, label: 'Comer saludable (alcohol social)' },
-        { icon: <Dumbbell className="w-3.5 h-3.5 text-sky-400" />, label: 'Entrenamiento 45 min' },
-        { icon: <Droplets className="w-3.5 h-3.5 text-sky-400" />, label: 'Agua (1L)' },
+        { icon: <Droplets className="w-3.5 h-3.5 text-sky-400" />, label: 'Agua (3L al día)' },
+        { icon: <Dumbbell className="w-3.5 h-3.5 text-sky-400" />, label: 'Ejercicio 45 min (1 día libre)' },
         { icon: <Star className="w-3.5 h-3.5 text-sky-400" />, label: 'Leer 10 páginas' },
+        { icon: <Star className="w-3.5 h-3.5 text-sky-400" />, label: 'Sin fotos de progreso' },
       ],
     },
     {
@@ -38,10 +39,10 @@ export const PLANS: {
       borderColor: 'border-purple-500',
       glowColor: 'shadow-purple-500/20',
       tasks: [
-        { icon: <Dumbbell className="w-3.5 h-3.5 text-purple-400" />, label: 'Entrenamiento 45 min' },
-        { icon: <Utensils className="w-3.5 h-3.5 text-purple-400" />, label: 'Dieta Saludable' },
-        { icon: <Droplets className="w-3.5 h-3.5 text-purple-400" />, label: 'Agua (3L)' },
-        { icon: <Star className="w-3.5 h-3.5 text-purple-400" />, label: 'Sin alcohol' },
+        { icon: <Utensils className="w-3.5 h-3.5 text-purple-400" />, label: 'Dieta saludable (Sin alcohol)' },
+        { icon: <Dumbbell className="w-3.5 h-3.5 text-purple-400" />, label: 'Ejercicio 45 min' },
+        { icon: <Star className="w-3.5 h-3.5 text-purple-400" />, label: 'Leer 10 páginas' },
+        { icon: <ClipboardList className="w-3.5 h-3.5 text-purple-400" />, label: '3-4 fotos de progreso/sem' },
       ],
     },
     {

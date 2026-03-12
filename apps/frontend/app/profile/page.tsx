@@ -7,7 +7,7 @@ import { useQuestStore } from '@/store/useQuestStore';
 import { userService, UserProfileResponse } from '@/lib/api/users';
 import { healthService, DailyStats } from '@/lib/api/health';
 import { format } from 'date-fns';
-import { Trophy, Calendar, Scale, Award, Flame, Target, ChevronRight, CheckCircle2, Lock, Activity, BarChart3, Footprints, Clock, Zap, Pencil, PieChart as PieChartIcon, RefreshCw, Sun, Moon, Dumbbell, Book, Droplet } from 'lucide-react';
+import { Trophy, Calendar, Scale, Award, Flame, Target, ChevronRight, CheckCircle2, Lock, Activity, BarChart3, Footprints, Clock, Zap, Pencil, PieChart as PieChartIcon, RefreshCw, Sun, Moon, Dumbbell, Book, Droplet, Apple } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, PieChart, Pie, Cell, Legend } from 'recharts';
 import toast from 'react-hot-toast';
 import AchievementsModal from '@/components/AchievementsModal';
@@ -24,6 +24,9 @@ const iconMap: Record<string, any> = {
   sun: Sun,
   moon: Moon,
   target: Target,
+  apple: Apple,
+  footprints: Footprints,
+  clock: Clock,
 };
 
 export default function Profile() {
@@ -516,7 +519,7 @@ export default function Profile() {
                   return (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {availableToSubscribe.map(quest => {
-                        const IconComponent = quest.icon ? iconMap[quest.icon] : Trophy;
+                        const IconComponent = quest.icon && iconMap[quest.icon] ? iconMap[quest.icon] : Trophy;
                         const isSubscribing = subscribingTo === quest.title;
 
                         return (

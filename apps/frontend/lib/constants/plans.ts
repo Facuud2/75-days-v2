@@ -1,14 +1,15 @@
 export const DEFAULT_GOALS = {
     Soft: [
-        { title: 'Agua (2L)', description: 'Beber al menos 2 litros de agua.', icon: 'droplet' },
-        { title: 'Lectura (10 págs)', description: 'Leer 10 páginas de un libro.', icon: 'book' },
-        { title: 'Entrenamiento', description: '30 minutos de actividad física.', icon: 'dumbbell' }
+        { title: 'Comer Saludable', description: 'Dieta saludable, alcohol únicamente en ocasiones sociales.', icon: 'utensils' },
+        { title: 'Agua (3L)', description: 'Beber al menos 3 litros de agua.', icon: 'droplet' },
+        { title: 'Entrenamiento', description: '45 minutos de actividad física (1 día de descanso por semana).', icon: 'dumbbell' },
+        { title: 'Lectura (10 págs)', description: 'Leer 10 páginas de cualquier libro.', icon: 'book' }
     ],
     Medium: [
-        { title: 'Agua (3L)', description: 'Beber al menos 3 litros de agua.', icon: 'droplet' },
-        { title: 'Lectura (10 págs)', description: 'Leer 10 páginas de un libro.', icon: 'book' },
+        { title: 'Dieta Saludable', description: 'Seguir una dieta saludable. Sin alcohol.', icon: 'utensils' },
         { title: 'Entrenamiento', description: '45 minutos de actividad física.', icon: 'dumbbell' },
-        { title: 'Dieta', description: 'Seguir una dieta saludable.', icon: 'utensils' }
+        { title: 'Lectura (10 págs)', description: 'Leer 10 páginas de cualquier libro.', icon: 'book' },
+        { title: 'Fotos de Progreso', description: 'Tomar 3-4 fotos de progreso a la semana.', icon: 'camera' }
     ],
     Hard: [
         { title: 'Dieta Estricta', description: 'Seguir una dieta sin comidas trampa ni alcohol.', icon: 'utensils' },

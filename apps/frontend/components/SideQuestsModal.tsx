@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Trophy, Target, Droplet, Dumbbell, Book, Sun, Moon } from 'lucide-react';
+import { X, Trophy, Target, Droplet, Dumbbell, Book, Sun, Moon, Apple, Footprints, Clock } from 'lucide-react';
 import { useQuestStore, SideQuestTemplate } from '@/store/useQuestStore';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -14,6 +14,9 @@ const iconMap: Record<string, any> = {
     sun: Sun,
     moon: Moon,
     target: Target,
+    apple: Apple,
+    footprints: Footprints,
+    clock: Clock,
 };
 
 export default function SideQuestsModal({ onClose }: SideQuestsModalProps) {
@@ -79,7 +82,7 @@ export default function SideQuestsModal({ onClose }: SideQuestsModalProps) {
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {availableToSubscribe.map((quest) => {
-                                const IconComponent = quest.icon ? iconMap[quest.icon] : Trophy;
+                                const IconComponent = quest.icon && iconMap[quest.icon] ? iconMap[quest.icon] : Trophy;
                                 return (
                                     <div
                                         key={quest.title}
