@@ -14,7 +14,7 @@ import LogMealModal from '@/components/LogMealModal';
 import LogWorkoutModal from '@/components/LogWorkoutModal';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, logout } = useAuthStore();
+  const { isAuthenticated, logout, user } = useAuthStore();
   const { appearance, colorPalette, customPalette, setAppearance } = useThemeStore();
   const { openPlansModal, openLogMealModal, openLogWorkoutModal, isLogMealModalOpen, isLogWorkoutModalOpen } = useUIStore();
   const { difficulty, isActive } = useChallengeStore();
@@ -120,7 +120,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
           {/* Nav - Only visible if logged in */}
           <nav className="flex items-center gap-1 md:gap-2">
-            {isAuthenticated && (
+            {isAuthenticated && user?.onboardingCompleted && (
               <>
                 <Link href="/dashboard" className={`flex flex-col items-center p-2 transition-colors ${pathname === '/dashboard' ? 'text-white' : 'text-white/50 hover:text-white'}`}>
                   <Home size={20} />
@@ -184,7 +184,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       {isAuthenticated && isLogWorkoutModalOpen && <LogWorkoutModal isOpen={isLogWorkoutModalOpen} onClose={() => { useUIStore.getState().closeLogWorkoutModal(); }} date={new Date().toISOString().split('T')[0]} onSaved={() => { }} />}
 
       {/* Mobile Bottom Nav - Only visible if logged in */}
-      {isAuthenticated && (
+      {isAuthenticated && user?.onboardingCompleted && (
         <nav className="sm:hidden fixed bottom-0 left-0 right-0 bg-zinc-950 border-t border-white/5 flex justify-around p-2 z-50">
           <Link href="/dashboard" className={`flex flex-col items-center p-2 ${pathname === '/dashboard' ? 'text-white' : 'text-white/50'}`}>
             <Home size={24} />
