@@ -7,68 +7,39 @@ async function main() {
 
     const templates = [
         {
-            title: 'Beber 3L de Agua',
-            difficulty: 'Easy',
-            durationDays: 7,
-            icon: 'droplet',
-            description: 'Mantente hidratado bebiendo al menos 3 litros de agua durante 7 días.'
+            title: 'Sin Azúcar Añadida',
+            difficulty: 'Hard',
+            durationDays: 21,
+            icon: 'target',
+            description: 'Abstenerse completamente de ingerir alimentos o bebidas con azúcares añadidos por 21 días.'
         },
         {
-            title: 'Caminar 10,000 Pasos',
+            title: 'Ducha de Agua Fría',
             difficulty: 'Medium',
             durationDays: 14,
-            icon: 'dumbbell',
-            description: 'Aumenta tu actividad diaria caminando 10,000 pasos por dos semanas.'
+            icon: 'droplet',
+            description: 'Comienza tu mañana con una ducha completamente fría durante 3 minutos.'
         },
         {
-            title: 'Leer 20 Páginas',
+            title: 'Mediatción Profunda',
             difficulty: 'Easy',
             durationDays: 30,
-            icon: 'book',
-            description: 'Fomenta el hábito de la lectura leyendo todos los días.'
-        },
-        {
-            title: 'Meditar 10 Minutos',
-            difficulty: 'Medium',
-            durationDays: 21,
             icon: 'sun',
-            description: 'Mejora tu enfoque y reduce el estrés con meditación diaria.'
+            description: 'Medita 15 minutos en silencio total al iniciar el día.'
         },
         {
-            title: 'Dormir 8 Horas',
+            title: '12k Pasos Diarios',
+            difficulty: 'Medium',
+            durationDays: 30,
+            icon: 'dumbbell',
+            description: 'Recorre un total de 12,000 pasos en el día para mantenerte en movimiento.'
+        },
+        {
+            title: 'Desconexión Digital',
             difficulty: 'Hard',
             durationDays: 7,
             icon: 'moon',
-            description: 'Prioriza tu descanso durmiendo entre 7 y 8 horas cada noche.'
-        },
-        {
-            title: 'Sin Azúcar Añadida',
-            difficulty: 'Hard',
-            durationDays: 14,
-            icon: 'target',
-            description: 'Evita consumir alimentos o bebidas con azúcares añadidos.'
-        },
-        // Onboarding additional maps
-        {
-            title: '10k Steps Daily',
-            difficulty: 'Medium',
-            durationDays: 30,
-            icon: 'dumbbell',
-            description: 'Caminar 10,000 pasos diarios por 30 días.'
-        },
-        {
-            title: 'Intermittent Fasting (16:8)',
-            difficulty: 'Hard',
-            durationDays: 14,
-            icon: 'target',
-            description: 'Ayuno intermitente 16 horas con ventana de 8 horas para comer.'
-        },
-        {
-            title: 'Meditation 10m',
-            difficulty: 'Easy',
-            durationDays: 21,
-            icon: 'sun',
-            description: 'Medita 10 minutos cada día.'
+            description: 'Cero pantallas (celular, tv, pc) al menos 1 hora antes de dormir.'
         }
     ];
 

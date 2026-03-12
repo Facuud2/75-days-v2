@@ -25,8 +25,8 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <div className="w-full max-w-xl bg-white dark:bg-zinc-950 rounded-3xl p-10 relative border border-zinc-200 dark:border-rose-500/20 shadow-2xl dark:shadow-[0_0_50px_-12px_rgba(244,63,94,0.15)] overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-zinc-950 text-white">
+      <div className="w-full max-w-xl bg-zinc-950 rounded-3xl p-10 relative border border-rose-500/20 shadow-[0_0_50px_-12px_rgba(244,63,94,0.15)] overflow-hidden">
         {/* Neon top glow line */}
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-rose-600 via-rose-400 to-rose-600 opacity-80"></div>
         <div className="text-center mb-8">
@@ -35,7 +35,7 @@ export default function Login() {
         </div>
 
         {error && (
-          <div className="mb-6 p-4 text-sm font-medium text-red-600 bg-red-50 dark:text-red-400 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 rounded-xl text-center">
+          <div className="mb-6 p-4 text-sm font-medium text-red-400 bg-red-500/10 border border-red-500/30 rounded-xl text-center">
             {error}
           </div>
         )}
@@ -48,7 +48,7 @@ export default function Login() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 focus:ring-2 focus:ring-rose-500/30 focus:border-rose-500 outline-none transition-all dark:text-white"
+              className="w-full px-4 py-3 rounded-xl bg-zinc-900/50 border border-zinc-800 focus:ring-2 focus:ring-rose-500/30 focus:border-rose-500 outline-none transition-all text-white"
               placeholder="you@example.com"
             />
           </div>
@@ -61,7 +61,7 @@ export default function Login() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 focus:ring-2 focus:ring-rose-500/30 focus:border-rose-500 outline-none transition-all dark:text-white"
+              className="w-full px-4 py-3 rounded-xl bg-zinc-900/50 border border-zinc-800 focus:ring-2 focus:ring-rose-500/30 focus:border-rose-500 outline-none transition-all text-white"
               placeholder="••••••••"
             />
           </div>
@@ -74,9 +74,9 @@ export default function Login() {
           </button>
         </form>
 
-        <p className="text-center mt-6 text-sm text-zinc-500 dark:text-zinc-400">
+        <p className="text-center mt-6 text-sm text-zinc-400">
           Don&apos;t have an account?{' '}
-          <Link href="/register" className="text-rose-600 dark:text-rose-400 font-bold hover:text-rose-500 transition-colors">
+          <Link href="/register" className="text-rose-400 font-bold hover:text-rose-500 transition-colors">
             Sign up
           </Link>
         </p>
