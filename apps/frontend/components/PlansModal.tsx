@@ -7,7 +7,7 @@ import { useChallengeStore, Difficulty } from '@/store/useChallengeStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { X, Target, Calendar, Utensils, Dumbbell, Droplets, ClipboardList, Star, Pencil } from 'lucide-react';
 
-const PLANS: {
+export const PLANS: {
   difficulty: Difficulty;
   title: string;
   description: string;
