@@ -197,64 +197,63 @@ export default function Profile() {
     <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 animate-in fade-in bg-zinc-950 min-h-screen text-zinc-100 font-sans">
 
       {/* 1. Header Profile Card */}
-      <div className="bg-zinc-900 border border-zinc-800/50 rounded-2xl p-6 md:p-8 shadow-xl flex flex-col md:flex-row items-center md:items-stretch gap-8 relative overflow-hidden">
+      <div className="bg-zinc-900 border border-zinc-800/50 rounded-2xl p-4 md:p-6 shadow-xl flex flex-col md:flex-row items-center md:items-stretch gap-4 relative overflow-hidden">
         {/* Subtle background glow */}
-        <div className="absolute top-0 right-1/4 w-96 h-96 bg-rose-900/10 rounded-full blur-3xl -z-10 pointer-events-none"></div>
+        <div className="absolute top-0 right-1/4 w-72 h-72 bg-rose-900/10 rounded-full blur-3xl -z-10 pointer-events-none"></div>
 
         {/* User Info Left */}
-        <div className="flex items-center gap-6 flex-1">
+        <div className="flex items-center gap-4 flex-1">
           <div className="relative">
-            {/* Avatar placeholder - replacing image with styled circle for consistent UI */}
-            <div className="w-24 h-24 md:w-28 md:h-28 bg-gradient-to-br from-zinc-700 to-zinc-900 border border-zinc-700 rounded-2xl flex items-center justify-center text-4xl font-bold uppercase shadow-2xl relative overflow-hidden">
+            {/* Avatar placeholder */}
+            <div className="w-16 h-16 md:w-24 md:h-24 bg-gradient-to-br from-zinc-700 to-zinc-900 border border-zinc-700 rounded-2xl flex items-center justify-center text-3xl font-bold uppercase shadow-2xl relative overflow-hidden">
               {user.name.charAt(0)}
               <div className="absolute inset-0 bg-rose-500 mt-auto h-2"></div>
             </div>
           </div>
 
-          <div className="space-y-1 text-center md:text-left">
-            <div className="flex items-center gap-3 justify-center md:justify-start">
-              <h1 className="text-2xl md:text-3xl font-bold tracking-tight">{user.name}</h1>
-              <span className="px-2 py-0.5 bg-rose-500/20 text-rose-400 text-xs font-bold rounded-md border border-rose-500/30">
+          <div className="space-y-1 text-left">
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl md:text-2xl font-bold tracking-tight">{user.name}</h1>
+              <span className="px-1.5 py-0.5 bg-rose-500/20 text-rose-400 text-[10px] font-bold rounded-md border border-rose-500/30">
                 Nivel {level}
               </span>
             </div>
-            <p className="text-zinc-400 text-sm">
+            <p className="text-zinc-400 text-xs text-left">
               Miembro desde {format(new Date(user.registeredAt), 'MMMM yyyy')}
             </p>
           </div>
         </div>
 
         {/* Key Stats Right */}
-        <div className="flex flex-wrap md:flex-nowrap gap-3 md:gap-4 justify-center md:justify-end">
+        <div className="grid grid-cols-5 md:flex gap-2 w-full justify-between items-stretch">
           {/* Edit Profile Button */}
           <button
             onClick={() => setIsEditProfileModalOpen(true)}
-            className="bg-zinc-950/50 border border-zinc-800 hover:border-rose-500/50 p-4 rounded-xl flex flex-col items-center justify-center min-w-[100px] group transition-colors cursor-pointer"
+            className="bg-zinc-950/50 border border-zinc-800 hover:border-rose-500/50 p-2 md:p-4 rounded-xl flex flex-col items-center justify-center min-w-0 flex-1 group transition-colors cursor-pointer"
           >
-            <Pencil className="w-6 h-6 text-rose-400 mb-2 group-hover:scale-110 transition-transform" />
-            <span className="text-sm font-semibold group-hover:text-rose-400 transition-colors">Editar</span>
-            <span className="text-xs text-zinc-500">Perfil</span>
+            <Pencil className="w-5 h-5 text-rose-400 mb-1 group-hover:scale-110 transition-transform" />
+            <span className="text-[10px] md:text-xs font-semibold group-hover:text-rose-400 transition-colors">Editar</span>
           </button>
 
-          <div className="bg-zinc-950/50 border border-zinc-800 p-4 rounded-xl flex flex-col items-center justify-center min-w-[100px]">
-            <Flame className="w-6 h-6 text-orange-500 mb-2" />
-            <span className="text-xl font-bold">{streak} días</span>
-            <span className="text-xs text-zinc-500">Racha Actual</span>
+          <div className="bg-zinc-950/50 border border-zinc-800 p-2 md:p-4 rounded-xl flex flex-col items-center justify-center min-w-0 flex-1 text-center">
+            <Flame className="w-5 h-5 text-orange-500 mb-1" />
+            <span className="text-sm md:text-xl font-bold">{streak}</span>
+            <span className="text-[10px] text-zinc-500 leading-tight">Racha</span>
           </div>
-          <div className="bg-zinc-950/50 border border-zinc-800 p-4 rounded-xl flex flex-col items-center justify-center min-w-[100px]">
-            <Calendar className="w-6 h-6 text-rose-500 mb-2" />
-            <span className="text-xl font-bold">{mockTotalDays}</span>
-            <span className="text-xs text-zinc-500">Días Totales</span>
+          <div className="bg-zinc-950/50 border border-zinc-800 p-2 md:p-4 rounded-xl flex flex-col items-center justify-center min-w-0 flex-1 text-center">
+            <Calendar className="w-5 h-5 text-rose-500 mb-1" />
+            <span className="text-sm md:text-xl font-bold">{mockTotalDays}</span>
+            <span className="text-[10px] text-zinc-500 leading-tight">Días</span>
           </div>
-          <div className="bg-zinc-950/50 border border-zinc-800 p-4 rounded-xl flex flex-col items-center justify-center min-w-[100px]">
-            <Activity className="w-6 h-6 text-green-500 mb-2" />
-            <span className="text-xl font-bold">{mockWeightLost} kg</span>
-            <span className="text-xs text-zinc-500">Peso Perdido</span>
+          <div className="bg-zinc-950/50 border border-zinc-800 p-2 md:p-4 rounded-xl flex flex-col items-center justify-center min-w-0 flex-1 text-center">
+            <Activity className="w-5 h-5 text-green-500 mb-1" />
+            <span className="text-sm md:text-xl font-bold">{mockWeightLost}</span>
+            <span className="text-[10px] text-zinc-500 leading-tight">Kg Menos</span>
           </div>
-          <div className="bg-zinc-950/50 border border-zinc-800 p-4 rounded-xl flex flex-col items-center justify-center min-w-[100px]">
-            <Trophy className="w-6 h-6 text-yellow-500 mb-2" />
-            <span className="text-xl font-bold">{mockChallengesCount}</span>
-            <span className="text-xs text-zinc-500">Desafíos</span>
+          <div className="bg-zinc-950/50 border border-zinc-800 p-2 md:p-4 rounded-xl flex flex-col items-center justify-center min-w-0 flex-1 text-center">
+            <Trophy className="w-5 h-5 text-yellow-500 mb-1" />
+            <span className="text-sm md:text-xl font-bold">{mockChallengesCount}</span>
+            <span className="text-[10px] text-zinc-500 leading-tight">X-Days</span>
           </div>
         </div>
       </div>

@@ -7,7 +7,7 @@ import { useChallengeStore, Difficulty } from '@/store/useChallengeStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { X, Target, Calendar, Utensils, Dumbbell, Droplets, ClipboardList, Star, Pencil } from 'lucide-react';
 
-const PLANS: {
+export const PLANS: {
   difficulty: Difficulty;
   title: string;
   description: string;
@@ -148,9 +148,6 @@ export default function PlansModal() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
                 {PLANS.map((plan) => {
                   const isSelected = difficulty === plan.difficulty;
-                  const previewTasks = plan.tasks.slice(0, PREVIEW_COUNT);
-                  const extraCount = plan.tasks.length - PREVIEW_COUNT;
-
                   return (
                     <div
                       key={plan.difficulty}
@@ -181,16 +178,13 @@ export default function PlansModal() {
                       <div className="space-y-2">
                         <p className="text-white/50 text-[11px] font-bold uppercase tracking-wider">Tareas Diarias:</p>
                         <ul className="space-y-1.5">
-                          {previewTasks.map((task, i) => (
+                          {plan.tasks.map((task, i) => (
                             <li key={i} className="flex items-center gap-2 text-xs text-white/70 font-medium">
                               {task.icon}
                               <span className="leading-snug">{task.label}</span>
                             </li>
                           ))}
                         </ul>
-                        {extraCount > 0 && (
-                          <p className="text-[11px] text-white/30 italic font-medium">+{extraCount} más...</p>
-                        )}
                       </div>
                     </div>
                   );

@@ -4,13 +4,15 @@ import { useState } from 'react';
 import { startCircularReveal } from '@/lib/themeTransition';
 import { useThemeStore, ColorPalette, AppearanceMode, PALETTES, PaletteConfig } from '@/store/useThemeStore';
 import { useAuthStore } from '@/store/useAuthStore';
+import { useUIStore } from '@/store/useUIStore';
+import { useChallengeStore } from '@/store/useChallengeStore';
 import {
   Moon, Sun, Monitor, Palette,
   User, Lock, Bell, Crown,
   Check, ChevronDown, ChevronUp,
   Shield, Zap, Infinity,
   Loader2, CheckCircle2, AlertCircle,
-  Sliders,
+  Sliders, Target,
 } from 'lucide-react';
 import { userService, UpdateProfilePayload } from '@/lib/api/users';
 
@@ -96,6 +98,8 @@ export default function SettingsPage() {
     setAppearance, setColorPalette, setCustomPalette,
   } = useThemeStore();
   const { user, updateProfile: updateAuthUser } = useAuthStore();
+  const { openPlansModal } = useUIStore();
+  const { isActive } = useChallengeStore();
 
   // ── Animated appearance switch ───────────────────────────────────────────
   const switchAppearance = (mode: AppearanceMode, e: React.MouseEvent) => {
@@ -247,6 +251,19 @@ export default function SettingsPage() {
         <SectionHeader icon={User} title="Perfil y Seguridad" subtitle="Información personal y contraseña" />
 
         <div className="px-6 py-5 space-y-5">
+          {!isActive && (
+            <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-rose-400">Sin Desafío Activo</h3>
+                <p className="text-xs text-zinc-400 mt-0.5">Explora y selecciona un nuevo desafío para comenzar.</p>
+              </div>
+              <button onClick={openPlansModal} className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-2">
+                <Target className="w-4 h-4" />
+                Ver Planes
+              </button>
+            </div>
+          )}
+
           {alert && (
             <div className={`flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm font-medium ${alert.type === 'success' ? 'bg-green-500/10 border border-green-500/30 text-green-400' : 'bg-red-500/10 border border-red-500/30 text-red-400'}`}>
               {alert.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
@@ -291,6 +308,30 @@ export default function SettingsPage() {
           </div>
         </div>
       </Section>
+
+      {/* ═══════════════════════════════════════════
+          PLAN ACTIVO
+      ═══════════════════════════════════════════ */}
+      {isActive && (
+        <Section>
+          <SectionHeader icon={Target} title="Desafío Actual" subtitle="Gestioná tu plan en curso" />
+          <div className="px-6 py-5">
+            <div className="flex flex-col sm:flex-row gap-4 sm:items-center justify-between bg-zinc-800/30 border border-zinc-800/70 p-4 rounded-xl">
+              <div>
+                <h3 className="text-sm font-bold text-zinc-200">Cambiar o Reiniciar Plan</h3>
+                <p className="text-xs text-zinc-500 mt-0.5 max-w-sm">Si elegís un nuevo programa, tu progreso de días actual regresará a cero y empezarás desde el día 1.</p>
+              </div>
+              <button
+                onClick={openPlansModal}
+                className="shrink-0 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-2 border border-zinc-700 hover:border-rose-500/50"
+              >
+                <Target className="w-4 h-4 text-rose-400" />
+                Explorar Planes
+              </button>
+            </div>
+          </div>
+        </Section>
+      )}
 
       {/* ═══════════════════════════════════════════
           2. TEMAS

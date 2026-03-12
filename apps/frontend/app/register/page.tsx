@@ -41,8 +41,8 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <div className="w-full max-w-xl bg-white dark:bg-zinc-950 rounded-3xl p-10 relative border border-zinc-200 dark:border-rose-500/20 shadow-2xl dark:shadow-[0_0_50px_-12px_rgba(244,63,94,0.15)] overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-zinc-950 text-white">
+      <div className="w-full max-w-xl bg-zinc-950 rounded-3xl p-10 relative border border-rose-500/20 shadow-[0_0_50px_-12px_rgba(244,63,94,0.15)] overflow-hidden">
         {/* Neon top glow line */}
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-rose-600 via-rose-400 to-rose-600 opacity-80"></div>
         <div className="text-center mb-8">
@@ -52,7 +52,7 @@ export default function Register() {
 
         {/* Server-side error (e.g. email already exists) */}
         {error && (
-          <div className="mb-6 p-4 text-sm font-medium text-red-600 bg-red-50 dark:text-red-400 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 rounded-xl text-center">
+          <div className="mb-6 p-4 text-sm font-medium text-red-400 bg-red-500/10 border border-red-500/30 rounded-xl text-center">
             {error}
           </div>
         )}
@@ -64,9 +64,9 @@ export default function Register() {
             <input
               type="text"
               {...register('name')}
-              className={`w-full px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/50 border focus:ring-2 outline-none transition-all dark:text-white ${errors.name
+              className={`w-full px-4 py-3 rounded-xl bg-zinc-900/50 border focus:ring-2 outline-none transition-all text-white ${errors.name
                 ? 'border-red-400 focus:ring-red-300'
-                : 'border-zinc-200 dark:border-zinc-800 focus:border-rose-500 dark:focus:border-rose-500 focus:ring-rose-500/30'
+                : 'border-zinc-800 focus:border-rose-500 focus:ring-rose-500/30'
                 }`}
               placeholder="Tu nombre"
             />
@@ -81,9 +81,9 @@ export default function Register() {
             <input
               type="email"
               {...register('email')}
-              className={`w-full px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/50 border focus:ring-2 outline-none transition-all dark:text-white ${errors.email
+              className={`w-full px-4 py-3 rounded-xl bg-zinc-900/50 border focus:ring-2 outline-none transition-all text-white ${errors.email
                 ? 'border-red-400 focus:ring-red-300'
-                : 'border-zinc-200 dark:border-zinc-800 focus:border-rose-500 dark:focus:border-rose-500 focus:ring-rose-500/30'
+                : 'border-zinc-800 focus:border-rose-500 focus:ring-rose-500/30'
                 }`}
               placeholder="tu@correo.com"
             />
@@ -98,9 +98,9 @@ export default function Register() {
             <input
               type="password"
               {...register('password')}
-              className={`w-full px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/50 border focus:ring-2 outline-none transition-all dark:text-white ${errors.password
+              className={`w-full px-4 py-3 rounded-xl bg-zinc-900/50 border focus:ring-2 outline-none transition-all text-white ${errors.password
                 ? 'border-red-400 focus:ring-red-300'
-                : 'border-zinc-200 dark:border-zinc-800 focus:border-rose-500 dark:focus:border-rose-500 focus:ring-rose-500/30'
+                : 'border-zinc-800 focus:border-rose-500 focus:ring-rose-500/30'
                 }`}
               placeholder="Mínimo 6 caracteres"
             />
@@ -115,11 +115,11 @@ export default function Register() {
               <input
                 type="checkbox"
                 {...register('acceptTerms')}
-                className="mt-1 h-4 w-4 rounded border-zinc-300 dark:border-zinc-600 accent-rose-500 cursor-pointer flex-shrink-0"
+                className="mt-1 h-4 w-4 rounded border-zinc-600 accent-rose-500 cursor-pointer flex-shrink-0"
               />
-              <span className="text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed">
+              <span className="text-sm text-zinc-400 leading-relaxed">
                 Acepto los{' '}
-                <a href="#" className="text-rose-600 dark:text-rose-400 font-bold underline underline-offset-2 hover:opacity-70 transition-opacity">
+                <a href="#" className="text-rose-400 font-bold underline underline-offset-2 hover:opacity-70 transition-opacity">
                   Términos y Condiciones
                 </a>{' '}de uso de la aplicación.
               </span>
@@ -138,9 +138,9 @@ export default function Register() {
           </button>
         </form>
 
-        <p className="text-center mt-6 text-sm text-zinc-500 dark:text-zinc-400">
+        <p className="text-center mt-6 text-sm text-zinc-400">
           ¿Ya tienes cuenta?{' '}
-          <Link href="/login" className="text-rose-600 dark:text-rose-400 font-bold hover:text-rose-500 transition-colors">
+          <Link href="/login" className="text-rose-400 font-bold hover:text-rose-500 transition-colors">
             Iniciar sesión
           </Link>
         </p>

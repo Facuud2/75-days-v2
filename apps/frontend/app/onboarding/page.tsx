@@ -5,7 +5,8 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { useChallengeStore, Difficulty } from '@/store/useChallengeStore';
 import { useQuestStore } from '@/store/useQuestStore';
 import { useRouter } from 'next/navigation';
-import { ChevronRight, ChevronLeft, SkipForward } from 'lucide-react';
+import { ChevronRight, ChevronLeft, SkipForward, Calendar, X } from 'lucide-react';
+import { PLANS } from '@/components/PlansModal';
 
 export default function Onboarding() {
   const [step, setStep] = useState(1);
@@ -260,21 +261,43 @@ export default function Onboarding() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {(['Soft', 'Medium', 'Hard', 'Custom'] as Difficulty[]).map((diff) => (
-                <div
-                  key={diff}
-                  onClick={() => setDifficulty(diff)}
-                  className={`p-5 rounded-2xl border-2 cursor-pointer transition-all ${difficulty === diff ? 'border-zinc-900 dark:border-zinc-100 bg-zinc-50 dark:bg-zinc-800/50' : 'border-transparent bg-zinc-50 dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700'}`}
-                >
-                  <h3 className="font-bold text-lg">{diff}</h3>
-                  <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
-                    {diff === 'Soft' && 'Un comienzo suave para construir hábitos.'}
-                    {diff === 'Medium' && 'Desafío equilibrado para un progreso constante.'}
-                    {diff === 'Hard' && 'El original, sin compromisos. 75 Días completos.'}
-                    {diff === 'Custom' && 'Armá tus propias reglas basadas en Hard.'}
-                  </p>
-                </div>
-              ))}
+              {PLANS.map((plan) => {
+                const isSelected = difficulty === plan.difficulty;
+                return (
+                  <div
+                    key={plan.difficulty}
+                    onClick={() => setDifficulty(plan.difficulty)}
+                    className={`p-5 rounded-2xl border-2 cursor-pointer transition-all flex flex-col gap-4 ${isSelected ? 'border-zinc-900 dark:border-zinc-100 bg-zinc-50 dark:bg-zinc-800/50 shadow-md' : 'border-transparent bg-zinc-50 dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700'}`}
+                  >
+                    {/* Title & Description */}
+                    <div>
+                      <h3 className={`font-bold text-lg leading-tight mb-1 ${isSelected ? plan.color : 'text-zinc-900 dark:text-zinc-100'}`}>
+                        {plan.title}
+                      </h3>
+                      <p className="text-zinc-500 dark:text-zinc-400 text-xs leading-relaxed">{plan.description}</p>
+                    </div>
+
+                    {/* Duration badge */}
+                    <div className="flex items-center gap-1.5 text-xs text-zinc-400 dark:text-zinc-500">
+                      <Calendar className="w-3.5 h-3.5" />
+                      <span className="font-medium">75 días</span>
+                    </div>
+
+                    {/* Tasks */}
+                    <div className="space-y-2">
+                      <p className="text-zinc-400 dark:text-zinc-500 text-[11px] font-bold uppercase tracking-wider">Tareas Diarias:</p>
+                      <ul className="space-y-1.5">
+                        {plan.tasks.map((task, i) => (
+                          <li key={i} className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-300 font-medium">
+                            {task.icon}
+                            <span className="leading-snug">{task.label}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             {difficulty === 'Custom' && (

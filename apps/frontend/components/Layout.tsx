@@ -5,17 +5,19 @@ import { useThemeStore } from '@/store/useThemeStore';
 import { useUIStore } from '@/store/useUIStore';
 import { useChallengeStore } from '@/store/useChallengeStore';
 import PlansModal from '@/components/PlansModal';
-import { Home, Calendar, User, Settings, LogOut, Moon, Sun, Flame, Target, Trophy } from 'lucide-react';
+import { Home, Calendar, User, Settings, LogOut, Moon, Sun, Flame, Target, Trophy, Apple, Dumbbell } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { startCircularReveal } from '@/lib/themeTransition';
+import LogMealModal from '@/components/LogMealModal';
+import LogWorkoutModal from '@/components/LogWorkoutModal';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, logout } = useAuthStore();
+  const { isAuthenticated, logout, user } = useAuthStore();
   const { appearance, colorPalette, customPalette, setAppearance } = useThemeStore();
-  const { openPlansModal } = useUIStore();
-  const { difficulty } = useChallengeStore();
+  const { openPlansModal, openLogMealModal, openLogWorkoutModal, isLogMealModalOpen, isLogWorkoutModalOpen } = useUIStore();
+  const { difficulty, isActive } = useChallengeStore();
   const pathname = usePathname();
   const router = useRouter();
 
@@ -72,7 +74,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [colorPalette, customPalette]);
 
-  if (!isAuthenticated && pathname !== '/login' && pathname !== '/register') {
+  if (!isAuthenticated && !['/login', '/register', '/onboarding'].includes(pathname)) {
     return <div className="min-h-screen bg-zinc-950 text-white">{children}</div>;
   }
 
@@ -118,16 +120,29 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
           {/* Nav - Only visible if logged in */}
           <nav className="flex items-center gap-1 md:gap-2">
-            {isAuthenticated && (
+            {isAuthenticated && user?.onboardingCompleted && (
               <>
                 <Link href="/dashboard" className={`flex flex-col items-center p-2 transition-colors ${pathname === '/dashboard' ? 'text-white' : 'text-white/50 hover:text-white'}`}>
                   <Home size={20} />
                   <span className="text-[10px] mt-1 hidden sm:block">Inicio</span>
                 </Link>
-                <button onClick={openPlansModal} className={`flex flex-col items-center p-2 transition-colors text-white/50 hover:text-white`}>
-                  <Target size={20} />
-                  <span className="text-[10px] mt-1 hidden sm:block">Planes</span>
-                </button>
+                {!isActive ? (
+                  <button onClick={openPlansModal} className={`flex flex-col items-center p-2 transition-colors text-white/50 hover:text-white`}>
+                    <Target size={20} />
+                    <span className="text-[10px] mt-1 hidden sm:block">Planes</span>
+                  </button>
+                ) : (
+                  <>
+                    <button onClick={openLogMealModal} className={`flex flex-col items-center p-2 transition-colors text-white/50 hover:text-white`}>
+                      <Apple size={20} />
+                      <span className="text-[10px] mt-1 hidden sm:block">Comida</span>
+                    </button>
+                    <button onClick={openLogWorkoutModal} className={`flex flex-col items-center p-2 transition-colors text-white/50 hover:text-white`}>
+                      <Dumbbell size={20} />
+                      <span className="text-[10px] mt-1 hidden sm:block">Físico</span>
+                    </button>
+                  </>
+                )}
                 <Link href="/profile" className={`flex flex-col items-center p-2 transition-colors ${pathname === '/profile' ? 'text-white' : 'text-white/50 hover:text-white'}`}>
                   <User size={20} />
                   <span className="text-[10px] mt-1 hidden sm:block">Perfil</span>
@@ -140,7 +155,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             )}
 
             {/* Always visible theme toggle */}
-            <button onClick={(e) => toggleTheme(e)} className="p-2 text-white/50 hover:text-white transition-colors rounded-full border border-white/10 ml-2 hidden sm:block relative overflow-hidden" title={appearance === 'dark' ? 'Cambiar a claro' : 'Cambiar a oscuro'}>
+            <button onClick={(e) => toggleTheme(e)} className="p-2 text-white/50 hover:text-white transition-colors rounded-full border border-white/10 ml-2 relative overflow-hidden" title={appearance === 'dark' ? 'Cambiar a claro' : 'Cambiar a oscuro'}>
               <span className={`block transition-all duration-300 ${appearance === 'dark' ? 'rotate-0 scale-100' : 'rotate-90 scale-0 absolute'}`}>
                 <Sun size={18} />
               </span>
@@ -165,16 +180,29 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </main>
 
       {isAuthenticated && <PlansModal />}
+      {isAuthenticated && isLogMealModalOpen && <LogMealModal isOpen={isLogMealModalOpen} onClose={() => { useUIStore.getState().closeLogMealModal(); }} date={new Date().toISOString().split('T')[0]} onSaved={() => { }} />}
+      {isAuthenticated && isLogWorkoutModalOpen && <LogWorkoutModal isOpen={isLogWorkoutModalOpen} onClose={() => { useUIStore.getState().closeLogWorkoutModal(); }} date={new Date().toISOString().split('T')[0]} onSaved={() => { }} />}
 
       {/* Mobile Bottom Nav - Only visible if logged in */}
-      {isAuthenticated && (
+      {isAuthenticated && user?.onboardingCompleted && (
         <nav className="sm:hidden fixed bottom-0 left-0 right-0 bg-zinc-950 border-t border-white/5 flex justify-around p-2 z-50">
           <Link href="/dashboard" className={`flex flex-col items-center p-2 ${pathname === '/dashboard' ? 'text-white' : 'text-white/50'}`}>
             <Home size={24} />
           </Link>
-          <button onClick={openPlansModal} className={`flex flex-col items-center p-2 text-white/50`}>
-            <Target size={24} />
-          </button>
+          {!isActive ? (
+            <button onClick={openPlansModal} className={`flex flex-col items-center p-2 text-white/50`}>
+              <Target size={24} />
+            </button>
+          ) : (
+            <>
+              <button onClick={openLogMealModal} className={`flex flex-col items-center p-2 text-white/50`}>
+                <Apple size={24} />
+              </button>
+              <button onClick={openLogWorkoutModal} className={`flex flex-col items-center p-2 text-white/50`}>
+                <Dumbbell size={24} />
+              </button>
+            </>
+          )}
           <Link href="/profile" className={`flex flex-col items-center p-2 ${pathname === '/profile' ? 'text-white' : 'text-white/50'}`}>
             <User size={24} />
           </Link>
