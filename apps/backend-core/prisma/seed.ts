@@ -5,41 +5,30 @@ const prisma = new PrismaClient();
 async function main() {
     console.log('Seeding SideQuestTemplates...');
 
+    // Limpiamos los templates existentes para reemplazar por completo
+    await prisma.sideQuestTemplate.deleteMany({});
+
     const templates = [
         {
-            title: 'Sin Azúcar Añadida',
-            difficulty: 'Hard',
+            title: 'Detox de Azúcar (Sugar-Free)',
+            difficulty: 'Medium',
             durationDays: 21,
-            icon: 'target',
-            description: 'Abstenerse completamente de ingerir alimentos o bebidas con azúcares añadidos por 21 días.'
+            icon: 'apple',
+            description: 'Rompe la dependencia de los alimentos ultraprocesados, estabiliza tus niveles de energía y reduce la inflamación eliminando el azúcar añadido de tu dieta.\n\nReglas Clave:\n- Cero consumo de golosinas, repostería, helados o gaseosas azucaradas.\n- Prohibido añadir azúcar blanca, rubia o endulzantes artificiales a las infusiones (café, té, mate).\n- Nota aclaratoria: El azúcar naturalmente presente en alimentos enteros (como las frutas) sí está permitido.\n\nMini-logros (Milestones):\n- Día 7: Superando el pico de abstinencia.\n- Día 14: Energía estabilizada.\n- Día 21: Paladar reiniciado (¡Completado!).'
         },
         {
-            title: 'Ducha de Agua Fría',
+            title: 'Caminante Constante (8K Steps)',
             difficulty: 'Medium',
-            durationDays: 14,
-            icon: 'droplet',
-            description: 'Comienza tu mañana con una ducha completamente fría durante 3 minutos.'
+            durationDays: 45,
+            icon: 'footprints',
+            description: 'Combate el sedentarismo e incorpora el movimiento natural a tu rutina diaria para fortalecer tu sistema cardiovascular sin necesidad de ir a un gimnasio.\n\nReglas Clave:\n- Acumular un mínimo de 8,000 pasos todos los días antes de la medianoche.\n- Se debe utilizar una app externa (como Google Fit, Apple Health) o un smartwatch para validar el conteo de forma personal.\n- Son válidos los pasos por caminata, trote o movimiento general en casa/trabajo.\n\nMini-logros (Milestones):\n- Día 15: Hábito en formación (Equivalente a 120,000 pasos acumulados).\n- Día 30: Resistencia mejorada.\n- Día 45: Caminante incansable (¡Completado!).'
         },
         {
-            title: 'Mediatción Profunda',
-            difficulty: 'Easy',
-            durationDays: 30,
-            icon: 'sun',
-            description: 'Medita 15 minutos en silencio total al iniciar el día.'
-        },
-        {
-            title: '12k Pasos Diarios',
-            difficulty: 'Medium',
-            durationDays: 30,
-            icon: 'dumbbell',
-            description: 'Recorre un total de 12,000 pasos en el día para mantenerte en movimiento.'
-        },
-        {
-            title: 'Desconexión Digital',
+            title: 'Maestría Metabólica (Ayuno 12/12)',
             difficulty: 'Hard',
-            durationDays: 7,
-            icon: 'moon',
-            description: 'Cero pantallas (celular, tv, pc) al menos 1 hora antes de dormir.'
+            durationDays: 60,
+            icon: 'clock',
+            description: 'Dale a tu sistema digestivo el descanso que necesita, promueve la regeneración celular y optimiza tu reloj biológico regulando tus horarios de comida.\n\nReglas Clave:\n- Mantener una ventana de ayuno estricto e ininterrumpido de al menos 12 horas diarias (ejemplo: cenar a las 20:00 hs y desayunar a las 08:00 hs).\n- Durante las horas de ayuno, la ingesta calórica debe ser estrictamente cero.\n- Solo se permite consumir agua, té, mate o café negro (sin leche ni endulzantes) durante el período de ayuno.\n\nMini-logros (Milestones):\n- Día 20: Adaptación digestiva superada.\n- Día 40: Control total de la saciedad.\n- Día 60: Maestro del tiempo (¡Completado!).'
         }
     ];
 
