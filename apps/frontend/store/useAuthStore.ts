@@ -27,6 +27,7 @@ interface AuthState {
   checkAuth: () => Promise<void>;
   updateProfile: (data: Partial<User>) => void;
   completeOnboarding: () => Promise<void>;
+  checkOnboardingStatus: () => Promise<boolean>;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -100,6 +101,19 @@ export const useAuthStore = create<AuthState>()(
         } catch (error: any) {
           console.error('Failed to complete onboarding:', error);
           throw error;
+        }
+      },
+
+      checkOnboardingStatus: async () => {
+        try {
+          const { onboardingCompleted } = await authService.getOnboardingStatus();
+          set((s) => ({
+            user: s.user ? { ...s.user, onboardingCompleted } : s.user,
+          }));
+          return onboardingCompleted;
+        } catch (error: any) {
+          console.error('Failed to check onboarding status:', error);
+          return false;
         }
       },
     }),

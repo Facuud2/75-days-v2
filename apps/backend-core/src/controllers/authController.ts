@@ -178,6 +178,24 @@ export const getMe = async (req: AuthRequest, res: Response) => {
     }
 };
 
+export const getOnboardingStatus = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user?.id;
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { onboardingCompleted: true }
+        });
+
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        res.json({ onboardingCompleted: user.onboardingCompleted });
+    } catch (error) {
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
 const completeOnboardingSchema = z.object({
     age: z.number().optional(),
     weight: z.number().optional(),

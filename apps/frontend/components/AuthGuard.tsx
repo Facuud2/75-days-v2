@@ -13,10 +13,12 @@ const AUTH_ROUTES = ['/login', '/register'];
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
     const router = useRouter();
     const pathname = usePathname();
-    const { isAuthenticated, checkAuth, isLoading, user } = useAuthStore();
+    const { isAuthenticated, checkAuth, isLoading, user, checkOnboardingStatus } = useAuthStore();
 
     // Manage hydration to prevent layout flashes
     const [isHydrated, setIsHydrated] = useState(false);
+    // Track whether we've verified onboarding status from the DB (fresh, not just localStorage)
+    const [onboardingChecked, setOnboardingChecked] = useState(false);
 
     useEffect(() => {
         const t = setTimeout(() => setIsHydrated(true), 0);
@@ -32,6 +34,22 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isHydrated]);
 
+    // After auth resolves (user is authenticated), fetch the real onboardingCompleted value
+    // directly from the DB so we don't rely on potentially stale localStorage.
+    useEffect(() => {
+        if (!isHydrated) return;
+
+        if (isAuthenticated && !isLoading) {
+            checkOnboardingStatus()
+                .catch(() => { })
+                .finally(() => setOnboardingChecked(true));
+        } else if (!isAuthenticated && !isLoading) {
+            // Not authenticated — no onboarding check needed
+            setOnboardingChecked(true);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isAuthenticated, isLoading, isHydrated]);
+
     const isPublicRoute = PUBLIC_ROUTES.includes(pathname);
     const isAuthRoute = AUTH_ROUTES.includes(pathname);
     const isOnboardingRoute = pathname === '/onboarding';
@@ -39,12 +57,12 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     const isRoutingRestricted = !isPublicRoute && !isOnboardingRoute && !isAuthenticated;
     const isRedundantLogin = isAuthenticated && isAuthRoute;
 
-    // Must complete onboarding: authenticated but onboarding not done, and not already on onboarding page
-    const needsOnboarding = isAuthenticated && user && user.onboardingCompleted !== true && !isOnboardingRoute;
+    // Must complete onboarding: authenticated but onboarding not done (DB-verified), and not already on onboarding page
+    const needsOnboarding = isAuthenticated && onboardingChecked && user && user.onboardingCompleted !== true && !isOnboardingRoute;
 
     // Route Protection logic that triggers navigation instead of internal state
     useEffect(() => {
-        if (!isHydrated || isLoading) return;
+        if (!isHydrated || isLoading || !onboardingChecked) return;
 
         if (isRoutingRestricted) {
             router.replace('/login');
@@ -53,10 +71,10 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
         } else if (needsOnboarding) {
             router.replace('/onboarding');
         }
-    }, [isHydrated, isLoading, isRoutingRestricted, isRedundantLogin, needsOnboarding, router]);
+    }, [isHydrated, isLoading, onboardingChecked, isRoutingRestricted, isRedundantLogin, needsOnboarding, router]);
 
     // Prevent flash of protected content while evaluating
-    if (!isHydrated || isLoading || isRoutingRestricted || isRedundantLogin || needsOnboarding) {
+    if (!isHydrated || isLoading || !onboardingChecked || isRoutingRestricted || isRedundantLogin || needsOnboarding) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-zinc-50 dark:bg-zinc-950">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-zinc-900 dark:border-zinc-100"></div>
