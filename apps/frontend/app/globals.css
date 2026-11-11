@@ -1,4 +1,9 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+
+/* Tailwind v4 dark: debe seguir el atributo/clase que controla el toggle,
+   no la preferencia del sistema operativo. */
+@custom-variant dark (&:where(.dark, .dark *));
 
 /* ══════════════════════════════════════════════════════════════════════════════
    PALETTE SYSTEM

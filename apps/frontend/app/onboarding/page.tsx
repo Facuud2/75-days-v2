@@ -11,8 +11,8 @@ import { PLANS } from '@/components/PlansModal';
 export default function Onboarding() {
   const [step, setStep] = useState(1);
   const { updateProfile, completeOnboarding } = useAuthStore();
-  const { startChallenge, addSideQuest } = useChallengeStore();
-  const { availableQuests, fetchAvailableQuests } = useQuestStore();
+  const { startChallenge } = useChallengeStore();
+  const { availableQuests, fetchAvailableQuests, subscribeToQuest } = useQuestStore();
   const router = useRouter();
 
   // Load available dynamic quests
@@ -71,11 +71,14 @@ export default function Onboarding() {
       });
       setStep(2);
     } else if (step === 2) {
-      selectedQuests.forEach(qId => {
-        const q = availableQuests.find(aq => aq.id === qId);
-        // Note: Map difficulty back to the ChallengeStore's expected string
-        if (q) addSideQuest({ title: q.title, difficulty: q.difficulty as any, durationDays: q.durationDays });
-      });
+      // F-42: las misiones del onboarding se guardan en useQuestStore, la misma
+      // fuente que leen el dashboard y el perfil.
+      await Promise.all(
+        selectedQuests.map((qId) => {
+          const q = availableQuests.find(aq => aq.id === qId);
+          return q ? subscribeToQuest(q.title, q.difficulty, q.durationDays) : Promise.resolve();
+        })
+      );
       setStep(3);
     } else if (step === 3) {
       const formattedCustomGoals = customGoals.map(g => ({ title: g }));

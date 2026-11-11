@@ -15,11 +15,10 @@ export default function Login() {
     e.preventDefault();
     try {
       const payload = { email: email.trim(), password };
-      console.log('Sending login payload:', payload);
       await login(payload);
       router.push('/dashboard');
     } catch (error: any) {
-      console.error('Login failed block raw error:', error);
+      console.error('Login failed:', error instanceof Error ? error.message : 'Unknown error');
       // NOTE: Here you could add a toast notification using useUIStore in the future
     }
   };

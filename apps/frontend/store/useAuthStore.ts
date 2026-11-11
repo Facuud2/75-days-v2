@@ -64,7 +64,15 @@ export const useAuthStore = create<AuthState>()(
       logout: () => {
         set({ user: null, token: null, isAuthenticated: false });
         useThemeStore.getState().resetTheme();
-        // Optionally redirect or clear other stores here if needed outside context
+        // F-37: limpiar el reto y las misiones del usuario anterior. Se usan
+        // imports dinámicos para no crear ciclos con useQuestStore.
+        import('./useChallengeStore').then(({ useChallengeStore }) => {
+          useChallengeStore.getState().reset();
+          useChallengeStore.persist.clearStorage();
+        });
+        import('./useQuestStore').then(({ useQuestStore }) => {
+          useQuestStore.getState().reset();
+        });
       },
 
       checkAuth: async () => {

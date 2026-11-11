@@ -8,7 +8,7 @@ import { estimateCaloriesBurned } from '../utils/calorieCalculator';
 
 const WorkoutSchema = z.object({
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
-    sport: z.enum(['strength', 'running', 'cycling', 'yoga', 'swimming', 'other']),
+    sport: z.enum(['strength', 'running', 'cycling', 'walking', 'yoga', 'swimming', 'other']),
     durationMin: z.number().int().positive(),
     intensity: z.enum(['low', 'medium', 'high']),
     // If the user provides caloriesBurned, it's treated as a manual override

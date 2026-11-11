@@ -3,9 +3,13 @@
 import { useChallengeStore } from '@/store/useChallengeStore';
 import { format, addDays, differenceInDays } from 'date-fns';
 import { CheckCircle2, XCircle, MinusCircle } from 'lucide-react';
+import { parseLocalDate } from '@/lib/utils/date';
+import DayDetailsModal from '@/components/DayDetailsModal';
+import { useState } from 'react';
 
 export default function CalendarView() {
   const { isActive, startDate, logs } = useChallengeStore();
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   if (!isActive || !startDate) {
     return (
@@ -16,9 +20,9 @@ export default function CalendarView() {
     );
   }
 
-  const start = new Date(startDate);
+  const start = parseLocalDate(startDate);
   const days = Array.from({ length: 75 }).map((_, i) => {
-    const date = addDays(start, i);
+      const date = addDays(start, i);
     const dateStr = format(date, 'yyyy-MM-dd');
     const log = logs[dateStr];
     
@@ -82,8 +86,9 @@ export default function CalendarView() {
             return (
               <div 
                 key={day.dayNumber} 
-                className={`aspect-square rounded-2xl flex flex-col items-center justify-center p-1 relative group transition-all hover:scale-105 cursor-pointer ${bgColor}`}
-                title={format(new Date(day.date), 'MMM d, yyyy')}
+                 onClick={() => setSelectedDate(day.date)}
+                 className={`aspect-square rounded-2xl flex flex-col items-center justify-center p-1 relative group transition-all hover:scale-105 cursor-pointer ${bgColor}`}
+                 title={format(parseLocalDate(day.date), 'MMM d, yyyy')}
               >
                 <span className={`text-sm md:text-lg font-bold ${textColor}`}>
                   {day.dayNumber}
@@ -96,7 +101,7 @@ export default function CalendarView() {
                 
                 {/* Tooltip */}
                 <div className="absolute bottom-full mb-2 hidden group-hover:block w-48 bg-zinc-900 text-white text-xs rounded-xl p-3 z-10 shadow-xl">
-                  <p className="font-bold mb-1">{format(new Date(day.date), 'MMMM d, yyyy')}</p>
+                   <p className="font-bold mb-1">{format(parseLocalDate(day.date), 'MMMM d, yyyy')}</p>
                   <p>Status: <span className="capitalize">{day.status}</span></p>
                   {day.log?.weight && <p>Weight: {day.log.weight}kg</p>}
                   <p className="mt-2 font-semibold">Goals:</p>
@@ -114,6 +119,9 @@ export default function CalendarView() {
           })}
         </div>
       </div>
+      {selectedDate && (
+        <DayDetailsModal date={selectedDate} onClose={() => setSelectedDate(null)} />
+      )}
     </div>
   );
 }

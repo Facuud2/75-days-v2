@@ -46,6 +46,7 @@ interface QuestStore {
     fetchAvailableQuests: () => Promise<void>;
     subscribeToQuest: (title: string, difficulty: string, durationDays: number) => Promise<void>;
     progressQuest: (id: string) => Promise<void>;
+    reset: () => void;
 }
 
 export const useQuestStore = create<QuestStore>((set, get) => ({
@@ -109,5 +110,9 @@ export const useQuestStore = create<QuestStore>((set, get) => ({
             // Revert optimistic update
             set({ quests: previousQuests, error: error.response?.data?.error || 'Failed to update quest progress' });
         }
+    },
+
+    reset: () => {
+        set({ quests: [], availableQuests: [], isLoading: false, error: null });
     }
 }));

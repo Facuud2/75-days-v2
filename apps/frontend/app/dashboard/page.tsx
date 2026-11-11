@@ -51,27 +51,23 @@ export default function Dashboard() {
   const hasCheckedReset = React.useRef(false);
 
   useEffect(() => {
-    if (!isActive) {
-      // Only redirect to onboarding if the user hasn't completed it yet.
-      // A user with onboardingCompleted=true but no active challenge has simply
-      // reset/abandoned their challenge — they should NOT be sent back to onboarding.
-      if (user?.onboardingCompleted !== true) {
-        router.push('/onboarding');
+    if (hasCheckedReset.current || !user) return;
+    hasCheckedReset.current = true;
+
+    // F-45: no dependemos de challenge-storage para descubrir el reto. Con
+    // storage limpio, primero consultamos al backend y recién después
+    // decidimos si hay que mostrar onboarding.
+    (async () => {
+      await fetchCurrentChallenge();
+      const current = useChallengeStore.getState();
+      if (!current.isActive) {
+        if (user.onboardingCompleted !== true) router.push('/onboarding');
+        return;
       }
-    } else {
-      // Always run daily reset check when visiting dashboard if active, but only once per mount
-      if (!hasCheckedReset.current) {
-        hasCheckedReset.current = true;
-        checkDailyReset().then(() => {
-          // Fallback if logs are completely empty even after check
-          if (Object.keys(useChallengeStore.getState().logs).length === 0) {
-            fetchCurrentChallenge();
-          }
-        });
-        fetchQuests();
-      }
-    }
-  }, [isActive, user, router, checkDailyReset, fetchCurrentChallenge, fetchQuests]);
+      await checkDailyReset();
+      await fetchQuests();
+    })();
+  }, [user, router, checkDailyReset, fetchCurrentChallenge, fetchQuests]);
 
   // Loading state prevents returning generic null silently
   if (isChallengeLoading || (isActive && !todayLog)) {

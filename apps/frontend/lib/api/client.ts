@@ -44,6 +44,7 @@ export async function apiClient<T>(
             if (!isAuthEndpoint) {
                 if (typeof window !== 'undefined') {
                     localStorage.removeItem('auth-storage');
+                    localStorage.removeItem('challenge-storage');
                     const currentPath = window.location.pathname;
                     if (currentPath !== '/login' && currentPath !== '/register' && currentPath !== '/') {
                         window.location.href = '/login';
@@ -62,7 +63,9 @@ export async function apiClient<T>(
             errorMessage += ': ' + errorBody.details.map((d: any) => `${d.path?.join('.') || 'Field'}: ${d.message}`).join(', ');
         }
 
-        throw new Error(errorMessage);
+        const error = new Error(errorMessage) as Error & { status?: number };
+        error.status = response.status;
+        throw error;
     }
 
     // Handle empty responses (like 204 No Content for delete)

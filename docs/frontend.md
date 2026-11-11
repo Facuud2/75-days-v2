@@ -43,7 +43,7 @@ Cinco stores de Zustand:
 | Store | Contenido | Persistencia |
 |---|---|---|
 | `useAuthStore` | Usuario, token, sesión, onboarding | `localStorage` (`auth-storage`), **incluye el token** |
-| `useChallengeStore` | Reto, logs por fecha, racha, puntos, misiones | `localStorage` (`challenge-storage`), solo un subconjunto de campos |
+| `useChallengeStore` | Reto, logs por fecha, racha y puntos | `localStorage` (`challenge-storage`), persiste el ancla mínima del reto |
 | `useQuestStore` | Misiones adoptadas y catálogo disponible | memoria |
 | `useThemeStore` | Apariencia y paleta de color | `localStorage` (`theme-storage`) |
 | `useUIStore` | Apertura de modales | memoria |
@@ -52,9 +52,9 @@ Cinco stores de Zustand:
 
 ### Lo que sobrevive a un reload
 
-`challenge-storage` **no persiste `startDate` ni `difficulty`**. Tras recargar, el store conserva racha, puntos y día actual, pero perdió el ancla temporal del reto. Consecuencias medidas en el código: `/calendar` muestra "No Active Challenge", el dashboard pinta el plan como `HARD` por defecto y el header cae al mismo valor. Ver `findings.md` F-36.
+`challenge-storage` persiste `startDate` y `difficulty` junto con los contadores. Además, el dashboard consulta el backend al montarse, por lo que un storage limpio no deja la pantalla en blanco. Ver `findings.md` F-36 y F-45.
 
-Tampoco hay un solo sistema de misiones: `useChallengeStore.sideQuests` y `useQuestStore.quests` conviven, y el onboarding escribe en el primero mientras dashboard y perfil leen del segundo. Ver `findings.md` F-42.
+Las misiones adoptadas viven en `useQuestStore.quests`; onboarding, dashboard y perfil usan la misma fuente. Ver `findings.md` F-42.
 
 ## Capa de API
 
@@ -71,28 +71,28 @@ Ver `findings.md` F-32.
 
 - **Actualización optimista** al marcar una meta y al avanzar una misión: el estado se actualiza antes de la respuesta y se revierte si falla.
 - **Normalización de fechas**: Prisma devuelve `DateTime` ISO para el campo `date`, así que el frontend recorta a `YYYY-MM-DD` al construir el mapa de logs.
-- **Recálculo local del día del reto**: al cargar el reto, el frontend vuelve a calcular el día con su propia fórmula en vez de confiar en el valor del backend. Duplica lógica del servidor. Ver `findings.md` F-35.
+- **Recálculo local del día del reto**: al cargar el reto, el frontend calcula el día en calendario local para evitar desfases UTC. El backend sigue siendo la fuente de persistencia y `check-reset` actualiza su contador. Ver `findings.md` F-35.
 - **Errores**: `react-hot-toast` para feedback puntual; varios `console.error` sin superficie al usuario.
 
 ## Carga de datos por pantalla
 
 | Pantalla | Fuente |
 |---|---|
-| Dashboard | `check-reset` → `fetchCurrentChallenge` → misiones |
+| Dashboard | `fetchCurrentChallenge` → `check-reset` → misiones |
 | Calendario | `useChallengeStore` (logs ya cargados) |
 | Perfil | `users/profile` + estadísticas diarias + estado y sincronización de Strava + entrenamientos recientes |
 | Settings | actualización de perfil y contraseña; tema |
 | Onboarding | auth + inicio de reto + misiones |
 
-**Rareza importante**: el perfil carga cuatro fuentes con `Promise.all` y solo captura el fallo de tres. Si `users/profile` falla —y hoy falla, porque la tabla `Achievement` no existe— se descarta **toda** la información, incluida la de salud que sí había respondido. Ver `findings.md` F-31.
+El perfil carga cuatro fuentes con `Promise.all`; cada fuente tiene un fallback independiente para que un fallo de perfil no descarte salud, Strava o entrenamientos. Ver `findings.md` F-31.
 
 ## Temática
 
 Dos ejes: apariencia (claro/oscuro) y paleta de color. El store persiste ambos y aplica la clase al elemento raíz. Hay una utilidad de transición que anima el cambio de tema. El modo oscuro es el valor por defecto.
 
-**Rareza**: el proyecto usa clases `dark:` pero nunca declara `@custom-variant dark` en `globals.css`. En Tailwind v4 eso significa que `dark:` responde a `prefers-color-scheme` del sistema, **no** a la clase `.dark` que aplica el store. El toggle de la app no controla esas clases. Ver `findings.md` F-38.
+El proyecto declara `@custom-variant dark` para que las clases `dark:` sigan la clase `.dark` aplicada por el store, no una preferencia ajena al toggle. Ver `findings.md` F-38.
 
-La paleta personalizada solo redefine la escala `rose-*`; los acentos `emerald`, `sky`, `orange` y `yellow` quedan fijos. Además `tw-animate-css` está instalado pero no importado, así que las clases `animate-in`/`fade-in` no producen animación (F-44).
+La paleta personalizada solo redefine la escala `rose-*`; los acentos `emerald`, `sky`, `orange` y `yellow` quedan fijos. `tw-animate-css` se importa desde `globals.css` para habilitar las clases `animate-in`/`fade-in` (F-44 resuelto).
 
 ## Componentes principales
 

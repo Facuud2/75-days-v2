@@ -10,6 +10,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { startCircularReveal } from '@/lib/themeTransition';
+import { getLocalDateString } from '@/lib/utils/date';
 import LogMealModal from '@/components/LogMealModal';
 import LogWorkoutModal from '@/components/LogWorkoutModal';
 
@@ -95,7 +96,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <Flame className="text-rose-500" fill="currentColor" />
           <span className="font-bold text-xl tracking-wider hidden sm:inline">75 DAYS</span>
           <span className="text-rose-500 italic font-bold text-xl">
-            {isAuthenticated ? (difficulty?.toUpperCase() || 'HARD') : 'APP'}
+            {isAuthenticated ? (difficulty?.toUpperCase() || 'ACTIVO') : 'APP'}
           </span>
         </div>
 
@@ -126,6 +127,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   <Home size={20} />
                   <span className="text-[10px] mt-1 hidden sm:block">Inicio</span>
                 </Link>
+                {isActive && (
+                  <Link href="/calendar" className={`flex flex-col items-center p-2 transition-colors ${pathname === '/calendar' ? 'text-white' : 'text-white/50 hover:text-white'}`}>
+                    <Calendar size={20} />
+                    <span className="text-[10px] mt-1 hidden sm:block">Calendario</span>
+                  </Link>
+                )}
                 {!isActive ? (
                   <button onClick={openPlansModal} className={`flex flex-col items-center p-2 transition-colors text-white/50 hover:text-white`}>
                     <Target size={20} />
@@ -180,8 +187,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </main>
 
       {isAuthenticated && <PlansModal />}
-      {isAuthenticated && isLogMealModalOpen && <LogMealModal isOpen={isLogMealModalOpen} onClose={() => { useUIStore.getState().closeLogMealModal(); }} date={new Date().toISOString().split('T')[0]} onSaved={() => { }} />}
-      {isAuthenticated && isLogWorkoutModalOpen && <LogWorkoutModal isOpen={isLogWorkoutModalOpen} onClose={() => { useUIStore.getState().closeLogWorkoutModal(); }} date={new Date().toISOString().split('T')[0]} onSaved={() => { }} />}
+      {isAuthenticated && isLogMealModalOpen && <LogMealModal isOpen={isLogMealModalOpen} onClose={() => { useUIStore.getState().closeLogMealModal(); }} date={getLocalDateString()} onSaved={() => { }} />}
+      {isAuthenticated && isLogWorkoutModalOpen && <LogWorkoutModal isOpen={isLogWorkoutModalOpen} onClose={() => { useUIStore.getState().closeLogWorkoutModal(); }} date={getLocalDateString()} onSaved={() => { }} />}
 
       {/* Mobile Bottom Nav - Only visible if logged in */}
       {isAuthenticated && user?.onboardingCompleted && (
@@ -189,6 +196,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <Link href="/dashboard" className={`flex flex-col items-center p-2 ${pathname === '/dashboard' ? 'text-white' : 'text-white/50'}`}>
             <Home size={24} />
           </Link>
+          {isActive && (
+            <Link href="/calendar" className={`flex flex-col items-center p-2 ${pathname === '/calendar' ? 'text-white' : 'text-white/50'}`}>
+              <Calendar size={24} />
+            </Link>
+          )}
           {!isActive ? (
             <button onClick={openPlansModal} className={`flex flex-col items-center p-2 text-white/50`}>
               <Target size={24} />

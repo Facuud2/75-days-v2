@@ -7,6 +7,7 @@ import { useQuestStore } from '@/store/useQuestStore';
 import { userService, UserProfileResponse } from '@/lib/api/users';
 import { healthService, DailyStats } from '@/lib/api/health';
 import { format } from 'date-fns';
+import { getLocalDateString } from '@/lib/utils/date';
 import { Trophy, Calendar, Scale, Award, Flame, Target, ChevronRight, CheckCircle2, Lock, Activity, BarChart3, Footprints, Clock, Zap, Pencil, PieChart as PieChartIcon, RefreshCw, Sun, Moon, Dumbbell, Book, Droplet, Apple } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, PieChart, Pie, Cell, Legend } from 'recharts';
 import toast from 'react-hot-toast';
@@ -39,8 +40,7 @@ export default function Profile() {
     points,
     achievements,
     bestWeight,
-    challengesCompleted,
-    sideQuests
+    challengesCompleted
   } = useChallengeStore();
 
   const {
@@ -71,15 +71,17 @@ export default function Profile() {
 
   const fetchProfile = useCallback(() => {
     if (user) {
-      const today = format(new Date(), 'yyyy-MM-dd');
+      const today = getLocalDateString();
       Promise.all([
-        userService.getProfile(),
+        // F-31: si el perfil falla, no debe arrastrar consigo los datos de
+        // salud y Strava que sí responden.
+        userService.getProfile().catch(() => null),
         healthService.getDailyStats(today).catch(() => null),
         healthService.getStravaStatus().catch(() => ({ connected: false })),
         healthService.getRecentWorkouts().catch(() => ({ workouts: [] }))
       ])
         .then(([profile, healthData, stravaStatus, workoutsData]) => {
-          setProfileData(profile);
+          if (profile) setProfileData(profile);
           setDailyStats(healthData);
           setIsStravaConnected(stravaStatus.connected);
           setRecentWorkouts(workoutsData?.workouts || []);

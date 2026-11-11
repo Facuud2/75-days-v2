@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { X, Trophy, Target, Droplet, Dumbbell, Book, Sun, Moon, Apple, Footprints, Clock } from 'lucide-react';
 import { useQuestStore, SideQuestTemplate } from '@/store/useQuestStore';
-import { motion, AnimatePresence } from 'framer-motion';
 
 interface SideQuestsModalProps {
     onClose: () => void;

@@ -78,15 +78,15 @@ Al cerrar la Fase 1 el sistema:
 - [ ] **2.8 — Sanear la configuración.**
   Eliminar knobs muertos (`FRONTEND_URL` en core, `NODE_ENV` en health, `APP_URL` en frontend). Quitar el fallback hardcodeado de `JWT_SECRET` (F-12): fallar al arrancar si falta. Cargar la configuración en un módulo que se importe primero (F-11).
 
-- [ ] **2.9 — Persistir el ancla del reto (F-36).**
+- [x] **2.9 — Persistir el ancla del reto (F-36).** *(hecho 2026-11-11)*
   Incluir `startDate` y `difficulty` en el `partialize` de `challenge-storage`, o dejar de persistir el reto y pedirlo siempre al backend. Verificar que `/calendar` y el dashboard funcionen tras un reload con storage limpio.
   *Aceptación*: recargar en `/dashboard` no muestra plan `HARD` por defecto ni "No Active Challenge" en `/calendar`.
 
-- [ ] **2.10 — Unificar los dos sistemas de misiones (F-42).**
+- [x] **2.10 — Unificar los dos sistemas de misiones (F-42).** *(hecho 2026-11-11)*
   Eliminar `sideQuests` de `useChallengeStore` o hacer que onboarding escriba en `useQuestStore`. Hoy las misiones elegidas en el onboarding no aparecen en el dashboard.
   *Aceptación*: una misión adoptada en el onboarding se ve en el dashboard sin recargar.
 
-- [ ] **2.11 — Corregir los bugs visibles del frontend.**
+- [x] **2.11 — Corregir los bugs visibles del frontend.** *(hecho 2026-11-11)*
   F-38 (`@custom-variant dark`), F-39 (no loguear la contraseña), F-40 (`walking` rechazado), F-41 (UTC vs local), F-45 (dashboard en blanco), F-46 (`logs` undefined), F-44 (`tw-animate-css`), F-37 (logout no limpia el reto). Son cambios pequeños y de alto impacto percibido.
   *Aceptación*: el toggle de tema afecta a toda la UI; guardar una caminata devuelve 201; el dashboard carga con storage limpio.
 
@@ -295,3 +295,5 @@ docker exec 75days-postgres pg_dump -U dev 75days_health > health.sql
 | 2026-11-11 | F-10 resuelto: seed de 51 ingredientes + `db:seed` reproducible; custom food creado end-to-end |
 | 2026-11-11 | F-01 resuelto: `register` con `Custom` sin metas → 400 (antes 500) |
 | 2026-11-11 | F-03 resuelto: advisory lock por día; concurrencia e invariante de puntos/racha verificados |
+| 2026-11-11 | 2.9–2.11 resueltas: persistencia del reto, misiones unificadas, guardas, fechas locales, dark mode, caminatas y calendario |
+| 2026-11-11 | Build de producción frontend OK; dev (3000), producción (3003), core (3001) y health (3002) responden 200 |

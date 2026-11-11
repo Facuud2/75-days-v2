@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { challengeService, StartChallengeData } from '../lib/api/challenges';
+import { differenceInCalendarDays } from 'date-fns';
+import { challengeService } from '../lib/api/challenges';
 import { logService, UpdateMetricsData } from '../lib/api/logs';
-import { questService, CreateQuestData } from '../lib/api/quests';
 
 export type Difficulty = 'Soft' | 'Medium' | 'Hard' | 'Custom';
 
@@ -26,16 +26,6 @@ export interface DailyLog {
   status: 'success' | 'fail' | 'rest' | 'pending';
 }
 
-export interface SideQuest {
-  id: string;
-  title: string;
-  difficulty: 'Easy' | 'Medium' | 'Hard';
-  durationDays: number;
-  startedAt: string;
-  progress: number; // days completed
-  completed: boolean;
-}
-
 export interface ChallengeState {
   isActive: boolean;
   difficulty: Difficulty | null;
@@ -43,7 +33,6 @@ export interface ChallengeState {
   currentDay: number;
   streak: number;
   logs: Record<string, DailyLog>;
-  sideQuests: SideQuest[];
   points: number;
   achievements: string[];
   bestWeight: number | null;
@@ -61,63 +50,81 @@ export interface ChallengeState {
   logDailyGoal: (date: string, goalId: string, completed: boolean) => Promise<void>;
   logDailyMetrics: (date: string, metrics: UpdateMetricsData) => Promise<void>;
 
-  fetchSideQuests: () => Promise<void>;
-  addSideQuest: (quest: CreateQuestData) => Promise<void>;
-  progressSideQuest: (questId: string) => Promise<void>;
-
   checkDailyReset: () => Promise<void>;
+  reset: () => void;
+}
+
+/**
+ * Estado inicial del reto. Se usa para arrancar el store y para limpiar todo
+ * al cerrar sesión (F-37: antes el reto del usuario anterior sobrevivía).
+ */
+const INITIAL_CHALLENGE_STATE = {
+  isActive: false,
+  difficulty: null,
+  startDate: null,
+  currentDay: 0,
+  streak: 0,
+  logs: {} as Record<string, DailyLog>,
+  points: 0,
+  achievements: [] as string[],
+  bestWeight: null,
+  challengesCompleted: 0,
+  customGoalsTemplate: [] as GoalTemplate[],
+  isLoading: false,
+  error: null,
+};
+
+/** Normaliza las fechas ISO de Prisma ("2026-03-03T00:00:00.000Z") a "YYYY-MM-DD". */
+function normalizeLogs(dailyLogs: unknown): Record<string, DailyLog> {
+  if (!Array.isArray(dailyLogs)) return {};
+  return dailyLogs.reduce((acc: Record<string, DailyLog>, log: any) => {
+    const dateKey = typeof log.date === 'string' ? log.date.slice(0, 10) : log.date;
+    acc[dateKey] = { ...log, date: dateKey, goals: log.goals ?? [] };
+    return acc;
+  }, {});
+}
+
+/** Día del reto en calendario local (1-based), sin desfases por UTC. */
+function calculateCurrentDay(startDate: string): number {
+  const [year, month, day] = startDate.slice(0, 10).split('-').map(Number);
+  const start = new Date(year, month - 1, day);
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  return Math.max(1, differenceInCalendarDays(now, start) + 1);
 }
 
 export const useChallengeStore = create<ChallengeState>()(
   persist(
     (set, get) => ({
-      isActive: false,
-      difficulty: null,
-      startDate: null,
-      currentDay: 0,
-      streak: 0,
-      logs: {},
-      sideQuests: [],
-      points: 0,
-      achievements: [],
-      bestWeight: null,
-      challengesCompleted: 0,
-      customGoalsTemplate: [],
-      isLoading: false,
-      error: null,
+      ...INITIAL_CHALLENGE_STATE,
 
       fetchCurrentChallenge: async () => {
         set({ isLoading: true, error: null });
         try {
           const { dailyLogs, ...restData } = (await challengeService.getCurrentChallenge()) as any;
           if (restData && Object.keys(restData).length > 0) {
-            let parsedLogs = get().logs;
-            if (Array.isArray(dailyLogs)) {
-              parsedLogs = dailyLogs.reduce((acc: any, log: any) => {
-                // Normalize Prisma ISO date (e.g. "2026-03-03T00:00:00.000Z") to "YYYY-MM-DD"
-                const dateKey = typeof log.date === 'string' ? log.date.slice(0, 10) : log.date;
-                acc[dateKey] = { ...log, date: dateKey, goals: log.goals ?? [] };
-                return acc;
-              }, {});
-            }
+            const parsedLogs = Array.isArray(dailyLogs) ? normalizeLogs(dailyLogs) : get().logs;
+            const safeCurrentDay = restData.startDate
+              ? calculateCurrentDay(restData.startDate)
+              : restData.currentDay ?? 1;
 
-            // Calculate exact day to avoid stale DB records before checkDailyReset fires
-            let safeCurrentDay = restData.currentDay;
-            if (restData.startDate) {
-              const start = new Date(restData.startDate);
-              start.setHours(0, 0, 0, 0);
-              const now = new Date();
-              now.setHours(0, 0, 0, 0);
-              const diffTime = Math.abs(now.getTime() - start.getTime());
-              const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-              safeCurrentDay = Math.max(1, diffDays + 1);
-            }
-
-            set({ ...restData, logs: parsedLogs, currentDay: safeCurrentDay, isActive: true, isLoading: false });
+            set({
+              ...restData,
+              logs: parsedLogs,
+              currentDay: safeCurrentDay,
+              isActive: true,
+              isLoading: false,
+            });
           } else {
-            set({ isActive: false, isLoading: false });
+            set({ ...INITIAL_CHALLENGE_STATE });
           }
         } catch (error: any) {
+          // 404 = no hay reto activo. No es un error de la app: limpiamos el
+          // estado persistido para que el dashboard no muestre datos viejos.
+          if (error?.status === 404) {
+            set({ ...INITIAL_CHALLENGE_STATE });
+            return;
+          }
           set({ error: error.message || 'Failed to fetch challenge', isLoading: false });
         }
       },
@@ -126,14 +133,7 @@ export const useChallengeStore = create<ChallengeState>()(
         set({ isLoading: true, error: null });
         try {
           const { dailyLogs, ...restData } = (await challengeService.startChallenge({ difficulty, customGoalsTemplate })) as any;
-          let parsedLogs = get().logs;
-          if (Array.isArray(dailyLogs)) {
-            parsedLogs = dailyLogs.reduce((acc: any, log: any) => {
-              const dateKey = typeof log.date === 'string' ? log.date.slice(0, 10) : log.date;
-              acc[dateKey] = { ...log, date: dateKey, goals: log.goals ?? [] };
-              return acc;
-            }, {});
-          }
+          const parsedLogs = Array.isArray(dailyLogs) ? normalizeLogs(dailyLogs) : get().logs;
           set({ ...restData, logs: parsedLogs, isActive: true, isLoading: false });
         } catch (error: any) {
           set({ error: error.message || 'Failed to start challenge', isLoading: false });
@@ -145,17 +145,7 @@ export const useChallengeStore = create<ChallengeState>()(
         set({ isLoading: true, error: null });
         try {
           await challengeService.abandonChallenge();
-          set({
-            isActive: false,
-            difficulty: null,
-            startDate: null,
-            currentDay: 0,
-            streak: 0,
-            logs: {},
-            sideQuests: [],
-            points: 0,
-            isLoading: false
-          });
+          set({ ...INITIAL_CHALLENGE_STATE });
         } catch (error: any) {
           set({ error: error.message || 'Failed to abandon challenge', isLoading: false });
           throw error;
@@ -195,7 +185,6 @@ export const useChallengeStore = create<ChallengeState>()(
         }
       },
 
-
       logDailyMetrics: async (date, metrics) => {
         set({ isLoading: true, error: null });
         try {
@@ -221,72 +210,42 @@ export const useChallengeStore = create<ChallengeState>()(
         }
       },
 
-      fetchSideQuests: async () => {
-        set({ isLoading: true, error: null });
-        try {
-          const quests = await questService.getQuests();
-          set({ sideQuests: quests, isLoading: false });
-        } catch (error: any) {
-          set({ error: error.message || 'Failed to fetch quests', isLoading: false });
-        }
-      },
-
-      addSideQuest: async (questData) => {
-        set({ isLoading: true, error: null });
-        try {
-          const newQuest = await questService.addQuest(questData);
-          set((state) => ({
-            sideQuests: [...state.sideQuests, newQuest],
-            isLoading: false
-          }));
-        } catch (error: any) {
-          set({ error: error.message || 'Failed to add quest', isLoading: false });
-          throw error;
-        }
-      },
-
-      progressSideQuest: async (questId) => {
-        set({ isLoading: true, error: null });
-        try {
-          const updatedQuest = await questService.progressQuest(questId);
-          set((state) => ({
-            sideQuests: state.sideQuests.map(q => q.id === questId ? updatedQuest : q),
-            isLoading: false
-          }));
-        } catch (error: any) {
-          set({ error: error.message || 'Failed to progress quest', isLoading: false });
-          throw error;
-        }
-      },
-
       checkDailyReset: async () => {
         set({ isLoading: true, error: null });
         try {
           const timezoneOffset = new Date().getTimezoneOffset();
-          const { streak, currentDay, logs } = await logService.checkDailyReset(timezoneOffset);
-          // Convert array of logs from backend to Record map, handling Prisma ISO dates
-          const logsRecord = logs.reduce((acc, log) => {
-            const dateKey = typeof log.date === 'string' ? log.date.slice(0, 10) : log.date;
-            acc[dateKey] = { ...log, date: dateKey };
-            return acc;
-          }, {} as Record<string, DailyLog>);
+          const response = await logService.checkDailyReset(timezoneOffset);
+          // El backend responde `{ message }` sin `logs` cuando no hay reto
+          // activo (F-46). Antes esto reventaba en `logs.reduce`.
+          if (!Array.isArray(response.logs)) {
+            set({ isActive: false, isLoading: false });
+            return;
+          }
 
+          const logsRecord = normalizeLogs(response.logs);
           set((state) => ({
-            streak,
+            streak: response.streak ?? state.streak,
             logs: { ...state.logs, ...logsRecord },
-            currentDay: currentDay ?? state.currentDay,
+            currentDay: response.currentDay ?? state.currentDay,
             isLoading: false
           }));
         } catch (error: any) {
           set({ error: error.message || 'Failed to check daily reset', isLoading: false });
         }
-      }
+      },
+
+      reset: () => {
+        set({ ...INITIAL_CHALLENGE_STATE });
+      },
     }),
     {
       name: 'challenge-storage',
-      // Optional: Only persist necessary fields to avoid caching stale API data
+      // Persistimos el ancla del reto (startDate/difficulty) para que el
+      // calendario y el plan sobrevivan a un reload (F-36).
       partialize: (state) => ({
         isActive: state.isActive,
+        difficulty: state.difficulty,
+        startDate: state.startDate,
         streak: state.streak,
         currentDay: state.currentDay,
         points: state.points,

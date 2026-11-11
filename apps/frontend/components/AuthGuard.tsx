@@ -5,7 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/useAuthStore';
 
 // Public routes that anyone can access, logged in or not.
-const PUBLIC_ROUTES = ['/login', '/register', '/dashboard'];
+const PUBLIC_ROUTES = ['/login', '/register'];
 
 // Routes that are ONLY for non-authenticated users (e.g., they shouldn't see login if already logged in)
 const AUTH_ROUTES = ['/login', '/register'];
@@ -54,7 +54,8 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     const isAuthRoute = AUTH_ROUTES.includes(pathname);
     const isOnboardingRoute = pathname === '/onboarding';
 
-    const isRoutingRestricted = !isPublicRoute && !isOnboardingRoute && !isAuthenticated;
+    // Onboarding writes profile/challenge data and must be authenticated too.
+    const isRoutingRestricted = !isPublicRoute && !isAuthenticated;
     const isRedundantLogin = isAuthenticated && isAuthRoute;
 
     // Must complete onboarding: authenticated but onboarding not done (DB-verified), and not already on onboarding page

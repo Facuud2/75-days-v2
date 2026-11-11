@@ -11,6 +11,7 @@ const MET_VALUES: Record<string, number> = {
     strength: 5.0,
     running: 9.0,
     cycling: 7.5,
+    walking: 3.5,
     yoga: 3.0,
     swimming: 8.0,
     other: 5.0,

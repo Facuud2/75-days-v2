@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import { SideQuest } from '../../store/useChallengeStore';
+import { SideQuest } from '../../store/useQuestStore';
 
 export interface CreateQuestData {
     title: string;
