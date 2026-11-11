@@ -1,18 +1,24 @@
-version: '3.8'
+name: 75-days
 
 services:
-  frontend:
-    image: node:22
-    working_dir: /app
-    volumes:
-      - ./apps/frontend:/app
-      - /app/node_modules
-    ports:
-      - "3000:3000"
-    command: sh -c "npm install && npm run dev"
+  postgres:
+    image: postgres:16-alpine
+    container_name: 75days-postgres
+    restart: unless-stopped
     environment:
-      - NODE_ENV=development
-      - WATCHPACK_POLLING=true
+      POSTGRES_USER: ${POSTGRES_USER:-dev}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev}
+      POSTGRES_DB: ${POSTGRES_DB:-75days}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dev} -d ${POSTGRES_DB:-75days}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   backend-core:
     image: node:22
@@ -22,9 +28,21 @@ services:
       - /app/node_modules
     ports:
       - "3001:3001"
-    command: sh -c "npm install && npx prisma generate && npm run dev"
+    env_file:
+      - ./apps/backend-core/.env
     environment:
-      - NODE_ENV=development
+      # Dentro de la red de Docker el host es "postgres", no localhost
+      DATABASE_URL: postgresql://${POSTGRES_USER:-dev}:${POSTGRES_PASSWORD:-dev}@postgres:5432/${POSTGRES_DB:-75days}
+      HEALTH_SERVICE_URL: http://backend-health:3002
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: >
+      sh -c "npm install --no-audit --no-fund
+      && npx prisma generate
+      && npx prisma migrate deploy
+      && npm run db:seed
+      && npm run dev"
 
   backend-health:
     image: node:22
@@ -34,6 +52,37 @@ services:
       - /app/node_modules
     ports:
       - "3002:3002"
-    command: sh -c "npm install && npm run dev"
+    env_file:
+      - ./apps/backend-health/.env
     environment:
-      - NODE_ENV=development
+      DATABASE_URL: postgresql://${POSTGRES_USER:-dev}:${POSTGRES_PASSWORD:-dev}@postgres:5432/75days_health
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: >
+      sh -c "npm install --no-audit --no-fund
+      && npx prisma generate
+      && npx prisma db push --skip-generate
+      && npm run db:seed
+      && npm run dev"
+
+  frontend:
+    image: node:22
+    working_dir: /app
+    volumes:
+      - ./apps/frontend:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      WATCHPACK_POLLING: "true"
+      NEXT_PUBLIC_API_URL: http://localhost:3001/api
+      NEXT_PUBLIC_HEALTH_API_URL: http://localhost:3002/api
+    depends_on:
+      - backend-core
+      - backend-health
+    command: sh -c "npm install --no-audit --no-fund && npm run dev"
+
+volumes:
+  postgres-data:

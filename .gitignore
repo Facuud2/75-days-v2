@@ -1,0 +1,13 @@
+# Raíz del monorepo
+node_modules/
+dist/
+.next/
+coverage/
+*.log
+.DS_Store
+
+# Entornos locales
+.env
+.env.local
+.env.*.local
+!.env.example
