@@ -5,8 +5,8 @@ const prisma = new PrismaClient();
 async function main() {
     console.log('Seeding SideQuestTemplates...');
 
-    // Limpiamos los templates existentes para reemplazar por completo
-    await prisma.sideQuestTemplate.deleteMany({});
+    // Upsert por título: no borra plantillas que hayan agregado otros seeds
+    // ni las que el usuario haya creado. El seed es idempotente.
 
     const templates = [
         {

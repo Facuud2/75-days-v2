@@ -47,6 +47,15 @@ export const register = async (req: Request, res: Response) => {
         const validatedData = registerSchema.parse(req.body);
         const { name, email, password, difficulty, customGoalsTemplate } = validatedData;
 
+        // F-01: `Custom` sin plantilla reventaba con 500 al indexar
+        // DEFAULT_GOALS['Custom'] (undefined). Devolvemos 400 como hace
+        // POST /challenges/start.
+        if (difficulty === 'Custom' && (!customGoalsTemplate || customGoalsTemplate.length === 0)) {
+            return res.status(400).json({
+                error: 'Custom difficulty requires at least one goal in customGoalsTemplate',
+            });
+        }
+
         const existingUser = await prisma.user.findUnique({ where: { email } });
         if (existingUser) {
             return res.status(400).json({ error: 'Email already exists' });

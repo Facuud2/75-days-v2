@@ -31,6 +31,8 @@ const goalUpdateSchema = z.object({
     completed: z.boolean()
 });
 
+class NotFoundError extends Error {}
+
 export const updateGoalStatus = async (req: AuthRequest, res: Response) => {
     try {
         const date = req.params.date as string;
@@ -38,78 +40,107 @@ export const updateGoalStatus = async (req: AuthRequest, res: Response) => {
         const { completed } = goalUpdateSchema.parse(req.body);
         const userId = req.user!.id;
 
-        const challenge = await prisma.challenge.findFirst({
-            where: { userId, isActive: true },
-            include: { dailyLogs: { where: { date }, include: { goals: true } } }
+        // Pre-chequeo de existencia y propiedad: la meta debe pertenecer a un
+        // log de la fecha indicada dentro del reto activo del usuario.
+        const goal = await prisma.dailyGoal.findFirst({
+            where: {
+                id: goalId,
+                dailyLog: {
+                    date,
+                    challenge: { userId, isActive: true },
+                },
+            },
+            include: { dailyLog: true },
         });
-
-        if (!challenge || !challenge.dailyLogs || challenge.dailyLogs.length === 0) {
-            return res.status(404).json({ error: 'Challenge or Log not found' });
-        }
-
-        const log = challenge.dailyLogs[0];
-        const goal = log.goals.find((g: any) => g.id === goalId);
 
         if (!goal) {
             return res.status(404).json({ error: 'Goal not found' });
         }
 
-        await prisma.dailyGoal.update({
-            where: { id: goalId },
-            data: { completed }
-        });
+        const result = await prisma.$transaction(async (tx) => {
+            // F-03: serializa las escrituras del mismo día con un advisory lock
+            // transaccional. Dos marcas concurrentes esperan turno en vez de
+            // leer valores viejos y pisarse. El lock se libera al hacer commit.
+            await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(hashtext(${goal.dailyLogId}))) AS lock`;
 
-        // Check if all goals are now completed
-        const updatedGoals = await prisma.dailyGoal.findMany({ where: { dailyLogId: log.id } });
-        const allCompleted = updatedGoals.every((g: any) => g.completed);
+            const currentGoal = await tx.dailyGoal.findUnique({
+                where: { id: goalId },
+                include: { dailyLog: true },
+            });
 
-        // Update log status and potential points/streak if needed
-        if (allCompleted && log.status !== 'success') {
-            await prisma.dailyLog.update({
+            if (!currentGoal) {
+                throw new NotFoundError('Goal not found');
+            }
+
+            await tx.dailyGoal.update({
+                where: { id: goalId },
+                data: { completed },
+            });
+
+            const goals = await tx.dailyGoal.findMany({
+                where: { dailyLogId: currentGoal.dailyLogId },
+            });
+            const allCompleted = goals.length > 0 && goals.every((g) => g.completed);
+
+            const log = await tx.dailyLog.findUnique({ where: { id: currentGoal.dailyLogId } });
+            if (!log) {
+                throw new NotFoundError('Log not found');
+            }
+
+            const challenge = await tx.challenge.findUnique({ where: { id: log.challengeId } });
+            if (!challenge) {
+                throw new NotFoundError('Challenge not found');
+            }
+
+            let status = log.status;
+            let points = challenge.points;
+            let streak = challenge.streak;
+
+            if (allCompleted && log.status !== 'success') {
+                status = 'success';
+                points += 10;
+                streak += 1;
+            } else if (!allCompleted && log.status === 'success') {
+                status = 'pending';
+                points = Math.max(0, points - 10);
+                streak = Math.max(0, streak - 1);
+            }
+
+            if (status !== log.status) {
+                await tx.dailyLog.update({ where: { id: log.id }, data: { status } });
+            }
+
+            if (points !== challenge.points || streak !== challenge.streak) {
+                await tx.challenge.update({
+                    where: { id: challenge.id },
+                    data: { points, streak },
+                });
+            }
+
+            const updatedLog = await tx.dailyLog.findUnique({
                 where: { id: log.id },
-                data: { status: 'success' }
+                include: { goals: true },
             });
+            if (!updatedLog) {
+                throw new NotFoundError('Log not found');
+            }
 
-            await prisma.challenge.update({
-                where: { id: challenge.id },
-                data: {
-                    points: challenge.points + 10,
-                    streak: challenge.streak + 1
-                }
-            });
-        } else if (!allCompleted && log.status === 'success') {
-            await prisma.dailyLog.update({
-                where: { id: log.id },
-                data: { status: 'pending' }
-            });
-
-            await prisma.challenge.update({
-                where: { id: challenge.id },
-                data: {
-                    points: Math.max(0, challenge.points - 10),
-                    streak: Math.max(0, challenge.streak - 1)
-                }
-            });
-        }
-
-        const updatedLog = await prisma.dailyLog.findUnique({
-            where: { id: log.id },
-            include: { goals: true }
-        });
-
-        const updatedChallenge = await prisma.challenge.findUnique({
-            where: { id: challenge.id }
+            return { updatedLog, streak, points };
         });
 
         res.json({
-            ...updatedLog,
-            challengeStreak: updatedChallenge?.streak,
-            challengePoints: updatedChallenge?.points
+            ...result.updatedLog,
+            challengeStreak: result.streak,
+            challengePoints: result.points,
         });
     } catch (error) {
         if (error instanceof z.ZodError) {
             return res.status(400).json({ error: 'Validation failed', details: error.issues });
         }
+        if (error instanceof NotFoundError) {
+            return res.status(404).json({ error: error.message });
+        }
+        console.error('Error in updateGoalStatus:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 };
