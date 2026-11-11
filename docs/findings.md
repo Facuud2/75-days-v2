@@ -40,7 +40,7 @@ Notas para el dueño. No son un plan de trabajo ni una auditoría de severidad: 
 | **F-31** | El perfil perdía también salud/Strava si fallaba `getProfile`. | `apps/frontend/app/profile/page.tsx` | **Resuelto 2026-11-11** — cada fuente tiene fallback independiente |
 | **F-32** | El frontend tiene dos clientes HTTP: `apiClient` (fetch, lee el token de `localStorage`) y un axios propio en `useQuestStore` (lee el token del store). Manejan 401 distinto: solo el primero redirige al login. | `apps/frontend/lib/api/client.ts:3-17` y `apps/frontend/store/useQuestStore.ts:4-18` | Inconsistencia |
 | **F-33** | `/dashboard` figuraba como ruta pública. | `apps/frontend/components/AuthGuard.tsx` | **Resuelto 2026-11-11** |
-| **F-34** | `@google/genai` y `GEMINI_API_KEY` no se usan en ningún archivo: dependencia y knob muertos. | búsqueda de `genai`/`GEMINI` en `apps/frontend` sin resultados | Limpieza |
+| **F-34** | `@google/genai` y `GEMINI_API_KEY` no se usaban. | `apps/frontend/package.json`, `.env.example` | **Resuelto 2026-11-11** — dependencia y variables eliminadas; Gemini fuera del producto |
 | **F-35** | El frontend recalcula el día del reto por su cuenta (`fetchCurrentChallenge`) con una fórmula propia, duplicando la lógica del backend y sin usar el `timezoneOffset`. | `apps/frontend/store/useChallengeStore.ts:104-114` | Duplicación |
 | **F-36** | `challenge-storage` perdía `startDate` y `difficulty` al recargar. | `apps/frontend/store/useChallengeStore.ts` | **Resuelto 2026-11-11** — persiste el ancla y el dashboard consulta backend con storage limpio |
 | **F-37** | `logout` no limpiaba el reto del usuario anterior. | `apps/frontend/store/useAuthStore.ts` | **Resuelto 2026-11-11** — limpia stores y `challenge-storage` |

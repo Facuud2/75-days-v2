@@ -5,7 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/useAuthStore';
 
 // Public routes that anyone can access, logged in or not.
-const PUBLIC_ROUTES = ['/login', '/register'];
+const PUBLIC_ROUTES = ['/login', '/register', '/dev/edge-cases'];
 
 // Routes that are ONLY for non-authenticated users (e.g., they shouldn't see login if already logged in)
 const AUTH_ROUTES = ['/login', '/register'];

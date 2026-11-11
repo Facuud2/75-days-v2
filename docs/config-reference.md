@@ -39,7 +39,7 @@ Cada clave indica si el código la lee realmente. Una clave que nadie lee es un 
 |---|---|---|---|
 | `NEXT_PUBLIC_API_URL` | `http://localhost:3001/api` | `lib/api/client.ts`, `store/useQuestStore.ts` | Viva |
 | `NEXT_PUBLIC_HEALTH_API_URL` | `http://localhost:3002/api` | `lib/api/health.ts` | Viva |
-| `GEMINI_API_KEY` | — | nadie | **Muerta** — `@google/genai` está instalado pero nunca se importa |
+| `GEMINI_API_KEY` | — | nadie | **Eliminada** — Gemini no forma parte del producto |
 | `APP_URL` | — | nadie | **Muerta** — sin referencias en el código |
 
 ## Reglas de consistencia

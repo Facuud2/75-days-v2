@@ -11,7 +11,7 @@
 | PostgreSQL `75days_health` | health → DB | TCP | `DATABASE_URL` | Viva |
 | FatSecret | health → externo | HTTPS REST + OAuth2 client credentials | `FATSECRET_CLIENT_ID/SECRET` | Configurable |
 | Strava | health ↔ externo | OAuth2 + HTTPS REST | `STRAVA_CLIENT_ID/SECRET` | Configurable |
-| Gemini | — | SDK `@google/genai` | `GEMINI_API_KEY` | **Muerta** (SDK nunca importado) |
+| Gemini | — | — | — | **Eliminada**; no forma parte del producto |
 | backend-core → backend-health | interno | HTTPS REST + API key | `INTERNAL_API_KEY` | **Dormido** |
 
 ---
@@ -44,9 +44,9 @@
 
 **Debilidades**: el `state` OAuth es el `userId` en claro (no protege CSRF); el callback no verifica que el usuario exista; no hay revocación al desconectar (no existe endpoint de desconexión).
 
-## Gemini (dependencia muerta)
+## Gemini (eliminado)
 
-**Qué hace hoy**: nada. `@google/genai` figura en `package.json` y `GEMINI_API_KEY` en el `.env.example`, pero **ningún archivo del frontend importa el SDK ni lee la variable**. Búsqueda de `genai`, `GoogleGenAI` y `GEMINI` en `apps/frontend` sin resultados fuera de `node_modules`.
+Gemini no se utilizará en este producto. Se eliminaron la dependencia `@google/genai`, la variable `GEMINI_API_KEY` y las referencias documentales de configuración. No hay ninguna API key de Gemini que configurar en desarrollo o producción.
 
 **Interpretación**: es un remanente del origen del proyecto como applet de AI Studio (el `package.json` se llama `ai-studio-applet`). Se puede eliminar la dependencia y la variable sin afectar nada.
 

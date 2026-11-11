@@ -23,16 +23,17 @@ Cada documento declara su nivel de confianza:
 | [api-reference.md](api-reference.md) | Todos los endpoints, con auth, body y respuesta |
 | [data-model.md](data-model.md) | Qué se guarda, quién lo posee, ciclo de vida y rarezas |
 | [config-reference.md](config-reference.md) | Cada variable de entorno y quién la lee |
-| [integrations.md](integrations.md) | FatSecret, Strava, Gemini y sus modos de falla |
+| [integrations.md](integrations.md) | FatSecret, Strava y el canal interno; Gemini fue eliminado |
 | [processes.md](processes.md) | Procesos de negocio end-to-end |
 | [history.md](history.md) | Qué muestra `git log` |
 | [findings.md](findings.md) | Defectos sospechados, con `archivo:línea` |
 | [coverage.md](coverage.md) | Cobertura de esta documentación |
 | [unknowns.md](unknowns.md) | Lo que no se pudo determinar |
 | [PLAN.md](PLAN.md) | Plan completo de recuperación (fases 2–6) |
+| [production-release.md](production-release.md) | Publicación, Render, secretos, bases limpias, smoke test y rollback |
 | [adr/](adr/) | Decisiones de arquitectura reconstruidas |
 | [../GLOSSARY.md](../GLOSSARY.md) | Glosario del dominio |
 
 ## Estado en una línea
 
-Los tres servicios arrancan y el camino feliz de registro y check-in diario funciona. Las funcionalidades de **misiones secundarias**, **logros** y **alimentos personalizados** están rotas o sin datos (ver `findings.md`).
+Los tres servicios arrancan y el camino feliz de registro, misiones, logros y alimentos personalizados está operativo. La guía de producción y el laboratorio local de edge cases están documentados en `production-release.md` y `/dev/edge-cases`.

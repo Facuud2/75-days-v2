@@ -112,4 +112,4 @@ Los modales de comida y entrenamiento concentran la mayor cantidad de lógica de
 
 ## Dependencia muerta
 
-`@google/genai` figura en `package.json` y `GEMINI_API_KEY` en el `.env.example`, pero **nadie los usa**. Ver `findings.md` F-34 y `integrations.md`.
+Gemini no forma parte del producto: se eliminaron `@google/genai` y `GEMINI_API_KEY`. Ver `findings.md` F-34 y `integrations.md`.

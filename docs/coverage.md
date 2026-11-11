@@ -10,7 +10,7 @@
 | Endpoints HTTP | **44** | `grep -rhoE "router\.(get\|post\|patch\|put\|delete)" apps/*/src/routes \| wc -l` |
 | Tablas en esquemas | **14** (8 core + 6 health) | `grep -c "^model " apps/*/prisma/schema.prisma` |
 | Variables de entorno | **16** (12 backends + 4 frontend) | `grep -rhoE "process\.env\.[A-Z_0-9]+\|NEXT_PUBLIC_[A-Z_0-9]+" apps --include="*.ts" \| sort -u` |
-| Integraciones externas | **3** (FatSecret, Strava, Gemini) + 2 bases | lectura de `lib/` y controladores |
+| Integraciones externas | **2** (FatSecret, Strava) + canal interno + 2 bases | lectura de `lib/` y controladores; Gemini eliminado |
 | Páginas del frontend | **8** (7 en `app/` + raíz) | `ls apps/frontend/app` |
 | Servicios desplegables | **3** | `docker-compose.yml` |
 
