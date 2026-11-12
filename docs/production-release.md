@@ -8,10 +8,10 @@ El sistema no es un único servicio: necesita **dos backends, un frontend y dos 
 
 - Render Web Service: `backend-core`.
 - Render Web Service: `backend-health`.
-- Render Web Service: `frontend`.
+- Vercel Project: `frontend` (recomendado para Next.js).
 - PostgreSQL gestionado con dos bases (`75days` y `75days_health`) o dos instancias PostgreSQL separadas.
 
-Render puede alojar los tres servicios, pero no conviene intentar que los backends compartan una única URL de base sin confirmar que el proveedor permite crear y usar dos bases lógicas. La alternativa más simple y segura es una base gestionada por servicio, o un proveedor PostgreSQL externo que permita ambas bases.
+Los dos backends permanecen en Render y el frontend se publica en Vercel. No conviene intentar que los backends compartan una única URL de base sin confirmar que el proveedor permite crear y usar dos bases lógicas. La alternativa más simple y segura es una base gestionada por servicio, o un proveedor PostgreSQL externo que permita ambas bases.
 
 ## Paso 0 — No reutilizar datos de desarrollo
 
@@ -95,10 +95,10 @@ npm ci && npx prisma generate && npm run build
 - Start command inicial para una base vacía:
 
 ```bash
-npx prisma db push && npm run db:seed && npm start
+npx prisma migrate deploy && npm run db:seed && npm start
 ```
 
-Esto reproduce el estado actual, pero **no es la solución final**: health todavía usa `db push` y queda pendiente convertirlo a migraciones versionadas (F-21 / tarea 2.3). No usar `--accept-data-loss` en producción.
+La migración baseline `20261111040000_init` crea el esquema actual y deja los cambios futuros auditables. No usar `db push` ni `--accept-data-loss` en producción.
 
 - Variables:
 
@@ -118,42 +118,49 @@ STRAVA_REDIRECT_URI=https://<health-host>/api/strava/callback
 
 Si FatSecret y Strava no se van a usar inicialmente, dejarlos vacíos y no incluir callbacks de prueba.
 
-## Paso 5 — Configurar `frontend` en Render
+## Paso 5 — Configurar `frontend` en Vercel
 
 - Root directory: `apps/frontend`.
-- Build command:
+- Framework preset: `Next.js`.
+- Build command (Vercel lo detecta automáticamente):
 
 ```bash
 npm ci && npm run build
 ```
 
-- Start command:
-
-```bash
-npm start
-```
-
-- Variables de build/runtime:
+- Variables de entorno de producción:
 
 ```text
-NODE_ENV=production
-PORT=10000
-NEXT_PUBLIC_API_URL=https://<core-host>/api
-NEXT_PUBLIC_HEALTH_API_URL=https://<health-host>/api
+NEXT_PUBLIC_API_URL=https://seven5-days-v2.onrender.com/api
+NEXT_PUBLIC_HEALTH_API_URL=https://seven5-days-v2-1.onrender.com/api
 ```
 
-No configurar `GEMINI_API_KEY`: Gemini fue eliminado deliberadamente del producto.
+No configurar `GEMINI_API_KEY`: Gemini fue eliminado deliberadamente del producto. En Vercel no se necesita `PORT` ni un `start command` personalizado.
 
 ## Paso 6 — Orden de primer deploy
 
 1. Crear las bases vacías.
 2. Desplegar `backend-core`; confirmar migraciones y seed.
 3. Desplegar `backend-health`; confirmar esquema y seed de 51 ingredientes.
-4. Configurar URLs definitivas del frontend en ambos backends.
-5. Desplegar frontend.
-6. Abrir la aplicación en una ventana incógnito.
-7. Registrar un usuario nuevo y completar onboarding.
-8. Verificar una misión, una comida, una caminata y una meta diaria.
+4. Crear el proyecto de Vercel apuntando a `apps/frontend`.
+5. Añadir las dos variables `NEXT_PUBLIC_*` en Vercel y desplegar el frontend.
+6. Configurar la URL de Vercel como `FRONTEND_URL` en ambos servicios de Render y redeployar ambos backends para activar CORS.
+7. Abrir la aplicación en una ventana incógnito.
+8. Registrar un usuario nuevo y completar onboarding.
+9. Verificar una misión, una comida, una caminata y una meta diaria.
+
+Para previews de Vercel, se puede usar una lista separada por comas en `FRONTEND_URL`, por ejemplo `https://mi-app.vercel.app,https://mi-app-git-main-mi-equipo.vercel.app`.
+
+## Variables de Render ya existentes
+
+Las URLs públicas actuales son:
+
+```text
+CORE:   https://seven5-days-v2.onrender.com
+HEALTH: https://seven5-days-v2-1.onrender.com
+```
+
+En `backend-core`, `HEALTH_SERVICE_URL` debe apuntar a `https://seven5-days-v2-1.onrender.com`. En ambos servicios, `JWT_SECRET` debe ser idéntico y `INTERNAL_API_KEY` debe ser idéntico. Cada servicio debe tener su propia `DATABASE_URL` de Neon: core a `75days` y health a `75days_health`.
 
 ## Smoke checklist post-deploy
 
@@ -182,9 +189,6 @@ Después, con un token nuevo:
 
 ## Pendientes antes de llamar a producción “estable”
 
-1. Convertir `backend-health` a migraciones versionadas (F-21).
-2. Eliminar fallbacks inseguros de `JWT_SECRET` y cargar configuración al inicio (F-11/F-12).
-3. Restringir CORS al dominio real del frontend.
-4. Agregar rate limiting para login y registro.
-5. Configurar logs, alertas, backups automáticos y dominio HTTPS.
-6. Ejecutar el laboratorio local de edge cases en `/dev/edge-cases`.
+1. Restringir CORS al dominio real del frontend.
+2. Configurar logs, alertas, backups automáticos y dominio HTTPS.
+3. Ejecutar el laboratorio local de edge cases en `/dev/edge-cases`.

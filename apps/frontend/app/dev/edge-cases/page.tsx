@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Clock3, Dumbbell, Flame, Footprints, Mail, ShieldAlert, Trophy, Utensils } from 'lucide-react';
 
 type Dataset = 'demo' | 'worst' | 'empty' | 'one' | 'thousand';
@@ -106,12 +106,13 @@ function formatNumber(value: number | null): string {
 }
 
 export default function EdgeCasesPage() {
-  const [dataset, setDataset] = useState<Dataset>('demo');
-
-  useEffect(() => {
-    const value = new URLSearchParams(window.location.search).get('data') as Dataset | null;
-    if (value && ['demo', 'worst', 'empty', 'one', 'thousand'].includes(value)) setDataset(value);
-  }, []);
+  const [dataset, setDataset] = useState<Dataset>(() => {
+    if (typeof window === 'undefined') return 'demo';
+    const value = new URLSearchParams(window.location.search).get('data');
+    return value && ['demo', 'worst', 'empty', 'one', 'thousand'].includes(value)
+      ? value as Dataset
+      : 'demo';
+  });
 
   const items = useMemo(() => makeItems(dataset), [dataset]);
 
@@ -210,7 +211,7 @@ export default function EdgeCasesPage() {
               <h2 className="mb-3 font-bold">Manual checks</h2>
               <ul className="space-y-2 text-sm leading-6 text-zinc-400">
                 <li>• 320px viewport y 200% zoom</li>
-                <li>• dark mode y `dir="rtl"`</li>
+                <li>• dark mode y <code>dir=&quot;rtl&quot;</code></li>
                 <li>• teclado: foco visible y botones alcanzables</li>
                 <li>• alternar estados sin recargar</li>
                 <li>• scroll de 1.000 filas</li>

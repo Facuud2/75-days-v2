@@ -67,7 +67,7 @@ export default function Login() {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full py-3 px-4 bg-rose-500 text-white rounded-xl font-bold hover:bg-rose-600 focus:ring-4 focus:ring-rose-500/30 transition-all mt-6 disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(244,63,94,0.3)] hover:shadow-[0_0_25px_rgba(244,63,94,0.45)]"
+             className="w-full py-3 px-4 bg-rose-400 text-zinc-950 rounded-xl font-bold hover:bg-rose-300 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-rose-300/40 transition-colors mt-6 disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(244,63,94,0.3)] hover:shadow-[0_0_25px_rgba(244,63,94,0.45)]"
           >
             {isLoading ? 'Signing In...' : 'Sign In'}
           </button>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Search, Utensils, Loader2, CheckCircle2, ChevronRight, ArrowLeft, Plus, Bookmark } from 'lucide-react';
+import { X, Search, Utensils, Loader2, CheckCircle2, ChevronRight, ArrowLeft, Plus, Bookmark, Flame } from 'lucide-react';
 import { healthService, FatSecretFoodItem, FatSecretFoodDetails, FatSecretFoodServing, CustomFood, Ingredient } from '@/lib/api/health';
 
 interface LogMealModalProps {
@@ -80,6 +80,15 @@ export default function LogMealModal({ isOpen, onClose, onSaved, date }: LogMeal
             fetchSystemIngredients();
         }
     }, [isOpen]);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') onClose();
+        };
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, [isOpen, onClose]);
 
     const fetchSystemIngredients = async () => {
         try {
@@ -275,13 +284,16 @@ export default function LogMealModal({ isOpen, onClose, onSaved, date }: LogMeal
 
     return (
         <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+            className="fixed inset-0 z-[100] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center sm:p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="meal-modal-title"
             onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
         >
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[85vh]">
+            <div className="bg-zinc-900 border border-zinc-800 rounded-t-[2rem] sm:rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[92dvh] sm:max-h-[85vh] overflow-hidden">
 
                 {/* Header */}
-                <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 shrink-0">
+                <div className="flex items-center justify-between px-4 py-4 sm:px-6 border-b border-zinc-800 shrink-0">
                     <div className="flex items-center gap-3">
                         {step !== 'MAIN' && (
                             <button onClick={() => setStep('MAIN')} className="p-1 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-zinc-200 transition-colors">
@@ -289,7 +301,7 @@ export default function LogMealModal({ isOpen, onClose, onSaved, date }: LogMeal
                             </button>
                         )}
                         <div>
-                            <h2 className="text-lg font-bold text-zinc-100 flex items-center gap-2">
+                            <h2 id="meal-modal-title" className="text-lg font-bold text-zinc-100 flex items-center gap-2">
                                 <Utensils className="w-5 h-5 text-orange-400" />
                                 {step === 'MAIN' ? 'Registrar Comida' :
                                     step === 'DETAILS' ? 'Detalles de la Composición' : 'Crear Plato Personalizado'}
@@ -297,15 +309,16 @@ export default function LogMealModal({ isOpen, onClose, onSaved, date }: LogMeal
                         </div>
                     </div>
                     <button
+                        aria-label="Cerrar registro de comida"
                         onClick={onClose}
-                        className="text-zinc-500 hover:text-zinc-300 transition-colors p-1 rounded-lg hover:bg-zinc-800"
+                        className="text-zinc-500 hover:text-zinc-300 transition-colors p-1 rounded-lg hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300"
                     >
                         <X className="w-5 h-5" />
                     </button>
                 </div>
 
                 {/* Body Content */}
-                <div className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent">
+                <div className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent">
 
                     {step === 'MAIN' && (
                         <div className="space-y-6">
@@ -391,7 +404,7 @@ export default function LogMealModal({ isOpen, onClose, onSaved, date }: LogMeal
                                     <div className="space-y-2">
                                         {!hasSearched && !isSearching && (
                                             <div className="py-6">
-                                                <p className="text-xs text-zinc-500 font-semibold mb-3 uppercase tracking-wider text-center">
+                                                 <p className="text-xs text-zinc-500 font-semibold mb-3 text-center">
                                                     Sugerencias rápidas para {mealType === 'breakfast' ? 'Desayuno' : mealType === 'lunch' ? 'Almuerzo' : mealType === 'dinner' ? 'Cena' : 'Snack'}
                                                 </p>
                                                 <div className="flex flex-wrap justify-center gap-2">
@@ -439,7 +452,7 @@ export default function LogMealModal({ isOpen, onClose, onSaved, date }: LogMeal
                             {activeTab === 'CUSTOM' && (
                                 <div className="space-y-4">
                                     <div className="flex justify-between items-center mb-2">
-                                        <p className="text-xs text-zinc-400 uppercase tracking-widest font-semibold">Tus recetas frecuentes</p>
+                                         <p className="text-xs text-zinc-400 font-semibold">Tus recetas frecuentes</p>
                                         <button
                                             onClick={() => setStep('CREATE_CUSTOM')}
                                             className="text-xs bg-orange-500/10 text-orange-400 font-bold px-3 py-1.5 rounded-lg hover:bg-orange-500/20 transition-colors flex items-center gap-1"
@@ -467,7 +480,7 @@ export default function LogMealModal({ isOpen, onClose, onSaved, date }: LogMeal
                                                             {food.name}
                                                         </div>
                                                         <div className="text-xs text-zinc-500 mt-1 flex gap-2">
-                                                            <span>🔥 {food.calories}kcal</span>
+                                                             <span className="inline-flex items-center gap-1"><Flame className="h-3 w-3 text-orange-400" /> {food.calories}kcal</span>
                                                             <span className="text-zinc-700">|</span>
                                                             <span>P: {food.proteinG}g</span>
                                                             <span>C: {food.carbG}g</span>
@@ -505,7 +518,7 @@ export default function LogMealModal({ isOpen, onClose, onSaved, date }: LogMeal
                                     {/* Serving Selector */}
                                     <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 space-y-4">
                                         <div>
-                                            <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2 block">
+                                             <label className="text-xs font-semibold text-zinc-400 mb-2 block">
                                                 Tamaño de Porción
                                             </label>
                                             <select
@@ -525,7 +538,7 @@ export default function LogMealModal({ isOpen, onClose, onSaved, date }: LogMeal
                                         </div>
 
                                         <div>
-                                            <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2 block">
+                                             <label className="text-xs font-semibold text-zinc-400 mb-2 block">
                                                 Cantidad (Multiplicador)
                                             </label>
                                             <div className="flex items-center gap-3">
@@ -550,20 +563,20 @@ export default function LogMealModal({ isOpen, onClose, onSaved, date }: LogMeal
                                         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
                                             <div className="text-center mb-4">
                                                 <span className="text-3xl font-black text-white">{(selectedServing.calories * quantity).toFixed(0)}</span>
-                                                <span className="text-xs text-zinc-500 ml-1 font-bold uppercase">kcal</span>
+                                                 <span className="text-xs text-zinc-500 ml-1 font-bold">kcal</span>
                                             </div>
 
                                             <div className="grid grid-cols-3 gap-2">
                                                 <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-2.5 text-center">
-                                                    <div className="text-[10px] text-blue-400 uppercase font-semibold mb-1">Proteínas</div>
+                                                     <div className="text-[10px] text-blue-400 font-semibold mb-1">Proteínas</div>
                                                     <div className="font-bold text-zinc-100">{(selectedServing.protein * quantity).toFixed(1)}g</div>
                                                 </div>
                                                 <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-2.5 text-center">
-                                                    <div className="text-[10px] text-yellow-400 uppercase font-semibold mb-1">Carbos</div>
+                                                     <div className="text-[10px] text-yellow-400 font-semibold mb-1">Carbos</div>
                                                     <div className="font-bold text-zinc-100">{(selectedServing.carbohydrates * quantity).toFixed(1)}g</div>
                                                 </div>
                                                 <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-2.5 text-center">
-                                                    <div className="text-[10px] text-red-400 uppercase font-semibold mb-1">Grasas</div>
+                                                     <div className="text-[10px] text-red-400 font-semibold mb-1">Grasas</div>
                                                     <div className="font-bold text-zinc-100">{(selectedServing.fat * quantity).toFixed(1)}g</div>
                                                 </div>
                                             </div>
@@ -594,7 +607,7 @@ export default function LogMealModal({ isOpen, onClose, onSaved, date }: LogMeal
                                 {/* Ingredients Section */}
                                 <div className="pt-2 border-t border-zinc-800">
                                     <div className="flex justify-between items-center mb-3">
-                                        <p className="text-xs font-semibold text-zinc-400 uppercase">Ingredientes</p>
+                                         <p className="text-xs font-semibold text-zinc-400">Ingredientes</p>
                                         {!isSelectingIngredient && (
                                             <button
                                                 type="button"
@@ -638,13 +651,13 @@ export default function LogMealModal({ isOpen, onClose, onSaved, date }: LogMeal
                                             ))}
                                             <div className="flex justify-between items-center p-3 mt-4 bg-orange-500/10 border border-orange-500/20 rounded-xl">
                                                 <div>
-                                                    <p className="text-[10px] text-orange-400 font-bold uppercase">Total Estimado</p>
-                                                    <p className="text-lg font-black text-white">{currentRecipeMacros.cals.toFixed(0)} <span className="text-xs text-zinc-500 font-bold uppercase">kcal</span></p>
+                                                     <p className="text-[10px] text-orange-400 font-bold">Total Estimado</p>
+                                                     <p className="text-lg font-black text-white">{currentRecipeMacros.cals.toFixed(0)} <span className="text-xs text-zinc-500 font-bold">kcal</span></p>
                                                 </div>
                                                 <div className="flex gap-3 text-xs text-zinc-400">
-                                                    <span className="flex flex-col items-center"><span className="text-blue-400 font-bold uppercase text-[9px]">P</span>{currentRecipeMacros.p.toFixed(1)}g</span>
-                                                    <span className="flex flex-col items-center"><span className="text-yellow-400 font-bold uppercase text-[9px]">C</span>{currentRecipeMacros.c.toFixed(1)}g</span>
-                                                    <span className="flex flex-col items-center"><span className="text-red-400 font-bold uppercase text-[9px]">G</span>{currentRecipeMacros.f.toFixed(1)}g</span>
+                                                     <span className="flex flex-col items-center"><span className="text-blue-400 font-bold text-[9px]">P</span>{currentRecipeMacros.p.toFixed(1)}g</span>
+                                                     <span className="flex flex-col items-center"><span className="text-yellow-400 font-bold text-[9px]">C</span>{currentRecipeMacros.c.toFixed(1)}g</span>
+                                                     <span className="flex flex-col items-center"><span className="text-red-400 font-bold text-[9px]">G</span>{currentRecipeMacros.f.toFixed(1)}g</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -722,12 +735,12 @@ export default function LogMealModal({ isOpen, onClose, onSaved, date }: LogMeal
 
                 {/* Footer Controls */}
                 {step === 'CREATE_CUSTOM' && (
-                    <div className="p-4 border-t border-zinc-800 bg-zinc-950/50 shrink-0 shadow-[0_-10px_30px_rgba(0,0,0,0.5)] z-10">
+                    <div className="p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] border-t border-zinc-800 bg-zinc-950/50 shrink-0 shadow-[0_-10px_30px_rgba(0,0,0,0.5)] z-10">
                         <button
                             type="submit"
                             form="create-custom-form"
                             disabled={isSaving || !newCustomFood.name || recipeIngredients.length === 0}
-                            className="w-full flex justify-center items-center gap-2 bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-500 hover:to-orange-400 text-white font-bold py-3.5 rounded-xl transition-all disabled:opacity-50 shadow-lg shadow-orange-500/20"
+                             className="w-full flex justify-center items-center gap-2 bg-orange-500 hover:bg-orange-400 text-zinc-950 font-bold py-3.5 rounded-xl transition-colors disabled:opacity-50 shadow-lg shadow-orange-500/20"
                         >
                             {isSaving ? (
                                 <><Loader2 className="w-5 h-5 animate-spin" /> Creando Platillo...</>

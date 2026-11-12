@@ -8,6 +8,7 @@ import { format, addDays, differenceInDays, startOfMonth, endOfMonth, getDay, is
 import { es } from 'date-fns/locale';
 import { Check, Utensils, Dumbbell, Sun, Droplet, Book, Camera, Target, ChevronLeft, ChevronRight, PlusCircle, Trophy } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import DayDetailsModal from '@/components/DayDetailsModal';
 import SideQuestsModal from '@/components/SideQuestsModal';
 import { DEFAULT_GOALS } from '@/lib/constants/plans';
@@ -174,7 +175,7 @@ export default function Dashboard() {
           <h3 className={`font-bold text-lg mb-1 transition-colors ${goal.completed ? 'text-white/70 line-through' : 'text-white'}`}>
             {goal.title}
           </h3>
-          <p className={`text-sm transition-colors ${goal.completed ? 'text-white/30' : 'text-white/50'}`}>
+          <p className={`text-sm transition-colors ${goal.completed ? 'text-white/50' : 'text-white/60'}`}>
             {goal.description || 'Completar esta tarea para avanzar en el desafío.'}
           </p>
         </div>
@@ -196,72 +197,92 @@ export default function Dashboard() {
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 animate-in fade-in">
 
       {/* Left Column */}
-      <div className="lg:col-span-4 space-y-6">
+      <div className="min-w-0 space-y-4 sm:space-y-6 lg:col-span-4">
 
-        {/* DÍA ACTUAL */}
-        <div className="bg-rose-950/20 border border-rose-950/40 rounded-3xl p-6 shadow-lg">
-          <h3 className="text-rose-500 text-[10px] font-bold tracking-[0.2em] uppercase mb-4">Día Actual</h3>
-          <div className="flex items-baseline gap-1 mb-8">
-            <span className="text-7xl font-bold text-white tracking-tighter">{currentDay}</span>
-            <span className="text-2xl text-white/40 font-bold">/ 75</span>
+        {/* RESUMEN DEL DÍA: une avance del desafío y estado de las tareas */}
+        <section className="bg-rose-950/20 border border-rose-950/40 rounded-3xl p-5 sm:p-6 shadow-lg" aria-labelledby="today-summary-title">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-rose-500 text-[10px] font-bold tracking-[0.2em] uppercase">Resumen de hoy</p>
+              <h2 id="today-summary-title" className="mt-1 text-sm font-semibold text-white/70">Día actual</h2>
+            </div>
+            <span className="rounded-full bg-white/5 px-2.5 py-1 text-[10px] font-bold text-white/50">
+              {Math.round((currentDay / 75) * 100)}% del reto
+            </span>
           </div>
-          <div className="space-y-3">
-            <div className="flex justify-between text-xs text-white/60 font-medium">
-              <span>Progreso Total</span>
+
+          <div className="mt-3 flex items-baseline gap-1">
+            <span className="text-6xl font-bold tracking-tighter text-white sm:text-7xl">{currentDay}</span>
+            <span className="text-xl font-bold text-white/40 sm:text-2xl">/ 75 días</span>
+          </div>
+
+          <div className="mt-4 space-y-2">
+            <div className="flex justify-between text-xs font-medium text-white/60">
+              <span>Progreso del desafío</span>
               <span>{Math.round((currentDay / 75) * 100)}%</span>
             </div>
-            <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+            <div className="h-1.5 overflow-hidden rounded-full bg-white/5">
               <div
                 className="h-full bg-rose-500 transition-all duration-1000 ease-out"
                 style={{ width: `${(currentDay / 75) * 100}%` }}
               />
             </div>
           </div>
-        </div>
 
-        {/* ESTADO DIARIO */}
-        <div className="bg-rose-950/20 border border-rose-950/40 rounded-3xl p-6 shadow-lg">
-          <h3 className="text-rose-500 text-[10px] font-bold tracking-[0.2em] uppercase mb-2">Estado Diario</h3>
-          <h2 className="text-2xl font-bold uppercase tracking-tight mb-6 text-white">
-            {progress === 100 ? 'Completado' : 'En Progreso'}
-          </h2>
+          <div className="mt-5 border-t border-white/10 pt-5">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-rose-500 text-[10px] font-bold tracking-[0.2em] uppercase">Estado diario</p>
+                <h3 className="mt-1 text-xl font-bold uppercase tracking-tight text-white">
+                  {progress === 100 ? 'Completado' : 'En progreso'}
+                </h3>
+              </div>
 
-          <div className="flex items-center gap-6">
-            <div className="relative w-24 h-24 flex items-center justify-center shrink-0">
-              <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
-                <path
-                  className="text-white/5"
-                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                />
-                <path
-                  className={`transition-all duration-1000 ease-out ${progress === 100 ? 'text-emerald-600 dark:text-emerald-500' : 'text-rose-500'}`}
-                  strokeDasharray={`${progress}, 100`}
-                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                />
-              </svg>
-              <span className={`absolute text-sm font-bold ${progress === 100 ? 'text-emerald-600 dark:text-emerald-500' : 'text-zinc-900 dark:text-white'}`}>
-                {progress}%
-              </span>
+              <div className="relative flex h-16 w-16 shrink-0 items-center justify-center sm:h-20 sm:w-20">
+                <svg className="h-full w-full -rotate-90" viewBox="0 0 36 36" aria-label={`${progress}% de tareas completadas`} role="img">
+                  <path
+                    className="text-white/5"
+                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  />
+                  <path
+                    className={`transition-all duration-1000 ease-out ${progress === 100 ? 'text-emerald-600 dark:text-emerald-500' : 'text-rose-500'}`}
+                    strokeDasharray={`${progress}, 100`}
+                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  />
+                </svg>
+                <span className={`absolute text-xs font-bold sm:text-sm ${progress === 100 ? 'text-emerald-600 dark:text-emerald-500' : 'text-white'}`}>
+                  {progress}%
+                </span>
+              </div>
             </div>
-            <p className="text-sm text-white/60 leading-relaxed">
+            <p className="mt-3 max-w-[18rem] text-sm leading-relaxed text-white/60">
               {remainingTasks === 0
                 ? '¡Todas las tareas completadas por hoy! Gran trabajo.'
                 : `${remainingTasks} tareas restantes para terminar el día.`}
             </p>
           </div>
-        </div>
+        </section>
+
+        <Link
+          href="/calendar"
+          className="dashboard-history-link lg:hidden flex min-h-12 items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm font-semibold text-white/70 active:bg-white/[0.08]"
+        >
+          Ver historial de días
+          <ChevronRight size={18} aria-hidden="true" />
+        </Link>
 
         {/* MINI CALENDAR */}
-        <div className="bg-rose-950/20 border border-rose-950/40 rounded-3xl p-6 shadow-lg">
+        <div className="dashboard-calendar-card bg-rose-950/20 border border-rose-950/40 rounded-3xl p-6 shadow-lg">
           <div className="flex justify-between items-center mb-6">
-            <button
-              onClick={() => setCurrentMonthDate(subMonths(currentMonthDate, 1))}
+              <button
+                aria-label="Mes anterior"
+                onClick={() => setCurrentMonthDate(subMonths(currentMonthDate, 1))}
               className="p-1 text-white/50 hover:text-white transition-colors rounded-full hover:bg-white/5"
             >
               <ChevronLeft size={20} />
@@ -269,8 +290,9 @@ export default function Dashboard() {
             <h3 className="text-white font-bold text-lg capitalize">
               {format(currentMonthDate, 'MMMM yyyy', { locale: es })}
             </h3>
-            <button
-              onClick={() => setCurrentMonthDate(addMonths(currentMonthDate, 1))}
+              <button
+                aria-label="Mes siguiente"
+                onClick={() => setCurrentMonthDate(addMonths(currentMonthDate, 1))}
               className="p-1 text-white/50 hover:text-white transition-colors rounded-full hover:bg-white/5"
             >
               <ChevronRight size={20} />
@@ -292,7 +314,7 @@ export default function Dashboard() {
 
             {calendarDays.map((day) => {
               let bg = 'bg-transparent';
-              let text = 'text-white/30';
+              let text = 'text-white/50';
               let border = 'border border-transparent';
               let dotColor = 'bg-rose-500';
 
@@ -309,13 +331,13 @@ export default function Dashboard() {
                 text = 'text-white/80';
                 border = 'border-white/5 hover:border-white/20';
               } else if (day.status === 'future') {
-                text = 'text-white/20';
+                text = 'text-white/50';
               }
 
               if (day.isToday && day.status !== 'success') {
                 bg = 'bg-rose-500/20';
                 border = 'border-rose-500/50';
-                text = 'text-rose-500 font-bold';
+                text = 'text-rose-300 font-bold';
               }
 
               return (
@@ -350,8 +372,8 @@ export default function Dashboard() {
       <div className="lg:col-span-8">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-8 gap-4">
           <div>
-            <h2 className="text-2xl font-bold text-rose-500 tracking-tight">Tareas de Hoy</h2>
-            <span className="text-white/50 text-sm font-medium capitalize">
+            <h1 className="text-2xl font-bold text-rose-400 tracking-tight">Tareas de Hoy</h1>
+            <span className="text-white/60 text-sm font-medium capitalize">
               {format(now, "EEEE, d 'de' MMMM", { locale: es })}
             </span>
           </div>
@@ -361,8 +383,8 @@ export default function Dashboard() {
             <button
               onClick={() => setActiveTab('plan')}
               className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === 'plan'
-                ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/20'
-                : 'text-white/50 hover:text-white hover:bg-white/5'
+                ? 'bg-rose-400 text-zinc-950 shadow-lg shadow-rose-500/20'
+                : 'text-white/60 hover:text-white hover:bg-white/5'
                 }`}
             >
               Plan Activo
@@ -370,8 +392,8 @@ export default function Dashboard() {
             <button
               onClick={() => setActiveTab('missions')}
               className={`px-6 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${activeTab === 'missions'
-                ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/20'
-                : 'text-white/50 hover:text-white hover:bg-white/5'
+                ? 'bg-rose-400 text-zinc-950 shadow-lg shadow-rose-500/20'
+                : 'text-white/60 hover:text-white hover:bg-white/5'
                 }`}
             >
               Misiones
@@ -392,9 +414,9 @@ export default function Dashboard() {
               {currentPlanName === 'Custom' ? (
                 /* PLAN CUSTOM: all goals are personal */
                 <div>
-                  <h3 className="text-sm font-bold tracking-widest text-emerald-600 dark:text-emerald-500 uppercase mb-4 opacity-80 flex items-center gap-2">
+                    <h2 className="text-sm font-bold tracking-widest text-emerald-300 uppercase mb-4 flex items-center gap-2">
                     <PlusCircle size={16} /> Metas Personalizadas
-                  </h3>
+                  </h2>
                   <div className="space-y-3">
                     {todayLog.goals.map(renderGoalItem)}
                   </div>
@@ -403,9 +425,9 @@ export default function Dashboard() {
                 <>
                   {/* TAREAS DEL PLAN BASE (Soft / Medium / Hard) */}
                   <div>
-                    <h3 className="text-sm font-bold tracking-widest text-rose-500 uppercase mb-4 opacity-80 flex items-center gap-2">
+                    <h2 className="text-sm font-bold tracking-widest text-rose-300 uppercase mb-4 flex items-center gap-2">
                       <Target size={16} /> Plan {currentPlanName}
-                    </h3>
+                      </h2>
                     <div className="space-y-3">
                       {baseGoals.length > 0 ? (
                         baseGoals.map(renderGoalItem)
@@ -420,9 +442,9 @@ export default function Dashboard() {
                   {/* METAS PERSONALIZADAS (extra goals on non-custom plans) */}
                   {customGoals.length > 0 && (
                     <div>
-                      <h3 className="text-sm font-bold tracking-widest text-emerald-600 dark:text-emerald-500 uppercase mb-4 opacity-80 flex items-center gap-2">
+                        <h2 className="text-sm font-bold tracking-widest text-emerald-300 uppercase mb-4 flex items-center gap-2">
                         <PlusCircle size={16} /> Metas Personalizadas
-                      </h3>
+                      </h2>
                       <div className="space-y-3">
                         {customGoals.map(renderGoalItem)}
                       </div>
@@ -435,9 +457,9 @@ export default function Dashboard() {
             /* TAB: MISIONES */
             <div className="animate-in fade-in slide-in-from-right-4 duration-300">
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-sm font-bold tracking-widest text-emerald-500 uppercase opacity-80 flex items-center gap-2">
+                <h2 className="text-sm font-bold tracking-widest text-emerald-300 uppercase flex items-center gap-2">
                   <Trophy size={16} /> Misiones Secundarias
-                </h3>
+                </h2>
                 <button
                   onClick={() => setIsSideQuestsModalOpen(true)}
                   className="text-xs font-bold text-rose-500 hover:text-white bg-rose-500/10 hover:bg-rose-500 transition-colors px-4 py-2 rounded-xl flex items-center gap-2"

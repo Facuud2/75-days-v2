@@ -13,7 +13,7 @@ const AUTH_ROUTES = ['/login', '/register'];
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
     const router = useRouter();
     const pathname = usePathname();
-    const { isAuthenticated, checkAuth, isLoading, user, checkOnboardingStatus } = useAuthStore();
+    const { isAuthenticated, token, checkAuth, isLoading, user, checkOnboardingStatus } = useAuthStore();
 
     // Manage hydration to prevent layout flashes
     const [isHydrated, setIsHydrated] = useState(false);
@@ -26,13 +26,13 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     }, []);
 
     useEffect(() => {
-        if (isHydrated) {
+        if (isHydrated && token) {
             checkAuth().catch(() => { });
         }
         // checkAuth is excluded intentionally: it's stable in zustand but changes reference on each render.
         // We only want to re-run this when hydration status changes.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isHydrated]);
+    }, [isHydrated, token]);
 
     // After auth resolves (user is authenticated), fetch the real onboardingCompleted value
     // directly from the DB so we don't rely on potentially stale localStorage.

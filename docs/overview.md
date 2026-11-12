@@ -51,7 +51,7 @@ El segundo mecanismo, `x-internal-api-key`, solo protege el canal dormido descri
 
 ## Persistencia
 
-Dos bases PostgreSQL independientes en el mismo servidor. `backend-core` gestiona su esquema con migraciones versionadas; `backend-health` lo hace con `db push`, sin historial. Esa asimetría es la causa de la deriva documentada en `data-model.md`.
+Dos bases PostgreSQL independientes en el mismo servidor. Ambos backends gestionan sus esquemas con migraciones versionadas; health parte de la baseline `20261111040000_init`. La deriva histórica de health queda documentada en `data-model.md`.
 
 ## Despliegue
 

@@ -50,7 +50,7 @@ Consecuencia medida en ese momento: `GET /api/quests/available` y `GET /api/user
 
 **Resuelto** con la migración `20261111031957_add_side_quest_template_and_achievement`, que crea ambas tablas, sus índices únicos y la FK a `User`. Verificado: ambos endpoints responden 200 y el catálogo de misiones tiene 3 plantillas.
 
-`backend-health` sigue sin migraciones: su esquema se aplica con `db push`. Eso significa que **no hay historial de cambios** para esa base y que un cambio de esquema puede destruir datos sin que quede registro. Es el riesgo F-21, todavía abierto.
+`backend-health` tiene ahora la migración baseline `20261111040000_init`; los cambios futuros deben generarse y aplicarse con `prisma migrate deploy`. En una base existente hay que marcar la baseline como aplicada tras comprobar que el esquema coincide.
 
 ## Estado de las bases (2026-11-11, tras F-07 y F-10)
 

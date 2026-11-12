@@ -66,4 +66,4 @@ Rarezas:
 
 ## Estado actual
 
-**Medido**: el servicio responde, valida JWT emitidos por `backend-core`, y devuelve metas por defecto, estadísticas diarias y entrenamientos del día. El catálogo tiene **51 ingredientes base** sembrados (F-10 resuelto). No tiene migraciones: el esquema se aplica con `db push`.
+**Medido**: el servicio responde, valida JWT emitidos por `backend-core`, y devuelve metas por defecto, estadísticas diarias y entrenamientos del día. El catálogo tiene **51 ingredientes base** sembrados (F-10 resuelto). El esquema se crea y actualiza mediante la baseline `20261111040000_init` y `prisma migrate deploy`.

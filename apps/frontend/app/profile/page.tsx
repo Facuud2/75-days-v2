@@ -9,7 +9,7 @@ import { healthService, DailyStats } from '@/lib/api/health';
 import { format } from 'date-fns';
 import { getLocalDateString } from '@/lib/utils/date';
 import { Trophy, Calendar, Scale, Award, Flame, Target, ChevronRight, CheckCircle2, Lock, Activity, BarChart3, Footprints, Clock, Zap, Pencil, PieChart as PieChartIcon, RefreshCw, Sun, Moon, Dumbbell, Book, Droplet, Apple } from 'lucide-react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, PieChart, Pie, Cell, Legend } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, PieChart, Pie, Cell, Legend } from 'recharts';
 import toast from 'react-hot-toast';
 import AchievementsModal from '@/components/AchievementsModal';
 import EditProfileModal from '@/components/EditProfileModal';
@@ -61,6 +61,7 @@ export default function Profile() {
   const [isLogWorkoutModalOpen, setIsLogWorkoutModalOpen] = useState(false);
   const [editingMeal, setEditingMeal] = useState<Meal | null>(null);
   const [editingWorkout, setEditingWorkout] = useState<any | null>(null);
+  const [chartsReady, setChartsReady] = useState(false);
 
   // Strava State
   const [isStravaConnected, setIsStravaConnected] = useState(false);
@@ -99,6 +100,11 @@ export default function Profile() {
     fetchQuests();
     fetchAvailableQuests();
 
+    let secondFrame = 0;
+    const firstFrame = requestAnimationFrame(() => {
+      secondFrame = requestAnimationFrame(() => setChartsReady(true));
+    });
+
     // Check for OAuth callbacks in URL
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('strava') === 'success') {
@@ -108,6 +114,10 @@ export default function Profile() {
       setAuthError('Error al conectar con Strava');
       window.history.replaceState({}, document.title, window.location.pathname);
     }
+    return () => {
+      cancelAnimationFrame(firstFrame);
+      if (secondFrame) cancelAnimationFrame(secondFrame);
+    };
   }, [fetchProfile, fetchQuests, fetchAvailableQuests]);
 
   const handleConnectStrava = async () => {
@@ -199,7 +209,7 @@ export default function Profile() {
   const level = Math.floor(points / 100) + 1;
 
   return (
-    <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 animate-in fade-in bg-zinc-950 min-h-screen text-zinc-100 font-sans">
+    <div className="profile-surface w-full max-w-7xl mx-auto space-y-4 p-3 pb-8 sm:space-y-6 sm:p-4 md:p-6 lg:p-8 animate-in fade-in bg-zinc-950 min-h-screen text-zinc-100 font-sans">
 
       {/* 1. Header Profile Card */}
       <div className="bg-zinc-900 border border-zinc-800/50 rounded-2xl p-4 md:p-6 shadow-xl flex flex-col md:flex-row items-center md:items-stretch gap-4 relative overflow-hidden">
@@ -210,7 +220,7 @@ export default function Profile() {
         <div className="flex items-center gap-4 flex-1">
           <div className="relative">
             {/* Avatar placeholder */}
-            <div className="w-16 h-16 md:w-24 md:h-24 bg-gradient-to-br from-zinc-700 to-zinc-900 border border-zinc-700 rounded-2xl flex items-center justify-center text-3xl font-bold uppercase shadow-2xl relative overflow-hidden">
+             <div className="w-16 h-16 md:w-24 md:h-24 bg-zinc-800 border border-zinc-700 rounded-2xl flex items-center justify-center text-3xl font-bold uppercase shadow-2xl relative overflow-hidden">
               {user.name.charAt(0)}
               <div className="absolute inset-0 bg-rose-500 mt-auto h-2"></div>
             </div>
@@ -230,32 +240,32 @@ export default function Profile() {
         </div>
 
         {/* Key Stats Right */}
-        <div className="grid grid-cols-5 md:flex gap-2 w-full justify-between items-stretch">
+        <div className="grid grid-cols-5 gap-1.5 w-full justify-between items-stretch sm:gap-2 md:flex">
           {/* Edit Profile Button */}
           <button
             onClick={() => setIsEditProfileModalOpen(true)}
-            className="bg-zinc-950/50 border border-zinc-800 hover:border-rose-500/50 p-2 md:p-4 rounded-xl flex flex-col items-center justify-center min-w-0 flex-1 group transition-colors cursor-pointer"
+            className="bg-zinc-950/50 border border-zinc-800 hover:border-rose-500/50 p-2 md:p-4 rounded-xl flex flex-col items-center justify-center min-w-0 flex-1 group transition-colors cursor-pointer min-h-16"
           >
             <Pencil className="w-5 h-5 text-rose-400 mb-1 group-hover:scale-110 transition-transform" />
             <span className="text-[10px] md:text-xs font-semibold group-hover:text-rose-400 transition-colors">Editar</span>
           </button>
 
-          <div className="bg-zinc-950/50 border border-zinc-800 p-2 md:p-4 rounded-xl flex flex-col items-center justify-center min-w-0 flex-1 text-center">
+          <div className="bg-zinc-950/50 border border-zinc-800 p-2 md:p-4 rounded-xl flex flex-col items-center justify-center min-w-0 flex-1 text-center min-h-16">
             <Flame className="w-5 h-5 text-orange-500 mb-1" />
             <span className="text-sm md:text-xl font-bold">{streak}</span>
             <span className="text-[10px] text-zinc-500 leading-tight">Racha</span>
           </div>
-          <div className="bg-zinc-950/50 border border-zinc-800 p-2 md:p-4 rounded-xl flex flex-col items-center justify-center min-w-0 flex-1 text-center">
+          <div className="bg-zinc-950/50 border border-zinc-800 p-2 md:p-4 rounded-xl flex flex-col items-center justify-center min-w-0 flex-1 text-center min-h-16">
             <Calendar className="w-5 h-5 text-rose-500 mb-1" />
             <span className="text-sm md:text-xl font-bold">{mockTotalDays}</span>
             <span className="text-[10px] text-zinc-500 leading-tight">Días</span>
           </div>
-          <div className="bg-zinc-950/50 border border-zinc-800 p-2 md:p-4 rounded-xl flex flex-col items-center justify-center min-w-0 flex-1 text-center">
+          <div className="bg-zinc-950/50 border border-zinc-800 p-2 md:p-4 rounded-xl flex flex-col items-center justify-center min-w-0 flex-1 text-center min-h-16">
             <Activity className="w-5 h-5 text-green-500 mb-1" />
             <span className="text-sm md:text-xl font-bold">{mockWeightLost}</span>
             <span className="text-[10px] text-zinc-500 leading-tight">Kg Menos</span>
           </div>
-          <div className="bg-zinc-950/50 border border-zinc-800 p-2 md:p-4 rounded-xl flex flex-col items-center justify-center min-w-0 flex-1 text-center">
+          <div className="bg-zinc-950/50 border border-zinc-800 p-2 md:p-4 rounded-xl flex flex-col items-center justify-center min-w-0 flex-1 text-center min-h-16">
             <Trophy className="w-5 h-5 text-yellow-500 mb-1" />
             <span className="text-sm md:text-xl font-bold">{mockChallengesCount}</span>
             <span className="text-[10px] text-zinc-500 leading-tight">X-Days</span>
@@ -269,7 +279,7 @@ export default function Profile() {
         <div className="lg:col-span-2 space-y-6">
 
           {/* Active Challenge Banner */}
-          <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6">
+          <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-4 sm:p-6">
             <div className="flex items-center gap-3 mb-4">
               <Target className="text-rose-400 w-5 h-5" />
               <h2 className="text-lg font-semibold">Desafíos</h2>
@@ -281,7 +291,7 @@ export default function Profile() {
                 <div className="absolute left-0 top-0 bottom-0 w-1 bg-rose-500"></div>
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-3">
-                    <span className="text-2xl">🔥</span>
+                     <Flame className="w-6 h-6 text-orange-400 shrink-0" aria-hidden="true" />
                     <div>
                       <div className="flex items-center gap-2">
                         <h3 className="font-bold text-lg">Desafío 75 {difficulty?.toUpperCase() || 'HARD'}</h3>
@@ -313,7 +323,7 @@ export default function Profile() {
 
             {/* Completed Challenges Grid */}
             <div className="mt-8">
-              <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-4">Completados</h3>
+              <h3 className="text-xs font-bold text-zinc-500 mb-4">Completados</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {mockCompletedChallenges.map((challenge, i) => (
                   <div key={i} className="bg-zinc-950/40 border border-zinc-800/80 rounded-xl p-4 flex flex-col justify-between hover:border-zinc-700 transition-colors">
@@ -334,7 +344,7 @@ export default function Profile() {
 
           {/* Achievements Section */}
           <div
-            className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6 cursor-pointer hover:border-zinc-700 transition-colors group relative overflow-hidden"
+            className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-4 sm:p-6 cursor-pointer hover:border-zinc-700 transition-colors group relative overflow-hidden"
             onClick={() => setIsAchievementsModalOpen(true)}
           >
             {/* Subtle interactive hover highlight */}
@@ -362,14 +372,14 @@ export default function Profile() {
               {achievementsList.slice(0, 4).map((ach) => (
                 <div key={ach.id} className={`p-4 rounded-xl border flex gap-4 ${ach.unlocked
                   ? 'bg-zinc-950/40 border-zinc-800'
-                  : 'bg-zinc-950/20 border-zinc-800/40 opacity-70'
+                   : 'bg-zinc-950/20 border-zinc-800/40'
                   }`}>
                   <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 text-xl shadow-inner ${ach.color}`}>
                     {ach.icon}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1 gap-2">
-                      <h4 className="font-semibold text-sm truncate">{ach.title}</h4>
+                       <h3 className="font-semibold text-sm truncate">{ach.title}</h3>
                       {ach.unlocked && <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />}
                     </div>
                     <p className="text-xs text-zinc-400 line-clamp-1 mb-2">{ach.description}</p>
@@ -422,7 +432,7 @@ export default function Profile() {
             <div className="space-y-8 relative z-10">
               {/* Suscribed Quests */}
               <div>
-                <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <h3 className="text-xs font-bold text-zinc-500 mb-4 flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-500/70" />
                   Mis Actividades
                 </h3>
@@ -459,7 +469,7 @@ export default function Profile() {
                               )}
                             </div>
                             <div className="flex items-center gap-3 mt-1">
-                              <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
+                              <span className="text-[10px] font-semibold text-zinc-500">
                                 Nivel: <span className={
                                   quest.difficulty === 'Easy' ? 'text-emerald-400' :
                                     quest.difficulty === 'Medium' ? 'text-amber-400' : 'text-red-400'
@@ -500,7 +510,7 @@ export default function Profile() {
 
               {/* Available Quests */}
               <div className="pt-2">
-                <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <h3 className="text-xs font-bold text-zinc-500 mb-4 flex items-center gap-2">
                   <Target className="w-4 h-4 text-rose-500/70" />
                   Nuevas Actividades Disponibles
                 </h3>
@@ -533,7 +543,7 @@ export default function Profile() {
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-start justify-between gap-2">
                                   <h4 className="font-semibold text-sm truncate text-zinc-200 group-hover:text-white transition-colors">{quest.title}</h4>
-                                  <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md shrink-0 ${quest.difficulty === 'Easy' ? 'bg-emerald-500/10 text-emerald-500' :
+                                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md shrink-0 ${quest.difficulty === 'Easy' ? 'bg-emerald-500/10 text-emerald-500' :
                                     quest.difficulty === 'Medium' ? 'bg-amber-500/10 text-amber-500' :
                                       'bg-red-500/10 text-red-500'
                                     }`}>
@@ -580,7 +590,7 @@ export default function Profile() {
                 Progreso de Peso
               </span>
               {mockBMI > 0 && (
-                <div className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${bmiCategory.bg} ${bmiCategory.color}`}>
+                <div className={`px-2.5 py-1 rounded-md text-[10px] font-bold ${bmiCategory.bg} ${bmiCategory.color}`}>
                   IMC: {mockBMI} ({bmiCategory.label})
                 </div>
               )}
@@ -592,9 +602,9 @@ export default function Profile() {
 
             {/* Dynamic Graph Line using Recharts */}
             <div className="w-full h-32 flex items-end mb-6 relative -ml-2">
-              {weightHistoryData.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={weightHistoryData} margin={{ top: 5, right: 0, left: -25, bottom: 0 }}>
+              {weightHistoryData.length > 0 && chartsReady ? (
+                <div className="w-full overflow-hidden">
+                  <AreaChart width={320} height={128} data={weightHistoryData} margin={{ top: 5, right: 0, left: -25, bottom: 0 }}>
                     <defs>
                       <linearGradient id="colorWeight" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="var(--color-rose-500)" stopOpacity={0.3} />
@@ -614,7 +624,7 @@ export default function Profile() {
                     )}
                     <Area type="monotone" dataKey="weight" name="Peso (kg)" stroke="var(--color-rose-500)" strokeWidth={3} fillOpacity={1} fill="url(#colorWeight)" activeDot={{ r: 6, fill: 'var(--color-rose-500)', stroke: '#18181b', strokeWidth: 2 }} />
                   </AreaChart>
-                </ResponsiveContainer>
+                </div>
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-zinc-500 text-xs text-center px-4">
                   Registra tu peso diariamente para ver tu progreso aquí.
@@ -685,11 +695,11 @@ export default function Profile() {
 
                 {/* Macros Donut Chart */}
                 <div className="pt-2">
-                  <h4 className="text-xs font-semibold text-zinc-400 mb-2 uppercase tracking-wider text-center">Macronutrientes</h4>
-                  {hasMacros ? (
+                  <h4 className="text-xs font-semibold text-zinc-400 mb-2 text-center">Macronutrientes</h4>
+                   {hasMacros && chartsReady ? (
                     <div className="h-48 relative">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
+                      <div className="w-full flex justify-center overflow-hidden">
+                        <PieChart width={240} height={192}>
                           <Pie
                             data={macrosData}
                             cx="50%"
@@ -711,10 +721,10 @@ export default function Profile() {
                           />
                           <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
                         </PieChart>
-                      </ResponsiveContainer>
+                      </div>
                       {/* Center absolute text */}
                       <div className="absolute inset-0 flex items-center justify-center pointer-events-none pb-8 text-center pt-[15px]">
-                        <span className="text-lg font-bold text-zinc-300">{(macrosData[0].value * 4 + macrosData[1].value * 4 + macrosData[2].value * 9).toFixed(0)} <br /><span className="text-[10px] uppercase tracking-wide text-zinc-500 font-medium">kcal</span></span>
+                        <span className="text-lg font-bold text-zinc-300">{(macrosData[0].value * 4 + macrosData[1].value * 4 + macrosData[2].value * 9).toFixed(0)} <br /><span className="text-[10px] text-zinc-500 font-medium">kcal</span></span>
                       </div>
                     </div>
                   ) : (
@@ -726,7 +736,7 @@ export default function Profile() {
 
                 {/* Registered Meals Feed */}
                 <div className="pt-2 border-t border-zinc-800/80">
-                  <h4 className="text-xs font-semibold text-zinc-400 mb-3 uppercase tracking-wider">Últimas Comidas</h4>
+                  <h4 className="text-xs font-semibold text-zinc-400 mb-3">Últimas Comidas</h4>
 
                   {(!dailyStats.meals || dailyStats.meals.length === 0) ? (
                     <div className="text-center text-xs text-zinc-500 py-4 bg-zinc-950/30 rounded-lg">
@@ -820,7 +830,7 @@ export default function Profile() {
               ) : null}
 
               <div className="pt-2 border-t border-zinc-800/80">
-                <h4 className="text-xs font-semibold text-zinc-400 mb-3 uppercase tracking-wider">Historial Reciente</h4>
+                <h4 className="text-xs font-semibold text-zinc-400 mb-3">Historial Reciente</h4>
                 {!recentWorkouts || recentWorkouts.length === 0 ? (
                   <div className="text-center text-xs text-zinc-500 py-4 bg-zinc-950/30 rounded-lg">
                     No hay entrenamientos registrados recientemente.

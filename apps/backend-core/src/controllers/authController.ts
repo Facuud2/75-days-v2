@@ -5,8 +5,8 @@ import { z } from 'zod';
 import { prisma } from '../utils/prisma';
 import { AuthRequest } from '../middlewares/auth';
 import { format } from 'date-fns';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_key_change_me_in_prod';
+import { config } from '../config';
+import { DEFAULT_GOALS } from '../constants/defaultGoals';
 
 const registerSchema = z.object({
     name: z.string().min(2),
@@ -19,28 +19,6 @@ const registerSchema = z.object({
         icon: z.string().optional()
     })).optional()
 });
-
-const DEFAULT_GOALS = {
-    Soft: [
-        { title: 'Agua (2L)', description: 'Beber al menos 2 litros de agua.', icon: 'droplet' },
-        { title: 'Lectura (10 págs)', description: 'Leer 10 páginas de un libro.', icon: 'book' },
-        { title: 'Entrenamiento', description: '30 minutos de actividad física.', icon: 'dumbbell' }
-    ],
-    Medium: [
-        { title: 'Agua (3L)', description: 'Beber al menos 3 litros de agua.', icon: 'droplet' },
-        { title: 'Lectura (10 págs)', description: 'Leer 10 páginas de un libro.', icon: 'book' },
-        { title: 'Entrenamiento', description: '45 minutos de actividad física.', icon: 'dumbbell' },
-        { title: 'Dieta', description: 'Seguir una dieta saludable.', icon: 'utensils' }
-    ],
-    Hard: [
-        { title: 'Dieta Estricta', description: 'Seguir una dieta sin comidas trampa ni alcohol.', icon: 'utensils' },
-        { title: 'Primer Entrenamiento', description: '45 minutos de actividad física.', icon: 'dumbbell' },
-        { title: 'Segundo Entrenamiento', description: '45 minutos, debe ser al aire libre.', icon: 'sun' },
-        { title: 'Agua (3.7L)', description: 'Beber un galón (aprox. 3.7 litros) de agua.', icon: 'droplet' },
-        { title: 'Lectura (10 págs)', description: 'Leer 10 páginas de un libro de no ficción.', icon: 'book' },
-        { title: 'Foto de Progreso', description: 'Tomar una foto de progreso diaria.', icon: 'camera' }
-    ],
-};
 
 export const register = async (req: Request, res: Response) => {
     try {
@@ -104,7 +82,7 @@ export const register = async (req: Request, res: Response) => {
             return { newUser, challenge };
         });
 
-        const token = jwt.sign({ id: user.newUser.id }, JWT_SECRET, { expiresIn: '7d' });
+        const token = jwt.sign({ id: user.newUser.id }, config.jwtSecret, { expiresIn: '7d' });
 
         res.status(201).json({
             token,
@@ -145,7 +123,7 @@ export const login = async (req: Request, res: Response) => {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
 
-        const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '7d' });
+        const token = jwt.sign({ id: user.id }, config.jwtSecret, { expiresIn: '7d' });
 
         res.json({
             token,

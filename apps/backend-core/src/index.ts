@@ -1,7 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
-dotenv.config();
+import './config';
 
 import authRoutes from './routes/auth';
 import challengeRoutes from './routes/challenges';
@@ -11,8 +10,12 @@ import usersRoutes from './routes/users';
 
 const app = express();
 const port = process.env.PORT || 3001;
+const allowedOrigins = (process.env.FRONTEND_URL || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
 
-app.use(cors());
+app.use(cors({ origin: allowedOrigins.length > 0 ? allowedOrigins : false }));
 app.use(express.json());
 
 app.get('/health', (req, res) => {

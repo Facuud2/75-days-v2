@@ -349,7 +349,7 @@ export default function EditProfileModal({
                     <button
                         onClick={handleSave}
                         disabled={saving}
-                        className="flex items-center gap-2 px-5 py-2 bg-rose-600 hover:bg-rose-500 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-60 disabled:cursor-not-allowed shadow-lg shadow-rose-900/30"
+                        className="flex items-center gap-2 px-5 py-2 bg-rose-400 hover:bg-rose-300 text-zinc-950 text-sm font-semibold rounded-xl transition-colors disabled:opacity-60 disabled:cursor-not-allowed shadow-lg shadow-rose-900/30"
                     >
                         {saving
                             ? <><Loader2 className="w-4 h-4 animate-spin" /> Guardando...</>

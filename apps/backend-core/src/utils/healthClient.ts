@@ -10,7 +10,7 @@
  */
 
 const HEALTH_SERVICE_URL = process.env.HEALTH_SERVICE_URL || 'http://localhost:3002';
-const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY || '';
+import { config } from '../config';
 
 export interface HealthDaySummary {
     userId: string;
@@ -41,7 +41,7 @@ export async function getDailyHealthSummary(
 
     const response = await fetch(url, {
         headers: {
-            'x-internal-api-key': INTERNAL_API_KEY,
+            'x-internal-api-key': config.internalApiKey,
             'Content-Type': 'application/json',
         },
     });

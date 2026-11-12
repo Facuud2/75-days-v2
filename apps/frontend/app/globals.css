@@ -68,6 +68,8 @@ html[data-appearance="dark"] {
   --bg-surface: #0f0f0f;
   --text-base: #f4f4f5;
   --text-muted: #a1a1aa;
+  --color-text-muted: #a1a1aa;
+  --color-text-secondary: #d4d4d8;
   /* Zinc defaults are already dark — no overrides needed */
 }
 
@@ -77,6 +79,8 @@ html[data-appearance="light"] {
   --bg-surface: #ffffff;
   --text-base: #1e1f22;
   --text-muted: #6b7280;
+  --color-text-muted: #52525b;
+  --color-text-secondary: #3f3f46;
 
   /* ── Invert zinc surface shades (dark bg → light bg) ─────────────────── */
   --color-zinc-950: oklch(0.96 0.002 286);
@@ -105,6 +109,24 @@ html[data-appearance="light"] {
   /* ── white becomes dark primary text in light mode ───────────────────── */
   /* text-white, border-white/N, bg-white/N all become dark automatically  */
   --color-white: oklch(0.13 0.003 286);
+}
+
+/* Semantic text roles for dense profile/settings surfaces. The rose/neon
+   identity stays intact; muted content uses measured neutral pairs instead of
+   inheriting low-opacity white or zinc-500 text. */
+.text-ui-muted {
+  color: var(--color-text-muted);
+}
+
+.text-ui-secondary {
+  color: var(--color-text-secondary);
+}
+
+.profile-surface .text-zinc-500,
+.profile-surface .text-zinc-600,
+.settings-surface .text-zinc-500,
+.settings-surface .text-zinc-600 {
+  color: var(--color-text-muted) !important;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -177,4 +199,114 @@ input[type="number"]::-webkit-inner-spin-button {
 input[type="number"] {
   -moz-appearance: textfield;
   appearance: textfield;
+}
+
+/* ── Mobile platform baseline ─────────────────────────────────────────────── */
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior: none;
+}
+
+body {
+  min-height: 100dvh;
+  overscroll-behavior: none;
+}
+
+button,
+a,
+[role="button"] {
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.app-shell {
+  min-height: 100dvh;
+}
+
+.app-header {
+  padding-top: max(1rem, env(safe-area-inset-top, 0px));
+}
+
+.app-main {
+  padding-bottom: 1.5rem;
+}
+
+.mobile-bottom-nav {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
+  min-height: calc(4.25rem + env(safe-area-inset-bottom, 0px));
+  backdrop-filter: blur(20px) saturate(140%);
+  background-color: color-mix(in srgb, var(--color-zinc-950) 88%, transparent);
+}
+
+@media (max-width: 1023px) {
+  .app-main {
+    padding-bottom: calc(6rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .dashboard-calendar-card {
+    display: none;
+  }
+
+  .app-nav > a,
+  .app-nav > button[aria-label="Abrir acciones rápidas"] {
+    display: none;
+  }
+}
+
+.quick-actions-overlay {
+  animation: quick-actions-fade-in 180ms ease-out both;
+}
+
+.quick-actions-sheet {
+  animation: quick-actions-sheet-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  touch-action: pan-y;
+}
+
+@keyframes quick-actions-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes quick-actions-sheet-in {
+  from { opacity: 0; transform: translateY(100%); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .quick-action-item:hover {
+    background-color: color-mix(in srgb, var(--color-rose-500) 12%, transparent);
+  }
+}
+
+input,
+textarea,
+select {
+  touch-action: manipulation;
+}
+
+@media (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .quick-actions-overlay,
+  .quick-actions-sheet {
+    animation: none !important;
+  }
 }

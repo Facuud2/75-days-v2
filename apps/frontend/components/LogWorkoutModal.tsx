@@ -59,6 +59,15 @@ export default function LogWorkoutModal({ isOpen, onClose, date, onSaved, initia
         }
     }, [isOpen, initialData]);
 
+    React.useEffect(() => {
+        if (!isOpen) return;
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') onClose();
+        };
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, [isOpen, onClose]);
+
     if (!isOpen) return null;
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -113,25 +122,26 @@ export default function LogWorkoutModal({ isOpen, onClose, date, onSaved, initia
     };
 
     return (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-zinc-950 border border-zinc-800 w-full max-w-md rounded-2xl overflow-hidden shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-end justify-center sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="workout-modal-title">
+            <div className="bg-zinc-950 border border-zinc-800 w-full max-w-md rounded-t-[2rem] sm:rounded-2xl overflow-hidden shadow-2xl relative animate-in fade-in zoom-in-95 duration-200 max-h-[92dvh] sm:max-h-none">
 
                 {/* Header */}
-                <div className="flex items-center justify-between p-5 border-b border-zinc-900 bg-zinc-900/50">
-                    <h2 className="text-lg font-bold flex items-center gap-2">
+                <div className="flex items-center justify-between p-4 sm:p-5 border-b border-zinc-900 bg-zinc-900/50">
+                    <h2 id="workout-modal-title" className="text-lg font-bold flex items-center gap-2">
                         <Footprints className="w-5 h-5 text-[#fc4c02]" />
                         {initialData ? 'Editar Actividad' : 'Registrar Actividad'}
                     </h2>
                     <button
+                        aria-label="Cerrar registro de entrenamiento"
                         onClick={onClose}
-                        className="p-1.5 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white transition-colors"
+                        className="p-1.5 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300"
                     >
                         <X className="w-5 h-5" />
                     </button>
                 </div>
 
                 {/* Form Body */}
-                <div className="p-5 max-h-[75vh] overflow-y-auto">
+                <div className="p-4 sm:p-5 max-h-[70dvh] sm:max-h-[75vh] overflow-y-auto overscroll-contain">
                     {error && (
                         <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 text-red-500 rounded-lg text-sm text-center">
                             {error}
@@ -142,7 +152,7 @@ export default function LogWorkoutModal({ isOpen, onClose, date, onSaved, initia
 
                         {/* Sport Select */}
                         <div>
-                            <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5 ml-1">
+                            <label className="block text-xs font-semibold text-zinc-400 mb-1.5 ml-1">
                                 Deporte
                             </label>
                             <div className="relative">
@@ -161,10 +171,10 @@ export default function LogWorkoutModal({ isOpen, onClose, date, onSaved, initia
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             {/* Duration */}
                             <div>
-                                <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5 ml-1">
+                                <label className="block text-xs font-semibold text-zinc-400 mb-1.5 ml-1">
                                     Duración (min)
                                 </label>
                                 <div className="relative">
@@ -184,7 +194,7 @@ export default function LogWorkoutModal({ isOpen, onClose, date, onSaved, initia
 
                             {/* Intensity */}
                             <div>
-                                <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5 ml-1">
+                                <label className="block text-xs font-semibold text-zinc-400 mb-1.5 ml-1">
                                     Intensidad
                                 </label>
                                 <select
@@ -202,10 +212,10 @@ export default function LogWorkoutModal({ isOpen, onClose, date, onSaved, initia
                         {/* Optional Fields Toggle Area */}
                         <div className="pt-2 border-t border-zinc-900/50 space-y-4">
 
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                 {/* Calories Override */}
                                 <div>
-                                    <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5 ml-1 flex items-center justify-between">
+                                    <label className="block text-xs font-semibold text-zinc-400 mb-1.5 ml-1 flex items-center justify-between">
                                         <span>Calorías (Opcional)</span>
                                     </label>
                                     <div className="relative">
@@ -226,7 +236,7 @@ export default function LogWorkoutModal({ isOpen, onClose, date, onSaved, initia
                                 {/* Distance */}
                                 {sport !== 'strength' && sport !== 'yoga' && (
                                     <div>
-                                        <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5 ml-1 flex items-center justify-between">
+                                        <label className="block text-xs font-semibold text-zinc-400 mb-1.5 ml-1 flex items-center justify-between">
                                             <span>Distancia (km) (Opcional)</span>
                                         </label>
                                         <input
@@ -244,7 +254,7 @@ export default function LogWorkoutModal({ isOpen, onClose, date, onSaved, initia
 
                             {/* Notes */}
                             <div>
-                                <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5 ml-1">
+                                <label className="block text-xs font-semibold text-zinc-400 mb-1.5 ml-1">
                                     Notas
                                 </label>
                                 <textarea
@@ -261,7 +271,7 @@ export default function LogWorkoutModal({ isOpen, onClose, date, onSaved, initia
                 </div>
 
                 {/* Footer */}
-                <div className="p-5 border-t border-zinc-900 bg-zinc-900/50 flex gap-3">
+                <div className="p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] sm:p-5 border-t border-zinc-900 bg-zinc-900/50 flex gap-3">
                     {initialData && (
                         <button
                             type="button"

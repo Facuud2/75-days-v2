@@ -71,10 +71,10 @@ Monorepo sin workspace manager (`turbo.json`/`pnpm-workspace.yaml`/`nx.json` aus
 
 ## CI/CD
 
-- **Plataforma**: ninguna. Sin `.github/workflows/`, sin `.gitlab-ci.yml`, sin `Jenkinsfile`.
-- **Cuándo corren los tests**: nunca.
-- **Qué bloquea un deploy**: nada. El despliegue es manual.
-- **Artefactos**: ninguno.
+- **Plataforma**: GitHub Actions (`.github/workflows/ci.yml`).
+- **Cuándo corren los tests**: todavía no hay tests; el pipeline ejecuta lint, typecheck, Prisma validate y build en cada PR/push a `main`.
+- **Qué bloquea un deploy**: el pipeline bloquea cambios con errores de lint, typecheck, validación Prisma o build; falta incorporar el gate de tests.
+- **Artefactos**: ninguno todavía.
 
 ## Environments
 

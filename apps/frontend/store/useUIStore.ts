@@ -1,6 +1,9 @@
 import { create } from 'zustand';
 
 interface UIState {
+  isQuickActionsOpen: boolean;
+  openQuickActions: () => void;
+  closeQuickActions: () => void;
   isPlansModalOpen: boolean;
   openPlansModal: () => void;
   closePlansModal: () => void;
@@ -13,6 +16,9 @@ interface UIState {
 }
 
 export const useUIStore = create<UIState>((set) => ({
+  isQuickActionsOpen: false,
+  openQuickActions: () => set({ isQuickActionsOpen: true }),
+  closeQuickActions: () => set({ isQuickActionsOpen: false }),
   isPlansModalOpen: false,
   openPlansModal: () => set({ isPlansModalOpen: true }),
   closePlansModal: () => set({ isPlansModalOpen: false }),

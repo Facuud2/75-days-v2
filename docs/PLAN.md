@@ -51,11 +51,12 @@ Al cerrar la Fase 1 el sistema:
 
 - [x] **2.2 — Detectar y cerrar cualquier otra deriva.** *(hecho 2026-11-11)*
   `npx prisma migrate diff --from-schema-datasource --to-schema-datamodel` sobre core y health. Si hay diferencias, generar migración.
-  *Aceptación cumplida*: diff vacío en core (\"This is an empty migration\"). Health sigue con `db push` hasta la tarea 2.3.
+   *Aceptación cumplida*: diff vacío en core (\"This is an empty migration\"). Health quedó cubierto por la tarea 2.3 con una baseline versionada.
 
-- [ ] **2.3 — Convertir `backend-health` a migraciones versionadas.**
+- [x] **2.3 — Convertir `backend-health` a migraciones versionadas.** *(hecho 2026-11-11)*
   Baseline: `npx prisma migrate diff --from-empty --to-schema-datamodel --script > prisma/migrations/0001_init/migration.sql`, marcar como aplicada con `prisma migrate resolve --applied`, y desde ahí usar solo `migrate deploy`.
-  *Aceptación*: `prisma/migrations/` existe en health; el compose usa `migrate deploy` en ambos.
+   Migración baseline `20261111040000_init`; el compose, README y guía de producción usan `migrate deploy` en ambos servicios. En una base health existente se debe ejecutar una vez `npx prisma migrate resolve --applied 20261111040000_init` después de comprobar que su esquema coincide con el baseline.
+   *Aceptación*: `prisma/migrations/` existe en health; el compose usa `migrate deploy` en ambos.
 
 - [x] **2.4 — Sembrar ingredientes base.** *(hecho 2026-11-11)*
   Catálogo de **51 alimentos comunes** con macros por 100 g en `backend-health/prisma/seed.ts`. Seed idempotente (upsert por nombre). Script `npm run db:seed` en ambos backends, ejecutado en el arranque del compose.
@@ -75,8 +76,8 @@ Al cerrar la Fase 1 el sistema:
 - [ ] **2.7 — Unificar las metas por defecto (F-02).**
   Extraer el catálogo a un único módulo compartido y hacer que registro y `start` usen la misma fuente. Verificar cuál de las dos versiones es la correcta **antes** de unificar (requiere decisión del dueño).
 
-- [ ] **2.8 — Sanear la configuración.**
-  Eliminar knobs muertos (`FRONTEND_URL` en core, `NODE_ENV` en health, `APP_URL` en frontend). Quitar el fallback hardcodeado de `JWT_SECRET` (F-12): fallar al arrancar si falta. Cargar la configuración en un módulo que se importe primero (F-11).
+- [ ] **2.8 — Sanear la configuración.** *(parcial: secretos resuelto 2026-11-11)*
+   Eliminar knobs muertos (`FRONTEND_URL` en core, `NODE_ENV` en health, `APP_URL` en frontend). El fallback hardcodeado de `JWT_SECRET` ya fue eliminado (F-12): ambos backends fallan al arrancar si faltan `JWT_SECRET` o `INTERNAL_API_KEY`, mediante módulos de configuración cargados antes de los routers (F-11).
 
 - [x] **2.9 — Persistir el ancla del reto (F-36).** *(hecho 2026-11-11)*
   Incluir `startDate` y `difficulty` en el `partialize` de `challenge-storage`, o dejar de persistir el reto y pedirlo siempre al backend. Verificar que `/calendar` y el dashboard funcionen tras un reload con storage limpio.
@@ -155,7 +156,7 @@ Al cerrar la Fase 1 el sistema:
 
 ## 6. Fase 6 — CI/CD y calidad continua
 
-- [ ] **6.1 — Pipeline base (GitHub Actions).** Lint + typecheck + tests + build en cada PR, con Postgres de servicio.
+- [ ] **6.1 — Pipeline base (GitHub Actions).** *(parcial: lint, typecheck, Prisma validate y build añadidos 2026-11-11)* Lint + typecheck + tests + build en cada PR, con Postgres de servicio. Falta incorporar tests cuando se complete la Fase 3.
 - [ ] **6.2 — Gates.** Cobertura con ratchet (nunca baja), migraciones verificadas, `openapi` sin diff inesperado.
 - [ ] **6.3 — Entornos.** Per-PR con base efímera; staging con datos sintéticos.
 - [ ] **6.4 — Imágenes.** Dockerfiles multi-stage reales (hoy el compose corre `node:22` con el código montado).
@@ -170,8 +171,8 @@ Al cerrar la Fase 1 el sistema:
 Ordenado por riesgo real, no por checklist.
 
 - [ ] **7.1** Quitar el fallback de `JWT_SECRET` y fallar al arrancar (F-12).
-- [ ] **7.2** Cerrar CORS a los orígenes conocidos (F-13).
-- [ ] **7.3** Rate limiting en login y registro; bloqueo por intentos (F-29).
+- [x] **7.2** Cerrar CORS a los orígenes conocidos (F-13). *(hecho 2026-11-11)* `FRONTEND_URL` acepta una lista separada por comas; si no está configurado, no se permiten orígenes de navegador.
+- [x] **7.3** Rate limiting en login y registro; bloqueo por intentos (F-29). *(hecho 2026-11-11)* Ventana de 15 minutos, máximo 10 solicitudes por IP y respuesta 429.
 - [ ] **7.4** Política de contraseñas y hash con costo revisado (F-30).
 - [ ] **7.5** Strava: `state` aleatorio de un solo uso; cifrar tokens en reposo; endpoint de desconexión (F-14, F-15).
 - [ ] **7.6** Escaneo de dependencias (OSV-Scanner) y SAST (Semgrep) en CI.
@@ -207,7 +208,7 @@ Decisiones de producto pendientes del dueño. Cada una requiere definir el compo
 | P0 | Persistir `startDate`/`difficulty` (F-36) | 2.9 | S |
 | P1 | Unificar los dos stores de misiones (F-42) | 2.10 | M |
 | P1 | Bugs visibles del frontend (F-37…F-47) | 2.11 | M |
-| P1 | Migraciones en health (F-21) | 2.3 | M |
+| P1 | Migraciones en health (F-21) | 2.3 | ✅ |
 | P1 | Quitar fallback de JWT (F-12) | 2.8 | S |
 | P1 | Unificar metas por defecto (F-02) | 2.7 | S |
 | P1 | Validación `Custom` en registro (F-01) | 2.6 | ✅ |
@@ -297,3 +298,4 @@ docker exec 75days-postgres pg_dump -U dev 75days_health > health.sql
 | 2026-11-11 | F-03 resuelto: advisory lock por día; concurrencia e invariante de puntos/racha verificados |
 | 2026-11-11 | 2.9–2.11 resueltas: persistencia del reto, misiones unificadas, guardas, fechas locales, dark mode, caminatas y calendario |
 | 2026-11-11 | Build de producción frontend OK; dev (3000), producción (3003), core (3001) y health (3002) responden 200 |
+| 2026-11-11 | `backend-health` pasa de `db push` a baseline `20261111040000_init`; compose y guía de producción usan `migrate deploy` |

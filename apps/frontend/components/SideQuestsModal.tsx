@@ -110,7 +110,7 @@ export default function SideQuestsModal({ onClose }: SideQuestsModalProps) {
                                         <button
                                             onClick={() => handleSubscribe(quest)}
                                             disabled={subscribingTo !== null}
-                                            className="w-full py-3 rounded-xl font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-rose-500 bg-rose-500 text-white hover:bg-rose-600 hover:border-rose-600 shadow-[0_0_20px_-5px_var(--color-rose-500)] flex items-center justify-center gap-2"
+                                            className="w-full py-3 rounded-xl font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-rose-400 bg-rose-400 text-zinc-950 hover:bg-rose-300 hover:border-rose-300 shadow-[0_0_20px_-5px_var(--color-rose-500)] flex items-center justify-center gap-2"
                                         >
                                             {subscribingTo === quest.title ? (
                                                 <div className="w-5 h-5 rounded-full border-2 border-white/20 border-t-white animate-spin" />

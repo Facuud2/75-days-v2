@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUIStore } from '@/store/useUIStore';
 import { useChallengeStore, Difficulty } from '@/store/useChallengeStore';
@@ -35,14 +35,14 @@ export const PLANS: {
       difficulty: 'Medium',
       title: 'Medium Challenge',
       description: 'Versión intermedia con desafíos balanceados',
-      color: 'text-purple-400',
-      borderColor: 'border-purple-500',
-      glowColor: 'shadow-purple-500/20',
+      color: 'text-rose-300',
+      borderColor: 'border-rose-400',
+      glowColor: 'shadow-rose-500/20',
       tasks: [
-        { icon: <Utensils className="w-3.5 h-3.5 text-purple-400" />, label: 'Dieta saludable (Sin alcohol)' },
-        { icon: <Dumbbell className="w-3.5 h-3.5 text-purple-400" />, label: 'Ejercicio 45 min' },
-        { icon: <Star className="w-3.5 h-3.5 text-purple-400" />, label: 'Leer 10 páginas' },
-        { icon: <ClipboardList className="w-3.5 h-3.5 text-purple-400" />, label: '3-4 fotos de progreso/sem' },
+        { icon: <Utensils className="w-3.5 h-3.5 text-rose-300" />, label: 'Dieta saludable (Sin alcohol)' },
+        { icon: <Dumbbell className="w-3.5 h-3.5 text-rose-300" />, label: 'Ejercicio 45 min' },
+        { icon: <Star className="w-3.5 h-3.5 text-rose-300" />, label: 'Leer 10 páginas' },
+        { icon: <ClipboardList className="w-3.5 h-3.5 text-rose-300" />, label: '3-4 fotos de progreso/sem' },
       ],
     },
     {
@@ -88,6 +88,15 @@ export default function PlansModal() {
   const onboardingCompleted = user?.onboardingCompleted === true;
   const PREVIEW_COUNT = 3;
 
+  useEffect(() => {
+    if (!isPlansModalOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closePlansModal();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isPlansModalOpen, closePlansModal]);
+
   if (!isPlansModalOpen) return null;
 
   const handleStart = () => {
@@ -111,6 +120,9 @@ export default function PlansModal() {
     >
       <div
         className="bg-zinc-950 border border-white/10 rounded-2xl w-full max-w-5xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] animate-in slide-in-from-bottom-4 duration-300"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="plans-modal-title"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -119,11 +131,12 @@ export default function PlansModal() {
             <div className="w-8 h-8 rounded-lg bg-rose-500/20 flex items-center justify-center">
               <Target className="text-rose-500 w-4 h-4" />
             </div>
-            <h2 className="text-xl font-bold text-white tracking-tight">Seleccionar Plan de Desafío</h2>
+            <h2 id="plans-modal-title" className="text-xl font-bold text-white tracking-tight">Seleccionar Plan de Desafío</h2>
           </div>
           <button
+            aria-label="Cerrar selección de plan"
             onClick={closePlansModal}
-            className="text-white/40 hover:text-white transition-colors p-2 rounded-lg hover:bg-white/5"
+            className="text-white/60 hover:text-white transition-colors p-2 rounded-lg hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300"
           >
             <X size={20} />
           </button>
@@ -251,7 +264,7 @@ export default function PlansModal() {
             {onboardingCompleted && (
               <button
                 onClick={handleStart}
-                className="px-6 py-2.5 bg-rose-500 text-white rounded-xl font-bold text-sm hover:bg-rose-600 transition-all shadow-[0_0_15px_rgba(244,63,94,0.25)] hover:shadow-[0_0_20px_rgba(244,63,94,0.4)]"
+                 className="px-6 py-2.5 bg-rose-400 text-zinc-950 rounded-xl font-bold text-sm hover:bg-rose-300 transition-colors shadow-[0_0_15px_rgba(244,63,94,0.25)] hover:shadow-[0_0_20px_rgba(244,63,94,0.4)]"
               >
                 {isActive ? 'Reiniciar Desafío' : 'Comenzar Desafío'}
               </button>

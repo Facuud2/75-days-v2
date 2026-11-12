@@ -16,9 +16,9 @@ Notas para el dueño. No son un plan de trabajo ni una auditoría de severidad: 
 | **F-06** | El "peso actual" del perfil es el **mejor** peso registrado, no el último. | `userController.ts:150` (`currentWeight: bestWeight`) | Semántica confusa |
 | **F-08** | Express 4 sin manejo de errores async: si Prisma falla en nutrición, workouts, custom foods o stats, la petición queda colgada (no responde 500). | `apps/backend-health/src/controllers/nutritionController.ts` (sin try/catch), `index.ts` (sin error handler) | Bug latente |
 | **F-03** | Puntos y racha se calculan con lectura + escritura no atómica. Dos marcas concurrentes pueden perder una actualización. | `logController.ts:73-92` | **Resuelto 2026-11-11** — advisory lock por día |
-| **F-11** | `JWT_SECRET` e `INTERNAL_API_KEY` se leen en constantes de módulo antes de `dotenv.config()`. Funciona por efecto colateral de Prisma cargando `dotenv`; depende del orden de imports. | `apps/backend-core/src/middlewares/auth.ts:4`, `apps/backend-health/src/middlewares/internalAuth.ts:3` | Fragilidad |
-| **F-12** | `JWT_SECRET` tiene un fallback hardcodeado idéntico en tres archivos. Si falta el env, la app arranca con un secreto público. | `backend-core/src/middlewares/auth.ts:4`, `backend-core/src/controllers/authController.ts:9`, `backend-health/src/middlewares/auth.ts:4` | Seguridad |
-| **F-13** | CORS abierto (`cors()` sin `origin`) en ambos servicios. | `backend-core/src/index.ts:17`, `backend-health/src/index.ts:19` | Seguridad |
+| **F-11** | `JWT_SECRET` e `INTERNAL_API_KEY` se leen en constantes de módulo antes de `dotenv.config()`. Funciona por efecto colateral de Prisma cargando `dotenv`; depende del orden de imports. | `apps/backend-core/src/middlewares/auth.ts:4`, `apps/backend-health/src/middlewares/internalAuth.ts:3` | **Resuelto 2026-11-11** — módulos `config.ts` cargan dotenv y validan antes de exportar secretos |
+| **F-12** | `JWT_SECRET` tiene un fallback hardcodeado idéntico en tres archivos. Si falta el env, la app arranca con un secreto público. | `backend-core/src/middlewares/auth.ts`, `backend-health/src/middlewares/auth.ts` | **Resuelto 2026-11-11** — falta de secreto detiene el arranque |
+| **F-13** | CORS abierto (`cors()` sin `origin`) en ambos servicios. | `backend-core/src/index.ts`, `backend-health/src/index.ts` | **Resuelto 2026-11-11** — orígenes explícitos desde `FRONTEND_URL` |
 | **F-14** | El `state` OAuth de Strava es el `userId` en claro: no protege CSRF en el callback. | `apps/backend-health/src/controllers/stravaController.ts:25,46` | Seguridad |
 | **F-15** | Tokens de Strava guardados en claro en la base. | `apps/backend-health/prisma/schema.prisma:23-26` | Seguridad |
 | **F-16** | `stravaController` instancia su propio `PrismaClient` en vez de usar el singleton. | `apps/backend-health/src/controllers/stravaController.ts:7` | Deuda |
@@ -27,7 +27,7 @@ Notas para el dueño. No son un plan de trabajo ni una auditoría de severidad: 
 | **F-18** | `challengesCompleted` nunca se incrementa; el logro "Disciplina" nunca puede desbloquearse. | `userController.ts:47` lee el campo; ningún `update` lo escribe | Bug funcional |
 | **F-19** | `console.log("HITTING AVAILABLE QUESTS")` en cada request del catálogo de misiones. | `apps/backend-core/src/controllers/questController.ts:22` | Limpieza |
 | **F-20** | No hay tests. `npm test` devuelve error explícito. | `apps/backend-core/package.json:6`, `backend-health` sin script | Bloqueante para migrar |
-| **F-21** | `backend-health` no tiene migraciones: esquema aplicado con `db push`, sin historial. | ausencia de `prisma/migrations` en health | Riesgo |
+| **F-21** | `backend-health` no tiene migraciones: esquema aplicado con `db push`, sin historial. | ausencia de `prisma/migrations` en health | **Resuelto 2026-11-11** — baseline `20261111040000_init`; nuevos arranques usan `migrate deploy` |
 | **F-22** | `externalId` de `WorkoutEntry` es único global, no por usuario. | `apps/backend-health/prisma/schema.prisma:64` | Modelo |
 | **F-23** | El balance neto resta lo quemado, pero "restante para la meta" no lo descuenta. Dos criterios en la misma respuesta. | `apps/backend-health/src/controllers/statsController.ts:34-42` | Semántica |
 | **F-24** | `date` es `String` sin validación de formato en los endpoints de logs de core (health sí valida). | `logController.ts:36,125` | Validación |
@@ -35,7 +35,7 @@ Notas para el dueño. No son un plan de trabajo ni una auditoría de severidad: 
 | **F-26** | `FRONTEND_URL` está en el `.env` de core pero ningún archivo de core la lee. | búsqueda de `process.env.FRONTEND_URL` | Knob muerto |
 | **F-27** | `NODE_ENV` está en el `.env` de health pero nadie lo lee. | búsqueda de `process.env.NODE_ENV` | Knob muerto |
 | **F-28** | `APP_URL` está en el `.env.example` del frontend sin referencias en el código. | búsqueda de `APP_URL` | Knob muerto |
-| **F-29** | No hay rate limiting en login ni registro. | `apps/backend-core/src/routes/auth.ts` | Seguridad |
+| **F-29** | No hay rate limiting en login ni registro. | `apps/backend-core/src/routes/auth.ts` | **Resuelto 2026-11-11** — límite de 10 solicitudes por IP cada 15 minutos |
 | **F-30** | El registro permite contraseñas de 6 caracteres y no exige complejidad. | `apps/backend-core/src/controllers/authController.ts:12` | Seguridad |
 | **F-31** | El perfil perdía también salud/Strava si fallaba `getProfile`. | `apps/frontend/app/profile/page.tsx` | **Resuelto 2026-11-11** — cada fuente tiene fallback independiente |
 | **F-32** | El frontend tiene dos clientes HTTP: `apiClient` (fetch, lee el token de `localStorage`) y un axios propio en `useQuestStore` (lee el token del store). Manejan 401 distinto: solo el primero redirige al login. | `apps/frontend/lib/api/client.ts:3-17` y `apps/frontend/store/useQuestStore.ts:4-18` | Inconsistencia |

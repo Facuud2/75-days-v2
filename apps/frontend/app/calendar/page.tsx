@@ -42,14 +42,14 @@ export default function CalendarView() {
   });
 
   return (
-    <div className="p-4 md:p-8 max-w-4xl mx-auto space-y-8 animate-in fade-in">
+    <div className="w-full max-w-4xl mx-auto space-y-5 p-3 pb-8 sm:space-y-8 sm:p-4 md:p-8 animate-in fade-in">
       <header>
         <h1 className="text-3xl font-bold tracking-tight">Journey Map</h1>
         <p className="text-zinc-500 dark:text-zinc-400">Your 75 days at a glance</p>
       </header>
 
       <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 md:p-8 shadow-sm border border-zinc-100 dark:border-zinc-800">
-        <div className="grid grid-cols-7 gap-2 md:gap-4">
+        <div className="grid grid-cols-7 gap-1.5 sm:gap-2 md:gap-4">
           {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => (
             <div key={d} className="text-center text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">
               {d}
@@ -84,12 +84,13 @@ export default function CalendarView() {
             }
 
             return (
-              <div 
+              <button
                 key={day.dayNumber} 
+                type="button"
                  onClick={() => setSelectedDate(day.date)}
-                 className={`aspect-square rounded-2xl flex flex-col items-center justify-center p-1 relative group transition-all hover:scale-105 cursor-pointer ${bgColor}`}
+                 className={`aspect-square w-full rounded-xl sm:rounded-2xl flex flex-col items-center justify-center p-1 relative group transition-colors cursor-pointer ${bgColor} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400`}
                  title={format(parseLocalDate(day.date), 'MMM d, yyyy')}
-              >
+               >
                 <span className={`text-sm md:text-lg font-bold ${textColor}`}>
                   {day.dayNumber}
                 </span>
@@ -114,7 +115,7 @@ export default function CalendarView() {
                     {!day.log && <li className="text-zinc-500">No data</li>}
                   </ul>
                 </div>
-              </div>
+              </button>
             );
           })}
         </div>

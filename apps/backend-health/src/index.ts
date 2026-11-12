@@ -1,7 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
-dotenv.config();
+import './config';
 
 import nutritionRoutes from './routes/nutrition';
 import workoutRoutes from './routes/workouts';
@@ -13,10 +12,14 @@ import stravaRoutes from './routes/strava';
 
 const app = express();
 const port = process.env.PORT || 3002;
+const allowedOrigins = (process.env.FRONTEND_URL || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
 
 // ── Global Middleware ─────────────────────────────────────────────────────────
 
-app.use(cors());
+app.use(cors({ origin: allowedOrigins.length > 0 ? allowedOrigins : false }));
 app.use(express.json());
 
 // ── Health Check ──────────────────────────────────────────────────────────────

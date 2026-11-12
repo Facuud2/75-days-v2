@@ -44,7 +44,7 @@ Monorepo de la app **75 Days Challenge**: seguimiento de retos de 75 días con m
 |---|---|---|---|---|
 | `apps/frontend` | Node 22+ | Next 15.5 / React 19 / Tailwind 4 | — | 3000 |
 | `apps/backend-core` | Node 22+ | Express 5 | Prisma 6 (migraciones) | 3001 |
-| `apps/backend-health` | Node 22+ | Express 4 | Prisma 6 (`db push`, sin migraciones) | 3002 |
+| `apps/backend-health` | Node 22+ | Express 4 | Prisma 6 (migraciones) | 3002 |
 
 Dependencias compartidas: `zod 4`, `date-fns 4`, `jsonwebtoken`, `bcryptjs`, `axios`.
 
@@ -78,7 +78,7 @@ createdb 75days_health
 
 # Backends
 cd apps/backend-core   && npm install && npx prisma generate && npx prisma migrate deploy && npm run db:seed && npm run dev
-cd apps/backend-health && npm install && npx prisma generate && npx prisma db push      && npm run db:seed && npm run dev
+cd apps/backend-health && npm install && npx prisma generate && npx prisma migrate deploy && npm run db:seed && npm run dev
 
 # Frontend
 cd apps/frontend && npm install && npm run dev
@@ -161,7 +161,7 @@ open http://localhost:3000
 - Registro → JWT → `/auth/me` → creación automática de challenge con metas por dificultad.
 - Token de core aceptado por health (JWT interoperable).
 - Guards de auth: 401 sin token, 403 con API key inválida.
-- Esquemas aplicados en ambas DB (core con 4 migraciones, health con `db push`).
+- Esquemas aplicados en ambas DB mediante migraciones (core con 4 migraciones, health con baseline versionado).
 - Misiones secundarias y logros operativos: `SideQuestTemplate` y `Achievement` existen en la base (migración `20261111031957`).
 - Catálogo de 51 ingredientes base sembrado; se pueden crear alimentos personalizados de punta a punta.
 
@@ -169,12 +169,12 @@ open http://localhost:3000
 | # | Problema | Impacto |
 |---|---|---|
 | 1 | **Cero tests** (`npm test` → `exit 1`) | Sin red de seguridad para migrar |
-| 2 | **`backend-health` no tiene migraciones** (solo `db push`) | Drift de esquema no auditable |
+| 2 | **`backend-health` usa una migración baseline** | Los cambios futuros quedan versionados y auditables |
 | 3 | Dos DBs sin FK ni transacciones distribuidas | Consistencia solo por aplicación |
 | 4 | `JWT_SECRET` tiene fallback hardcodeado en el código | Riesgo si falta el env |
 | 5 | Sin observabilidad (solo `console.log`) | Diagnóstico difícil |
-| 6 | Sin CI/CD | Todo se valida a mano |
-| 7 | CORS abierto (`cors()` sin origen) | Riesgo en producción |
+| 6 | CI base en GitHub Actions, todavía sin tests | Falta completar la Fase 3 |
+| 7 | CORS restringido a `FRONTEND_URL`; rate limit en auth | Pendiente validar en un entorno desplegado |
 | 8 | `backend-core` compilaba `dist/` dentro del repo | Ya destrackeado y agregado a `.gitignore` |
 
 ### 🔜 Próximos pasos
