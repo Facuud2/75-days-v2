@@ -61,6 +61,15 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     // Must complete onboarding: authenticated but onboarding not done (DB-verified), and not already on onboarding page
     const needsOnboarding = isAuthenticated && onboardingChecked && user && user.onboardingCompleted !== true && !isOnboardingRoute;
 
+    // On auth routes, a form submission also flips `isLoading`. Replacing the
+    // page with the boot screen would unmount the form (and its error state),
+    // so only block on an actual session check: a persisted token that has not
+    // been verified yet. Authenticated visitors are still redirected away.
+    const isSessionPending = Boolean(token) && !isAuthenticated;
+    const shouldShowBoot = isAuthRoute
+        ? !isHydrated || isRedundantLogin || isSessionPending
+        : !isHydrated || isLoading || !onboardingChecked || isRoutingRestricted || isRedundantLogin || needsOnboarding;
+
     // Route Protection logic that triggers navigation instead of internal state
     useEffect(() => {
         if (!isHydrated || isLoading || !onboardingChecked) return;
@@ -75,7 +84,15 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     }, [isHydrated, isLoading, onboardingChecked, isRoutingRestricted, isRedundantLogin, needsOnboarding, router]);
 
     // Prevent flash of protected content while evaluating
-    if (!isHydrated || isLoading || !onboardingChecked || isRoutingRestricted || isRedundantLogin || needsOnboarding) {
+    if (shouldShowBoot) {
+        if (isAuthRoute) {
+            return (
+                <div className="auth-boot" aria-busy="true" aria-label="Cargando">
+                    <div className="auth-boot-spinner" />
+                </div>
+            );
+        }
+
         return (
             <div className="flex items-center justify-center min-h-screen bg-zinc-50 dark:bg-zinc-950">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-zinc-900 dark:border-zinc-100"></div>

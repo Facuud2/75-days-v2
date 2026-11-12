@@ -25,6 +25,7 @@ interface AuthState {
   register: (data: RegisterData) => Promise<void>;
   logout: () => void;
   checkAuth: () => Promise<void>;
+  clearError: () => void;
   updateProfile: (data: Partial<User>) => void;
   completeOnboarding: () => Promise<void>;
   checkOnboardingStatus: () => Promise<boolean>;
@@ -60,6 +61,8 @@ export const useAuthStore = create<AuthState>()(
           throw error;
         }
       },
+
+      clearError: () => set({ error: null }),
 
       logout: () => {
         set({ user: null, token: null, isAuthenticated: false });
@@ -127,6 +130,23 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'auth-storage',
+      // Persist only durable session data. `isLoading` and `error` are request
+      // state: persisting them can leave a reloaded tab with a disabled submit
+      // button or a stale error from a previous visit.
+      partialize: (state) => ({
+        user: state.user,
+        token: state.token,
+        isAuthenticated: state.isAuthenticated,
+      }),
+      merge: (persisted, current) => {
+        const saved = (persisted ?? {}) as Partial<AuthState>;
+        return {
+          ...current,
+          user: saved.user ?? null,
+          token: saved.token ?? null,
+          isAuthenticated: saved.isAuthenticated ?? false,
+        };
+      },
     }
   )
 );

@@ -28,7 +28,7 @@ test.describe('75 Days Challenge — pilares críticos', () => {
     await page.locator('input[type="email"]').fill(email);
     await page.locator('input[type="password"]').fill(password);
     await page.screenshot({ path: 'test-results/audit-login-filled.png', fullPage: true });
-    await page.getByRole('button', { name: /sign in/i }).click();
+    await page.getByRole('button', { name: /iniciar sesión/i }).click();
     await page.waitForLoadState('networkidle');
 
     if (page.url().includes('/onboarding')) {

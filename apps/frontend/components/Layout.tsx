@@ -52,6 +52,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     const isDark = mode === 'dark' || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
     isDark ? root.classList.add('dark') : root.classList.remove('dark');
     root.setAttribute('data-appearance', isDark ? 'dark' : 'light');
+    root.style.colorScheme = isDark ? 'dark' : 'light';
+    let themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"][data-runtime-theme]');
+    if (!themeColor) {
+      themeColor = document.createElement('meta');
+      themeColor.name = 'theme-color';
+      themeColor.dataset.runtimeTheme = 'true';
+    }
+    themeColor.setAttribute('content', isDark ? '#050505' : '#f2f3f5');
+    if (!themeColor.isConnected) document.head.appendChild(themeColor);
   }, []);
 
   // Apply appearance on store changes (covers page load & system changes)
@@ -75,6 +84,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       roseShades.forEach((s) => root.style.removeProperty(`--color-rose-${s}`));
     }
   }, [colorPalette, customPalette]);
+
+  // Auth surfaces own the full viewport (safe areas, status bar, scroll) and
+  // must not inherit the app header or the padded content shell.
+  if (pathname === '/login' || pathname === '/register') {
+    return <>{children}</>;
+  }
 
   if (!isAuthenticated && !['/login', '/register', '/onboarding'].includes(pathname)) {
     return <div className="min-h-screen bg-zinc-950 text-white">{children}</div>;
@@ -134,7 +149,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </Link>
                 <button aria-label="Abrir acciones rápidas" aria-expanded={isQuickActionsOpen} onClick={openQuickActions} className="flex flex-col items-center rounded-xl p-2 text-white/60 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400">
                   <Plus size={20} />
-                  <span className="mt-1 hidden text-[10px] sm:block">Abrir acciones rápidas</span>
+
                 </button>
                 <Link href="/profile" className={`flex flex-col items-center p-2 transition-colors ${pathname === '/profile' ? 'text-white' : 'text-white/50 hover:text-white'}`}>
                   <User size={20} />
@@ -201,7 +216,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <span className="flex h-14 w-14 items-center justify-center rounded-full border-4 border-zinc-950 bg-rose-500 shadow-[0_8px_24px_rgba(244,63,94,0.35)] transition-transform active:scale-95">
               <Plus size={28} strokeWidth={2.5} />
             </span>
-            <span>Abrir acciones rápidas</span>
+
           </button>
           <Link href="/profile" aria-current={pathname === '/profile' ? 'page' : undefined} className={`flex min-w-0 flex-1 flex-col items-center gap-1 rounded-xl p-1.5 text-[10px] font-medium ${pathname === '/profile' ? 'text-white' : 'text-white/50'}`}>
             <User size={24} />

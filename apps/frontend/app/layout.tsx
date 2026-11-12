@@ -22,6 +22,15 @@ export const metadata: Metadata = {
     title: '75 Days',
     statusBarStyle: 'black-translucent',
   },
+  formatDetection: {
+    telephone: false,
+    email: false,
+    address: false,
+  },
+  other: {
+    // iOS still reads the Apple-prefixed flag when installing from Safari.
+    'apple-mobile-web-app-capable': 'yes',
+  },
 };
 
 export const viewport: Viewport = {

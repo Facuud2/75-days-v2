@@ -20,9 +20,9 @@ El layout raíz envuelve todo en tres capas: un guard de autenticación, el layo
 | `/register` | Formulario de registro con elección de dificultad | solo anónimos |
 | `/onboarding` | Completa edad, peso, altura y peso objetivo; permite elegir plan | autenticado, obligatorio |
 | `/dashboard` | Día actual, metas, racha, puntos, misiones | **marcada como pública** |
-| `/calendar` | Historial de días del reto | autenticado |
+| `/calendar` | Mapa de 75 días y agenda del reto, con detalle editable por día | autenticado |
 
-**Rareza**: `/calendar` es una ruta muerta. No hay ningún `Link` hacia ella en el resto de la aplicación, y sus celdas tienen `cursor-pointer` pero sin `onClick`, así que tampoco abren el detalle del día. El calendario que sí se usa es el mini-calendario del dashboard. Ver `findings.md` F-47.
+La pantalla de calendario es la vista completa del historial. En móvil ofrece Mapa y Agenda; el detalle se abre como bottom sheet, y en escritorio conserva una superficie centrada con el mismo flujo de edición. El dashboard mantiene un acceso compacto al historial.
 | `/profile` | Estadísticas, peso, logros, comidas, entrenamientos, Strava | autenticado |
 | `/settings` | Perfil, contraseña, tema y paleta | autenticado |
 

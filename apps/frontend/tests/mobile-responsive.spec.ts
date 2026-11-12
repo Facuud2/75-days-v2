@@ -6,7 +6,7 @@ test.describe('mobile platform baseline', () => {
     await page.goto('/login');
     await page.locator('input[type="email"]').fill('p@a.com');
     await page.locator('input[type="password"]').fill('123456');
-    await page.getByRole('button', { name: /sign in/i }).click();
+    await page.getByRole('button', { name: /iniciar sesión/i }).click();
     await page.waitForURL(/\/dashboard$/);
 
     for (const viewport of [
