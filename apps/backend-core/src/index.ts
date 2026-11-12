@@ -10,12 +10,28 @@ import usersRoutes from './routes/users';
 
 const app = express();
 const port = process.env.PORT || 3001;
-const allowedOrigins = (process.env.FRONTEND_URL || '')
+const configuredOrigins = (process.env.FRONTEND_URL || '')
     .split(',')
-    .map((origin) => origin.trim())
+    .map((origin) => origin.trim().replace(/\/+$/, ''))
     .filter(Boolean);
+// Keep production usable even if Render's FRONTEND_URL is accidentally omitted.
+// Additional preview/custom origins must still be supplied through FRONTEND_URL.
+const allowedOrigins = configuredOrigins.length > 0
+    ? configuredOrigins
+    : [
+        'https://75-days-v2.vercel.app',
+        ...(process.env.NODE_ENV === 'production' ? [] : ['http://localhost:3000']),
+    ];
 
-app.use(cors({ origin: allowedOrigins.length > 0 ? allowedOrigins : false }));
+app.use(cors({
+    origin: (origin, callback) => {
+        // Requests without an Origin (health checks, curl, service-to-service)
+        // are not subject to browser CORS and should continue to work.
+        callback(null, origin && allowedOrigins.includes(origin) ? origin : false);
+    },
+    methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+}));
 app.use(express.json());
 
 app.get('/health', (req, res) => {
