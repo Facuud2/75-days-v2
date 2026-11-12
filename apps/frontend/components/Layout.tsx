@@ -59,7 +59,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       themeColor.name = 'theme-color';
       themeColor.dataset.runtimeTheme = 'true';
     }
-    themeColor.setAttribute('content', isDark ? '#050505' : '#f2f3f5');
+    themeColor.setAttribute('content', isDark ? '#09090b' : '#f6f5f3');
     if (!themeColor.isConnected) document.head.appendChild(themeColor);
   }, []);
 

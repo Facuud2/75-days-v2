@@ -41,7 +41,7 @@ export default function SideQuestsModal({ onClose }: SideQuestsModalProps) {
                 onClick={onClose}
             />
 
-            <div className="relative bg-[#1a0b12] border border-rose-950/50 rounded-3xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="side-quests-modal relative bg-[#1a0b12] border border-rose-950/50 rounded-3xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
 
                 {/* Header */}
                 <div className="p-6 border-b border-rose-950/50 flex justify-between items-center bg-rose-950/10 backdrop-blur-md">

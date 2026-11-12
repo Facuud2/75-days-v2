@@ -194,7 +194,7 @@ export default function Dashboard() {
 
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 animate-in fade-in">
+    <div className="dashboard-page grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 animate-in fade-in">
 
       {/* Left Column */}
       <div className="min-w-0 space-y-4 sm:space-y-6 lg:col-span-4">

@@ -21,16 +21,21 @@ export default function DayDetailsSheet({ day, onClose, onPrevious, onNext }: { 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const startY = useRef<number | null>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isClosingRef = useRef(false);
   const [isSaving, setIsSaving] = useState(false);
   const [offsetY, setOffsetY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
 
   const dismiss = useCallback(() => {
-    if (isClosing) return;
+    // Keep this guard in a ref. Using `isClosing` here made the effect below
+    // change identity after setIsClosing(), which cleaned up the timer before
+    // onClose could unmount the backdrop.
+    if (isClosingRef.current) return;
+    isClosingRef.current = true;
     setIsClosing(true);
     closeTimer.current = setTimeout(onClose, 180);
-  }, [isClosing, onClose]);
+  }, [onClose]);
 
   useEffect(() => {
     closeRef.current?.focus();
@@ -51,7 +56,11 @@ export default function DayDetailsSheet({ day, onClose, onPrevious, onNext }: { 
     document.addEventListener('keydown', onKeyDown);
     const overflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    return () => { document.removeEventListener('keydown', onKeyDown); document.body.style.overflow = overflow; if (closeTimer.current) clearTimeout(closeTimer.current); };
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = overflow;
+      if (closeTimer.current) clearTimeout(closeTimer.current);
+    };
   }, [dismiss, onNext, onPrevious]);
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -106,7 +115,7 @@ export default function DayDetailsSheet({ day, onClose, onPrevious, onNext }: { 
   };
 
   return (
-    <div className="calendar-sheet-backdrop" role="presentation" onPointerDown={(event) => event.target === event.currentTarget && dismiss()}>
+    <div className={`calendar-sheet-backdrop ${isClosing ? 'calendar-sheet-backdrop--closing' : ''}`} role="presentation" onPointerDown={(event) => event.target === event.currentTarget && dismiss()}>
       <section className={`calendar-sheet ${isClosing ? 'calendar-sheet--closing' : ''}`} role="dialog" aria-modal="true" aria-labelledby="calendar-sheet-title" style={offsetY ? { transform: `translateY(${offsetY}px)`, transition: isDragging ? 'none' : undefined } : undefined}>
         <div className="calendar-sheet__handle" aria-hidden="true" onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerCancel={() => { startY.current = null; setIsDragging(false); setOffsetY(0); }} />
         <header className="calendar-sheet__header">
