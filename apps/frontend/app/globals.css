@@ -75,6 +75,27 @@ html[data-palette="bamboo-green"] {
   --app-text-muted: #a1a1aa;
   --app-accent: #f43f5e;
   --app-accent-strong: #e11d48;
+
+  /* Profile identity surfaces — semantic roles shared by both appearances. */
+  --profile-shell: #211d24;
+  --profile-shell-text: #f4f4f5;
+  --profile-shell-muted: #a1a1aa;
+  --profile-shell-border: #3f3540;
+  --profile-hero: #f0dce2;
+  --profile-hero-text: #27212a;
+  --profile-hero-muted: #554650;
+  --profile-stat-surface: #2b2530;
+  --profile-stat-border: #4a3e4a;
+  --profile-action: #18181b;
+  --profile-action-text: #ffffff;
+  --profile-avatar-text: #fb7185;
+  --profile-level-text: #fda4af;
+  --profile-level-bg: #4b2334;
+  --profile-level-border: #8f3d59;
+  --profile-challenge: #2b2027;
+  --profile-challenge-text: #f4f4f5;
+  --profile-challenge-muted: #d4d4d8;
+  --profile-challenge-status: #fda4af;
 }
 
 html[data-appearance="dark"] {
@@ -118,6 +139,26 @@ html[data-appearance="light"] {
   --app-accent: #e11d48;
   --app-accent-strong: #be123c;
 
+  --profile-shell: #ffffff;
+  --profile-shell-text: #18181b;
+  --profile-shell-muted: #52525b;
+  --profile-shell-border: #deddd9;
+  --profile-hero: #f0dce2;
+  --profile-hero-text: #27212a;
+  --profile-hero-muted: #554650;
+  --profile-stat-surface: #f7f4f6;
+  --profile-stat-border: #d7cbd2;
+  --profile-action: #18181b;
+  --profile-action-text: #ffffff;
+  --profile-avatar-text: #be123c;
+  --profile-level-text: #be123c;
+  --profile-level-bg: #fce7ef;
+  --profile-level-border: #f9a8c0;
+  --profile-challenge: #ffffff;
+  --profile-challenge-text: #18181b;
+  --profile-challenge-muted: #52525b;
+  --profile-challenge-status: #9f1239;
+
   /* ── Invert zinc surface shades (dark bg → light bg) ─────────────────── */
   --color-zinc-950: oklch(0.96 0.002 286);
   /* was near-black, now near-white  */
@@ -145,6 +186,65 @@ html[data-appearance="light"] {
   /* ── white becomes dark primary text in light mode ───────────────────── */
   /* text-white, border-white/N, bg-white/N all become dark automatically  */
   --color-white: oklch(0.13 0.003 286);
+}
+
+/* Profile roles. Keeping these out of the component prevents light mode from
+   inheriting dark-only surfaces while preserving the editorial pink hero. */
+.profile-identity-card {
+  background-color: var(--profile-shell);
+  color: var(--profile-shell-text);
+  border-color: var(--profile-shell-border);
+}
+
+.profile-identity-hero {
+  background-color: var(--profile-hero);
+  color: var(--profile-hero-text);
+}
+
+.profile-identity-hero-muted {
+  color: var(--profile-hero-muted);
+}
+
+.profile-identity-stats {
+  background-color: var(--profile-stat-surface);
+  border-color: var(--profile-stat-border);
+}
+
+.profile-identity-stats-muted {
+  color: var(--profile-shell-muted);
+}
+
+.profile-identity-stats-value {
+  color: var(--profile-shell-text);
+}
+
+.profile-identity-action {
+  background-color: var(--profile-action);
+  color: var(--profile-action-text);
+}
+
+.profile-identity-avatar {
+  color: var(--profile-avatar-text);
+  border-color: var(--profile-shell-border);
+}
+
+.profile-identity-level {
+  color: var(--profile-level-text);
+  background-color: var(--profile-level-bg);
+  border-color: var(--profile-level-border);
+}
+
+.profile-challenge {
+  background-color: var(--profile-challenge);
+  color: var(--profile-challenge-text);
+}
+
+.profile-challenge-muted {
+  color: var(--profile-challenge-muted);
+}
+
+.profile-challenge-status {
+  color: var(--profile-challenge-status);
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════

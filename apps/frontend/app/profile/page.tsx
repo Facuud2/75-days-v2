@@ -209,95 +209,83 @@ export default function Profile() {
   const level = Math.floor(points / 100) + 1;
 
   return (
-    <div className="profile-surface w-full max-w-7xl mx-auto space-y-4 p-3 pb-8 sm:space-y-6 sm:p-4 md:p-6 lg:p-8 animate-in fade-in bg-zinc-950 min-h-screen text-zinc-100 font-sans">
+    <div className="profile-surface w-full max-w-7xl mx-auto space-y-6 pb-8 animate-in fade-in text-zinc-100 font-sans">
 
-      {/* 1. Header Profile Card */}
-      <div className="bg-zinc-900 border border-zinc-800/50 rounded-2xl p-4 md:p-6 shadow-xl flex flex-col md:flex-row items-center md:items-stretch gap-4 relative overflow-hidden">
-        {/* Subtle background glow */}
-        <div className="absolute top-0 right-1/4 w-72 h-72 bg-rose-900/10 rounded-full blur-3xl -z-10 pointer-events-none"></div>
-
-        {/* User Info Left */}
-        <div className="flex items-center gap-4 flex-1">
-          <div className="relative">
-            {/* Avatar placeholder */}
-             <div className="w-16 h-16 md:w-24 md:h-24 bg-zinc-800 border border-zinc-700 rounded-2xl flex items-center justify-center text-3xl font-bold uppercase shadow-2xl relative overflow-hidden">
-              {user.name.charAt(0)}
-              <div className="absolute inset-0 bg-rose-500 mt-auto h-2"></div>
+      {/* Identity-first profile header */}
+      <section aria-labelledby="profile-heading" className="profile-identity-card relative overflow-hidden rounded-[2rem] border shadow-[0_24px_70px_rgba(0,0,0,0.22)]">
+        <div className="profile-identity-hero relative min-h-[168px] overflow-hidden px-5 pb-12 pt-5 sm:min-h-[198px] sm:px-8 sm:pt-7">
+          <div className="absolute -right-16 -top-20 h-56 w-56 rounded-full bg-[#f7b7a7]/70 blur-2xl" aria-hidden="true" />
+          <div className="absolute bottom-[-80px] left-1/3 h-44 w-72 rounded-full bg-[#d6d9f0]/80 blur-2xl" aria-hidden="true" />
+          <div className="absolute inset-x-0 bottom-0 h-20 bg-[#211d24]/10" aria-hidden="true" />
+          <div className="relative flex items-start justify-between gap-4">
+            <div>
+              <p className="profile-identity-hero-muted mb-1 text-[11px] font-bold uppercase tracking-[0.18em]">Mi perfil</p>
+              <p className="profile-identity-hero-muted max-w-[18rem] text-sm font-medium leading-relaxed sm:max-w-sm">Tu constancia también merece un lugar visible.</p>
             </div>
-          </div>
-
-          <div className="space-y-1 text-left">
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl md:text-2xl font-bold tracking-tight">{user.name}</h1>
-              <span className="px-1.5 py-0.5 bg-rose-500/20 text-rose-400 text-[10px] font-bold rounded-md border border-rose-500/30">
-                Nivel {level}
-              </span>
-            </div>
-            <p className="text-zinc-400 text-xs text-left">
-              Miembro desde {format(new Date(user.registeredAt), 'MMMM yyyy')}
-            </p>
+            <button
+              type="button"
+              onClick={() => setIsEditProfileModalOpen(true)}
+              className="profile-identity-action inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-colors hover:bg-rose-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[#f0dce2]"
+            >
+              Editar <Pencil className="h-4 w-4" aria-hidden="true" />
+            </button>
           </div>
         </div>
 
-        {/* Key Stats Right */}
-        <div className="grid grid-cols-5 gap-1.5 w-full justify-between items-stretch sm:gap-2 md:flex">
-          {/* Edit Profile Button */}
-          <button
-            onClick={() => setIsEditProfileModalOpen(true)}
-            className="bg-zinc-950/50 border border-zinc-800 hover:border-rose-500/50 p-2 md:p-4 rounded-xl flex flex-col items-center justify-center min-w-0 flex-1 group transition-colors cursor-pointer min-h-16"
-          >
-            <Pencil className="w-5 h-5 text-rose-400 mb-1 group-hover:scale-110 transition-transform" />
-            <span className="text-[10px] md:text-xs font-semibold group-hover:text-rose-400 transition-colors">Editar</span>
-          </button>
+        <div className="relative px-5 pb-5 sm:px-8 sm:pb-7">
+          <div className="-mt-14 flex flex-col gap-4 sm:-mt-16 sm:flex-row sm:items-end sm:justify-between">
+            <div className="flex items-end gap-4">
+              <div className="profile-identity-avatar flex h-28 w-28 shrink-0 items-center justify-center rounded-full border-[6px] bg-zinc-900 text-4xl font-bold uppercase shadow-xl sm:h-32 sm:w-32 sm:text-5xl" aria-label={`Avatar de ${user.name}`}>
+                {user.name.charAt(0)}
+              </div>
+              <div className="pb-1">
+                <div className="mb-1 flex flex-wrap items-center gap-2">
+                  <h1 id="profile-heading" className="text-2xl font-bold tracking-tight text-[var(--profile-shell-text)] sm:text-3xl">{user.name}</h1>
+                  <span className="profile-identity-level rounded-full border px-2.5 py-1 text-[11px] font-bold">Nivel {level}</span>
+                </div>
+                <p className="text-sm text-[var(--profile-shell-muted)]">Miembro desde {format(new Date(user.registeredAt), 'MMMM yyyy')}</p>
+              </div>
+            </div>
+          </div>
 
-          <div className="bg-zinc-950/50 border border-zinc-800 p-2 md:p-4 rounded-xl flex flex-col items-center justify-center min-w-0 flex-1 text-center min-h-16">
-            <Flame className="w-5 h-5 text-orange-500 mb-1" />
-            <span className="text-sm md:text-xl font-bold">{streak}</span>
-            <span className="text-[10px] text-zinc-500 leading-tight">Racha</span>
-          </div>
-          <div className="bg-zinc-950/50 border border-zinc-800 p-2 md:p-4 rounded-xl flex flex-col items-center justify-center min-w-0 flex-1 text-center min-h-16">
-            <Calendar className="w-5 h-5 text-rose-500 mb-1" />
-            <span className="text-sm md:text-xl font-bold">{mockTotalDays}</span>
-            <span className="text-[10px] text-zinc-500 leading-tight">Días</span>
-          </div>
-          <div className="bg-zinc-950/50 border border-zinc-800 p-2 md:p-4 rounded-xl flex flex-col items-center justify-center min-w-0 flex-1 text-center min-h-16">
-            <Activity className="w-5 h-5 text-green-500 mb-1" />
-            <span className="text-sm md:text-xl font-bold">{mockWeightLost}</span>
-            <span className="text-[10px] text-zinc-500 leading-tight">Kg Menos</span>
-          </div>
-          <div className="bg-zinc-950/50 border border-zinc-800 p-2 md:p-4 rounded-xl flex flex-col items-center justify-center min-w-0 flex-1 text-center min-h-16">
-            <Trophy className="w-5 h-5 text-yellow-500 mb-1" />
-            <span className="text-sm md:text-xl font-bold">{mockChallengesCount}</span>
-            <span className="text-[10px] text-zinc-500 leading-tight">X-Days</span>
+          <div className="profile-identity-stats mt-6 grid grid-cols-2 divide-x divide-[var(--profile-stat-border)] overflow-hidden rounded-2xl border sm:grid-cols-4">
+            <div className="px-3 py-4 text-center sm:px-5"><p className="profile-identity-stats-value text-2xl font-bold tracking-tight">{streak}</p><p className="profile-identity-stats-muted mt-1 text-xs">Días de racha</p></div>
+            <div className="px-3 py-4 text-center sm:px-5"><p className="profile-identity-stats-value text-2xl font-bold tracking-tight">{mockTotalDays}</p><p className="profile-identity-stats-muted mt-1 text-xs">Días completados</p></div>
+            <div className="border-t border-[var(--profile-stat-border)] px-3 py-4 text-center sm:border-t-0 sm:px-5"><p className="profile-identity-stats-value text-2xl font-bold tracking-tight">{mockWeightLost}</p><p className="profile-identity-stats-muted mt-1 text-xs">Kg perdidos</p></div>
+            <div className="border-t border-[var(--profile-stat-border)] px-3 py-4 text-center sm:border-t-0 sm:px-5"><p className="profile-identity-stats-value text-2xl font-bold tracking-tight">{mockChallengesCount}</p><p className="profile-identity-stats-muted mt-1 text-xs">Retos completados</p></div>
           </div>
         </div>
-      </div>
+      </section>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
 
         {/* Left Column - Main Content (Spans 2 cols) */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="space-y-6 lg:col-span-2">
 
           {/* Active Challenge Banner */}
-          <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-4 sm:p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <Target className="text-rose-400 w-5 h-5" />
-              <h2 className="text-lg font-semibold">Desafíos</h2>
-              <span className="text-sm text-zinc-500 ml-auto">{mockChallengesCount} completados · {isActive ? '1' : '0'} en progreso</span>
+          <section aria-labelledby="challenge-heading" className="rounded-[1.75rem] border border-zinc-800/80 bg-zinc-900 p-4 sm:p-6">
+            <div className="mb-5 flex flex-wrap items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-300">
+                <Target className="h-5 w-5" aria-hidden="true" />
+              </div>
+              <div>
+                <h2 id="challenge-heading" className="text-xl font-semibold tracking-tight">Tu reto actual</h2>
+                <p className="text-sm text-zinc-500">{mockChallengesCount} completados · {isActive ? '1' : '0'} en progreso</p>
+              </div>
             </div>
 
             {isActive ? (
-              <div className="bg-zinc-950/50 border border-zinc-800 rounded-xl p-5 relative overflow-hidden">
+              <div className="profile-challenge relative overflow-hidden rounded-2xl border border-rose-500/20 p-5 sm:p-6">
                 <div className="absolute left-0 top-0 bottom-0 w-1 bg-rose-500"></div>
-                <div className="flex items-start justify-between mb-4">
+                <div className="mb-4 flex items-start justify-between gap-4">
                   <div className="flex items-center gap-3">
                      <Flame className="w-6 h-6 text-orange-400 shrink-0" aria-hidden="true" />
                     <div>
                       <div className="flex items-center gap-2">
-                        <h3 className="font-bold text-lg">Desafío 75 {difficulty?.toUpperCase() || 'HARD'}</h3>
-                        <span className="px-2 py-0.5 bg-rose-500/20 text-rose-400 text-xs font-medium rounded">En Progreso</span>
+                         <h3 className="text-lg font-bold tracking-tight">Desafío 75 {difficulty?.toUpperCase() || 'HARD'}</h3>
+                         <span className="profile-challenge-status rounded bg-rose-500/20 px-2 py-0.5 text-xs font-medium">En Progreso</span>
                       </div>
-                      <p className="text-zinc-400 text-sm mt-1">75 días de entrenamiento diario, dieta estricta, sin alcohol, leer 10 páginas</p>
+                       <p className="profile-challenge-muted mt-1 text-sm">75 días de entrenamiento diario, dieta estricta, sin alcohol, leer 10 páginas</p>
                     </div>
                   </div>
                 </div>
@@ -310,13 +298,13 @@ export default function Profile() {
                       style={{ width: `${Math.min(100, (currentDay / 75) * 100)}%` }}
                     />
                   </div>
-                  <div className="flex justify-end text-xs text-zinc-500 font-medium">
+                   <div className="profile-challenge-muted flex justify-end text-xs font-medium">
                     {currentDay}/75 días
                   </div>
                 </div>
               </div>
             ) : (
-              <div className="bg-zinc-950/50 border border-zinc-800 rounded-xl p-5 text-center text-zinc-400">
+              <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-950/50 p-5 text-center text-zinc-400">
                 No hay ningún desafío activo en este momento.
               </div>
             )}
@@ -340,11 +328,11 @@ export default function Profile() {
                 ))}
               </div>
             </div>
-          </div>
+          </section>
 
           {/* Achievements Section */}
           <div
-            className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-4 sm:p-6 cursor-pointer hover:border-zinc-700 transition-colors group relative overflow-hidden"
+            className="group relative cursor-pointer overflow-hidden rounded-[1.75rem] border border-zinc-800/80 bg-zinc-900 p-4 transition-colors hover:border-zinc-700 sm:p-6"
             onClick={() => setIsAchievementsModalOpen(true)}
           >
             {/* Subtle interactive hover highlight */}
@@ -413,7 +401,7 @@ export default function Profile() {
           </div>
 
           {/* Dynamic Activities Section */}
-          <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6 relative overflow-hidden">
+          <section aria-labelledby="activity-heading" className="relative overflow-hidden rounded-[1.75rem] border border-zinc-800/80 bg-zinc-900 p-5 sm:p-6">
             {/* Subtle background glow */}
             <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-900/5 rounded-full blur-3xl -z-10 pointer-events-none"></div>
 
@@ -423,7 +411,7 @@ export default function Profile() {
                   <Target className="text-emerald-500 w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold leading-tight">Actividades Dinámicas</h2>
+                   <h2 id="activity-heading" className="text-lg font-semibold leading-tight">Actividades Dinámicas</h2>
                   <p className="text-sm text-zinc-400">Misiones secundarias para potenciar tu progreso</p>
                 </div>
               </div>
@@ -575,7 +563,7 @@ export default function Profile() {
                 })()}
               </div>
             </div>
-          </div>
+          </section>
 
         </div>
 
@@ -583,8 +571,8 @@ export default function Profile() {
         <div className="space-y-6">
 
           {/* Weight Progress Widget */}
-          <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6">
-            <h3 className="text-sm font-semibold flex items-center justify-between mb-4 text-zinc-300">
+          <section aria-labelledby="weight-heading" className="rounded-[1.75rem] border border-zinc-800/80 bg-zinc-900 p-5 sm:p-6">
+              <h3 id="weight-heading" className="text-sm font-semibold flex items-center justify-between mb-4 text-zinc-300">
               <span className="flex items-center gap-2">
                 <Scale className="w-4 h-4 text-green-400" />
                 Progreso de Peso
@@ -648,12 +636,12 @@ export default function Profile() {
                 </span>
               </div>
             </div>
-          </div>
+          </section>
 
           {/* Daily Nutrition Widget */}
-          <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6 relative overflow-hidden group">
+          <section aria-labelledby="nutrition-heading" className="group relative overflow-hidden rounded-[1.75rem] border border-zinc-800/80 bg-zinc-900 p-5 sm:p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold flex items-center gap-2 text-zinc-300">
+               <h3 id="nutrition-heading" className="text-sm font-semibold flex items-center gap-2 text-zinc-300">
                 <PieChartIcon className="w-4 h-4 text-orange-400" />
                 Nutrición de Hoy
               </h3>
@@ -769,12 +757,12 @@ export default function Profile() {
                 Información nutricional no disponible.
               </div>
             )}
-          </div>
+          </section>
 
           {/* Sports Activity Widget */}
-          <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6 relative overflow-hidden group">
+          <section aria-labelledby="sports-heading" className="group relative overflow-hidden rounded-[1.75rem] border border-zinc-800/80 bg-zinc-900 p-5 sm:p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold flex items-center gap-2 text-zinc-300">
+               <h3 id="sports-heading" className="text-sm font-semibold flex items-center gap-2 text-zinc-300">
                 <Footprints className="w-4 h-4 text-[#fc4c02]" />
                 Actividad Deportiva
               </h3>
@@ -865,7 +853,7 @@ export default function Profile() {
                 )}
               </div>
             </div>
-          </div>
+          </section>
 
           {/* Global Stats Widget
           <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6">
