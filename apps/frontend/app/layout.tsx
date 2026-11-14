@@ -49,7 +49,7 @@ import AuthGuard from '@/components/AuthGuard';
 
 // ... other imports ...
 
-import { Toaster } from 'react-hot-toast';
+import StackedToaster from '@/components/StackedToaster';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -58,13 +58,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AuthGuard>
           <AppLayout>{children}</AppLayout>
         </AuthGuard>
-        <Toaster position="bottom-right" toastOptions={{
-          style: {
-            background: '#18181b', // hover:bg-zinc-900 equivalent mostly
-            color: '#f4f4f5',
-            border: '1px solid #27272a',
-          }
-        }} />
+        <StackedToaster />
       </body>
     </html>
   );

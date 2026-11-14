@@ -84,7 +84,7 @@ test('login, section navigation, and logout never get stuck on loading spinner',
   await page.getByRole('button', { name: 'Iniciar sesión' }).click();
 
   await expect(page).toHaveURL(/\/dashboard/, { timeout: 15_000 });
-  await expect(page.locator('.auth-boot-spinner')).toHaveCount(0);
+  await expect(page.locator('[data-boot-skeleton]')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Cerrar sesión' })).toHaveCount(0);
 
   // Navigate across sections
@@ -103,7 +103,7 @@ test('login, section navigation, and logout never get stuck on loading spinner',
   await page.getByRole('dialog').getByRole('button', { name: 'Cerrar sesión' }).click();
   await expect(page).toHaveURL(/\/login/, { timeout: 15_000 });
   await expect(page.getByRole('heading', { name: 'Iniciar sesión' })).toBeVisible();
-  await expect(page.locator('.auth-boot-spinner')).toHaveCount(0);
+  await expect(page.locator('[data-boot-skeleton]')).toHaveCount(0);
 });
 
 test('stale token on /login recovers cleanly when /auth/me returns 401', async ({ page }) => {
@@ -129,5 +129,5 @@ test('stale token on /login recovers cleanly when /auth/me returns 401', async (
 
   await page.goto('/login');
   await expect(page.getByRole('heading', { name: 'Iniciar sesión' })).toBeVisible();
-  await expect(page.locator('.auth-boot-spinner')).toHaveCount(0);
+  await expect(page.locator('[data-boot-skeleton]')).toHaveCount(0);
 });

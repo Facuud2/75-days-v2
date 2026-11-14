@@ -122,6 +122,7 @@ export default function Profile() {
   const [hasLoadedStats, setHasLoadedStats] = useState(false);
   const [challengeReady, setChallengeReady] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [authBlocked, setAuthBlocked] = useState(false);
 
   const [profileEditMode, setProfileEditMode] = useState<ProfileEditMode | null>(null);
   const [isEditMenuOpen, setIsEditMenuOpen] = useState(false);
@@ -146,8 +147,15 @@ export default function Profile() {
 
     userService
       .getProfile()
-      .then(setProfileData)
+      .then((data) => {
+        setAuthBlocked(false);
+        setProfileData(data);
+      })
       .catch((error) => {
+        if (error?.status === 401 || error?.status === 403) {
+          setAuthBlocked(true);
+          return;
+        }
         console.error('Error fetching profile:', error);
         setProfileError('No pudimos cargar tu perfil.');
       })
@@ -420,7 +428,7 @@ export default function Profile() {
   const logrosSummary = `${formatNumber(unlockedCount)}/${formatNumber(activeAchievements.length)}`;
 
   const headerLoading = !hasLoadedProfile && !profileData;
-  const isInitialLoading = !user || headerLoading || !challengeReady;
+  const isInitialLoading = !user || headerLoading || !challengeReady || authBlocked;
 
   if (isInitialLoading) return <ProfileSkeleton />;
 
@@ -431,11 +439,13 @@ export default function Profile() {
           <ProfileHeader
             name={displayName}
             avatarUrl={user.avatarUrl}
+            bannerUrl={user.bannerUrl}
             level={level}
             memberSince={memberSince}
             quote={user.profileQuote}
             onEdit={() => setIsEditMenuOpen(true)}
             onAvatar={() => setProfileEditMode('avatar')}
+            onBanner={() => setProfileEditMode('banner')}
             loading={headerLoading}
           />
         </aside>

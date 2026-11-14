@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { motion, useReducedMotion } from 'motion/react';
 import {
   Calendar,
   CheckCircle2,
@@ -159,6 +160,7 @@ function OnboardingTutorialModal({
   onComplete,
 }: Omit<OnboardingTutorialProps, 'isOpen'>) {
   const router = useRouter();
+  const reduceMotion = useReducedMotion();
   const [stepIndex, setStepIndex] = useState(0);
   const [spotlightRect, setSpotlightRect] = useState<SpotlightRect | null>(null);
   const dialogRef = useRef<HTMLDivElement | null>(null);
@@ -320,14 +322,17 @@ function OnboardingTutorialModal({
       />
 
       {/* Tutorial Card */}
-      <div
+      <motion.div
         ref={dialogRef}
         tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="tutorial-step-title"
         aria-describedby="tutorial-step-description"
-        className="relative z-10 w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-3xl border border-white/15 bg-zinc-950/95 p-5 sm:p-6 shadow-2xl outline-none animate-in fade-in zoom-in-95 duration-200"
+        initial={reduceMotion ? false : { opacity: 0, scale: 0.96, y: 8 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={reduceMotion ? { duration: 0 } : { type: 'spring', bounce: 0, duration: 0.35 }}
+        className="relative z-10 w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-3xl border border-white/15 bg-zinc-950/95 p-5 sm:p-6 shadow-2xl outline-none"
       >
         {/* Top bar: step badge + skip button */}
         <div className="flex items-center justify-between gap-3">
@@ -350,7 +355,7 @@ function OnboardingTutorialModal({
 
         {/* Content */}
         <div className="mt-4 flex items-start gap-3.5">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-rose-500/15 text-rose-400">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-rose-500/15 text-rose-400">
             <StepIcon size={22} aria-hidden="true" />
           </div>
           <div className="min-w-0 flex-1">
@@ -370,7 +375,7 @@ function OnboardingTutorialModal({
         </div>
 
         {/* Tip box */}
-        <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 px-3.5 py-2.5 text-xs leading-relaxed text-white/70">
+        <div className="mt-4 rounded-xl border border-white/10 bg-white/5 px-3.5 py-2.5 text-xs leading-relaxed text-white/70">
           <span className="font-bold text-rose-400">Tip: </span>
           {currentStep.tip}
         </div>
@@ -443,7 +448,7 @@ function OnboardingTutorialModal({
             </button>
           </div>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

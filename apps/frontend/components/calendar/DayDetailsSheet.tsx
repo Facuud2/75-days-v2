@@ -2,12 +2,19 @@
 /* eslint-disable @next/next/no-img-element -- local compressed data URI preview is not a remote LCP image. */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { motion, useDragControls, useReducedMotion } from 'motion/react';
 import { CalendarDays, Camera, Check, ChevronLeft, ChevronRight, FileText, Scale, Upload, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import type { ChallengeDay } from '@/lib/calendar/challengeDays';
 import { useChallengeStore } from '@/store/useChallengeStore';
 import toast from 'react-hot-toast';
+import {
+  REDUCED_MOTION_TRANSITION,
+  SHEET_ENTER_SPRING,
+  SHEET_EXIT_TRANSITION,
+  shouldDismissSheet,
+} from '@/lib/motion/sheetPhysics';
 
 const statusText = { success: 'Completado', fail: 'No cumplido', rest: 'Descanso', pending: 'Pendiente', future: 'Futuro', inactive: 'Fuera del reto' } as const;
 
@@ -19,13 +26,14 @@ export default function DayDetailsSheet({ day, onClose, onPrevious, onNext }: { 
   const [notes, setNotes] = useState(log?.notes ?? '');
   const closeRef = useRef<HTMLButtonElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const startY = useRef<number | null>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isClosingRef = useRef(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [offsetY, setOffsetY] = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
+  const [isDragOverPhoto, setIsDragOverPhoto] = useState(false);
+  const [justDroppedPhoto, setJustDroppedPhoto] = useState(false);
+  const dragControls = useDragControls();
+  const reduceMotion = useReducedMotion();
 
   const dismiss = useCallback(() => {
     // Keep this guard in a ref. Using `isClosing` here made the effect below
@@ -63,29 +71,8 @@ export default function DayDetailsSheet({ day, onClose, onPrevious, onNext }: { 
     };
   }, [dismiss, onNext, onPrevious]);
 
-  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    startY.current = event.clientY;
-    setIsDragging(true);
-    event.currentTarget.setPointerCapture(event.pointerId);
-  };
-
-  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (startY.current === null || isClosing) return;
-    setOffsetY(Math.max(0, event.clientY - startY.current));
-  };
-
-  const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (startY.current === null) return;
-    const distance = event.clientY - startY.current;
-    startY.current = null;
-    setIsDragging(false);
-    if (distance > 96) { setOffsetY(0); dismiss(); }
-    else setOffsetY(0);
-  };
-
-  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const processImageFile = (file: File | undefined) => {
+    if (!file || !file.type.startsWith('image/')) return;
     const reader = new FileReader();
     reader.onload = () => {
       const image = new Image();
@@ -96,10 +83,22 @@ export default function DayDetailsSheet({ day, onClose, onPrevious, onNext }: { 
         canvas.height = Math.round(image.height * (width / image.width));
         canvas.getContext('2d')?.drawImage(image, 0, 0, canvas.width, canvas.height);
         setPhotoUrl(canvas.toDataURL('image/jpeg', 0.7));
+        setJustDroppedPhoto(true);
+        window.setTimeout(() => setJustDroppedPhoto(false), 500);
       };
       image.src = String(reader.result);
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    processImageFile(event.target.files?.[0]);
+  };
+
+  const handlePhotoDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setIsDragOverPhoto(false);
+    processImageFile(event.dataTransfer.files?.[0]);
   };
 
   const save = async () => {
@@ -114,10 +113,48 @@ export default function DayDetailsSheet({ day, onClose, onPrevious, onNext }: { 
     dismiss();
   };
 
+  const enterTransition = reduceMotion ? REDUCED_MOTION_TRANSITION : SHEET_ENTER_SPRING;
+  const exitTransition = reduceMotion ? REDUCED_MOTION_TRANSITION : SHEET_EXIT_TRANSITION;
+
   return (
-    <div className={`calendar-sheet-backdrop ${isClosing ? 'calendar-sheet-backdrop--closing' : ''}`} role="presentation" onPointerDown={(event) => event.target === event.currentTarget && dismiss()}>
-      <section className={`calendar-sheet ${isClosing ? 'calendar-sheet--closing' : ''}`} role="dialog" aria-modal="true" aria-labelledby="calendar-sheet-title" style={offsetY ? { transform: `translateY(${offsetY}px)`, transition: isDragging ? 'none' : undefined } : undefined}>
-        <div className="calendar-sheet__handle" aria-hidden="true" onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerCancel={() => { startY.current = null; setIsDragging(false); setOffsetY(0); }} />
+    <motion.div
+      className="calendar-sheet-backdrop"
+      role="presentation"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: isClosing ? 0 : 1 }}
+      transition={{ duration: reduceMotion ? 0.1 : 0.18 }}
+      onPointerDown={(event) => event.target === event.currentTarget && dismiss()}
+    >
+      <motion.section
+        className="calendar-sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="calendar-sheet-title"
+        initial={reduceMotion ? { opacity: 0 } : { y: '100%' }}
+        animate={
+          isClosing
+            ? reduceMotion
+              ? { opacity: 0, transition: exitTransition }
+              : { y: '100%', transition: exitTransition }
+            : reduceMotion
+              ? { opacity: 1, transition: enterTransition }
+              : { y: 0, transition: enterTransition }
+        }
+        drag="y"
+        dragListener={false}
+        dragControls={dragControls}
+        dragConstraints={{ top: 0, bottom: 0 }}
+        dragElastic={{ top: 0.04, bottom: 0.42 }}
+        dragTransition={{ bounceStiffness: 420, bounceDamping: 34 }}
+        onDragEnd={(_, info) => {
+          if (shouldDismissSheet(info.offset.y, info.velocity.y)) dismiss();
+        }}
+      >
+        <div
+          className="calendar-sheet__handle"
+          aria-hidden="true"
+          onPointerDown={(event) => dragControls.start(event)}
+        />
         <header className="calendar-sheet__header">
           <div>
             <p className="calendar-context-label"><CalendarDays size={14} aria-hidden="true" /> Día {day.dayNumber} de 75</p>
@@ -147,12 +184,56 @@ export default function DayDetailsSheet({ day, onClose, onPrevious, onNext }: { 
             <div className="calendar-section-heading"><h3 id="notes-title">Registro personal</h3><FileText size={16} aria-hidden="true" /></div>
             <label className="calendar-field"><span><Scale size={15} aria-hidden="true" /> Peso (kg)</span><input inputMode="decimal" type="number" min="0" step="0.1" value={weight} onChange={(event) => setWeight(event.target.value)} placeholder="—" /></label>
             <label className="calendar-field"><span><FileText size={15} aria-hidden="true" /> Nota</span><textarea rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="¿Cómo te sentiste hoy?" /></label>
-            <div className="calendar-field"><span><Camera size={15} aria-hidden="true" /> Foto de progreso</span>{photoUrl ? <button type="button" className="calendar-photo-preview" onClick={() => fileInputRef.current?.click()}><img src={photoUrl} alt="Vista previa del progreso" /></button> : <button type="button" className="calendar-upload" onClick={() => fileInputRef.current?.click()}><Upload size={18} aria-hidden="true" /> Subir foto</button>}<input ref={fileInputRef} className="sr-only" type="file" accept="image/*" onChange={handleImageUpload} /></div>
+            <div
+              className="calendar-field"
+              onDragEnter={(event) => {
+                event.preventDefault();
+                setIsDragOverPhoto(true);
+              }}
+              onDragOver={(event) => {
+                event.preventDefault();
+                if (!isDragOverPhoto) setIsDragOverPhoto(true);
+              }}
+              onDragLeave={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+                  setIsDragOverPhoto(false);
+                }
+              }}
+              onDrop={handlePhotoDrop}
+            >
+              <span><Camera size={15} aria-hidden="true" /> Foto de progreso</span>
+              {photoUrl ? (
+                <motion.button
+                  type="button"
+                  className={`calendar-photo-preview transition-shadow ${isDragOverPhoto ? 'ring-2 ring-rose-400 shadow-[0_0_24px_rgba(244,63,94,0.3)]' : ''}`}
+                  animate={
+                    reduceMotion
+                      ? undefined
+                      : { scale: isDragOverPhoto ? 1.03 : justDroppedPhoto ? [1.08, 0.96, 1] : 1 }
+                  }
+                  transition={{ type: 'spring', bounce: 0.28, duration: 0.36 }}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <img src={photoUrl} alt="Vista previa del progreso" />
+                </motion.button>
+              ) : (
+                <motion.button
+                  type="button"
+                  className={`calendar-upload transition-colors ${isDragOverPhoto ? '!border-rose-400 !bg-rose-500/10 !text-rose-200 shadow-[0_0_24px_rgba(244,63,94,0.22)]' : ''}`}
+                  animate={reduceMotion ? undefined : { scale: isDragOverPhoto ? 1.03 : 1 }}
+                  transition={{ type: 'spring', bounce: 0.25, duration: 0.28 }}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Upload size={18} aria-hidden="true" /> {isDragOverPhoto ? 'Soltá la foto acá' : 'Subir o arrastrar foto'}
+                </motion.button>
+              )}
+              <input ref={fileInputRef} className="sr-only" type="file" accept="image/*" onChange={handleImageUpload} />
+            </div>
           </section>
         </div>
 
         <footer className="calendar-sheet__footer"><button type="button" onClick={onPrevious} disabled={!onPrevious} className="calendar-nav-button" aria-label="Día anterior"><ChevronLeft size={18} /></button><button type="button" onClick={() => void save()} disabled={isSaving} className="calendar-save-button">{isSaving ? 'Guardando…' : 'Guardar registro'}</button><button type="button" onClick={onNext} disabled={!onNext} className="calendar-nav-button" aria-label="Día siguiente"><ChevronRight size={18} /></button></footer>
-      </section>
-    </div>
+      </motion.section>
+    </motion.div>
   );
 }

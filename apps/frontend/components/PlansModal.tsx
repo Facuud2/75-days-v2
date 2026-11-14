@@ -188,7 +188,7 @@ export default function PlansModal() {
       onClick={handleClose}
     >
       <div
-        className="mobile-sheet-panel bg-zinc-950 border border-white/10 rounded-2xl w-full max-w-5xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] animate-in slide-in-from-bottom-4 duration-300"
+        className="mobile-sheet-panel bg-zinc-950 border border-white/10 rounded-2xl w-full max-w-5xl overflow-hidden shadow-2xl flex flex-col max-h-[90dvh] animate-in slide-in-from-bottom-4 duration-200"
         role="dialog"
         aria-modal="true"
         aria-labelledby="plans-modal-title"

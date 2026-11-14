@@ -134,41 +134,41 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             {isAuthenticated && user?.onboardingCompleted && (
               <div data-tour="site-nav" className="hidden lg:flex items-center gap-1 md:gap-2">
                 <Link href="/dashboard" className={`app-header-nav flex flex-col items-center p-2 transition-colors ${pathname === '/dashboard' ? 'is-active' : ''}`}>
-                  <Home size={20} />
+                  <Home size={20} strokeWidth={pathname === '/dashboard' ? 2.4 : 1.8} />
                   <span className="text-[10px] mt-1 hidden sm:block">Inicio</span>
                 </Link>
                 <Link href="/calendar" className={`app-header-nav flex flex-col items-center p-2 transition-colors ${pathname === '/calendar' ? 'is-active' : ''}`}>
-                  <Calendar size={20} />
+                  <Calendar size={20} strokeWidth={pathname === '/calendar' ? 2.4 : 1.8} />
                   <span className="text-[10px] mt-1 hidden sm:block">Calendario</span>
                 </Link>
                 <button data-tour="quick-actions" aria-label="Abrir acciones rápidas" aria-expanded={isQuickActionsOpen} onClick={openQuickActions} className="app-header-nav flex flex-col items-center rounded-xl p-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400">
-                  <Plus size={20} />
+                  <Plus size={20} strokeWidth={2.2} />
 
                 </button>
                 <Link href="/profile" className={`app-header-nav flex flex-col items-center p-2 transition-colors ${pathname === '/profile' ? 'is-active' : ''}`}>
-                  <User size={20} />
+                  <User size={20} strokeWidth={pathname === '/profile' ? 2.4 : 1.8} />
                   <span className="text-[10px] mt-1 hidden sm:block">Perfil</span>
                 </Link>
                 <Link href="/settings" className={`app-header-nav flex flex-col items-center p-2 transition-colors ${pathname === '/settings' ? 'is-active' : ''}`}>
-                  <Settings size={20} />
+                  <Settings size={20} strokeWidth={pathname === '/settings' ? 2.4 : 1.8} />
                   <span className="text-[10px] mt-1 hidden sm:block">Ajustes</span>
                 </Link>
               </div>
             )}
 
             {/* Always visible theme toggle */}
-            <button aria-label={appearance === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'} onClick={(e) => toggleTheme(e)} className="app-header-control p-2 transition-colors rounded-full border ml-2 relative overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400" title={appearance === 'dark' ? 'Cambiar a claro' : 'Cambiar a oscuro'}>
-              <span className={`block transition-all duration-300 ${appearance === 'dark' ? 'rotate-0 scale-100' : 'rotate-90 scale-0 absolute'}`}>
+            <button aria-label={appearance === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'} onClick={(e) => toggleTheme(e)} className="app-header-control inline-flex min-h-11 min-w-11 items-center justify-center transition-colors rounded-full border ml-2 relative overflow-hidden active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400" title={appearance === 'dark' ? 'Cambiar a claro' : 'Cambiar a oscuro'}>
+              <span className={`block transition-all duration-200 motion-reduce:transition-none ${appearance === 'dark' ? 'rotate-0 scale-100' : 'rotate-90 scale-0 absolute'}`}>
                 <Sun size={18} />
               </span>
-              <span className={`block transition-all duration-300 ${appearance === 'dark' ? '-rotate-90 scale-0 absolute' : 'rotate-0 scale-100'}`}>
+              <span className={`block transition-all duration-200 motion-reduce:transition-none ${appearance === 'dark' ? '-rotate-90 scale-0 absolute' : 'rotate-0 scale-100'}`}>
                 <Moon size={18} />
               </span>
             </button>
 
             {/* Logout button: shown next to theme toggle only on Settings */}
             {isAuthenticated && pathname === '/settings' && (
-              <button aria-label="Cerrar sesión" onClick={() => setIsLogoutConfirmOpen(true)} className="inline-flex app-header-control p-2 transition-colors rounded-full border ml-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400">
+              <button aria-label="Cerrar sesión" onClick={() => setIsLogoutConfirmOpen(true)} className="inline-flex min-h-11 min-w-11 items-center justify-center app-header-control transition-colors rounded-full border ml-2 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400">
                 <LogOut size={18} />
               </button>
             )}

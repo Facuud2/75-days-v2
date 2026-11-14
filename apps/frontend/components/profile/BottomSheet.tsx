@@ -5,6 +5,12 @@ import { createPortal } from 'react-dom';
 import { AnimatePresence, motion, useDragControls, useReducedMotion } from 'motion/react';
 import { X } from 'lucide-react';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
+import {
+  REDUCED_MOTION_TRANSITION,
+  SHEET_ENTER_SPRING,
+  SHEET_EXIT_TRANSITION,
+  shouldDismissSheet,
+} from '@/lib/motion/sheetPhysics';
 
 interface BottomSheetProps {
   open: boolean;
@@ -78,10 +84,8 @@ export default function BottomSheet({ open, onClose, title, description, childre
 
   if (typeof document === 'undefined') return null;
 
-  const enterTransition = reduceMotion
-    ? { duration: 0 }
-    : { type: 'spring' as const, bounce: 0, duration: 0.4 };
-  const exitTransition = reduceMotion ? { duration: 0 } : { duration: 0.22, ease: 'easeIn' as const };
+  const enterTransition = reduceMotion ? REDUCED_MOTION_TRANSITION : SHEET_ENTER_SPRING;
+  const exitTransition = reduceMotion ? REDUCED_MOTION_TRANSITION : SHEET_EXIT_TRANSITION;
 
   return createPortal(
     <AnimatePresence>
@@ -91,7 +95,7 @@ export default function BottomSheet({ open, onClose, title, description, childre
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: reduceMotion ? 0 : 0.18 }}
+          transition={{ duration: reduceMotion ? 0.1 : 0.18 }}
           onClick={onClose}
         >
           <motion.div
@@ -108,11 +112,10 @@ export default function BottomSheet({ open, onClose, title, description, childre
             dragListener={false}
             dragControls={dragControls}
             dragConstraints={{ top: 0, bottom: 0 }}
-            dragElastic={{ top: 0, bottom: 0.42 }}
-            dragMomentum={false}
-            dragTransition={{ bounceStiffness: 500, bounceDamping: 40 }}
+            dragElastic={{ top: 0.04, bottom: 0.42 }}
+            dragTransition={{ bounceStiffness: 420, bounceDamping: 34 }}
             onDragEnd={(_, info) => {
-              if (info.offset.y > 120 || info.velocity.y > 650) onClose();
+              if (shouldDismissSheet(info.offset.y, info.velocity.y)) onClose();
             }}
             onClick={(event) => event.stopPropagation()}
           >
@@ -141,7 +144,7 @@ export default function BottomSheet({ open, onClose, title, description, childre
                 className="pv2-icon-button -mr-2 -mt-1"
                 aria-label="Cerrar"
               >
-                <X size={20} strokeWidth={1.5} aria-hidden="true" />
+                <X size={20} strokeWidth={2} aria-hidden="true" />
               </button>
             </div>
 

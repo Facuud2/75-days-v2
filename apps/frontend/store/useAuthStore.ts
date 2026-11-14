@@ -175,11 +175,12 @@ export const useAuthStore = create<AuthState>()(
       }),
       merge: (persisted, current) => {
         const saved = (persisted ?? {}) as Partial<AuthState>;
+        const token = saved.token || null;
         return {
           ...current,
-          user: saved.user ?? null,
-          token: saved.token ?? null,
-          isAuthenticated: saved.isAuthenticated ?? false,
+          user: token ? (saved.user ?? null) : null,
+          token,
+          isAuthenticated: Boolean(token) && Boolean(saved.isAuthenticated),
         };
       },
     }

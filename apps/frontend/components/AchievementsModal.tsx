@@ -28,7 +28,7 @@ export default function AchievementsModal({ isOpen, onClose, achievements }: Ach
     return (
         <div className="mobile-sheet-root fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
             <div
-                className="mobile-sheet-panel bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4 duration-300"
+                className="mobile-sheet-panel bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-2xl max-h-[85dvh] flex flex-col shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4 duration-200"
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* Header */}
@@ -43,7 +43,8 @@ export default function AchievementsModal({ isOpen, onClose, achievements }: Ach
                     </div>
                     <button
                         onClick={onClose}
-                        className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-xl transition-colors"
+                        aria-label="Cerrar logros"
+                        className="flex min-h-11 min-w-11 items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-xl transition-colors"
                     >
                         <X className="w-6 h-6" />
                     </button>
@@ -55,7 +56,7 @@ export default function AchievementsModal({ isOpen, onClose, achievements }: Ach
                         {achievements.map((ach) => (
                             <div
                                 key={ach.id}
-                                className={`p-5 rounded-2xl border transition-all duration-300 flex flex-col gap-3 ${ach.unlocked
+                                className={`p-5 rounded-2xl border transition-all duration-200 flex flex-col gap-3 ${ach.unlocked
                                         ? 'bg-zinc-900/80 border-yellow-500/30 shadow-[0_0_15px_rgba(234,179,8,0.1)]'
                                         : 'bg-zinc-950/50 border-zinc-800/60 opacity-75 grayscale-[50%]'
                                     }`}
@@ -91,7 +92,7 @@ export default function AchievementsModal({ isOpen, onClose, achievements }: Ach
                                             </div>
                                             <div className="h-2 w-full bg-zinc-900 rounded-full overflow-hidden border border-zinc-800/80">
                                                 <div
-                                                    className="h-full bg-gradient-to-r from-zinc-700 to-zinc-500 rounded-full transition-all duration-1000 ease-out"
+                                                    className="h-full bg-gradient-to-r from-zinc-700 to-zinc-500 rounded-full transition-all duration-250 ease-out"
                                                     style={{ width: `${Math.min(100, (ach.progress / ach.total) * 100)}%` }}
                                                 />
                                             </div>

@@ -132,7 +132,7 @@ export default function Dashboard() {
         onClick={handleClick}
         disabled={isLocked}
         aria-pressed={goal.completed}
-        className={`group w-full text-left bg-rose-950/20 border rounded-2xl px-3.5 py-3 sm:p-5 flex items-center gap-3 sm:gap-5 transition-all duration-300 min-h-14 ${isLocked
+        className={`group w-full text-left bg-rose-950/20 border rounded-2xl px-3.5 py-3 sm:p-5 flex items-center gap-3 sm:gap-5 transition-all duration-200 min-h-14 ${isLocked
           ? 'border-[#361726] opacity-40 cursor-not-allowed select-none'
           : isThisUpdating
             ? 'border-rose-500/20 cursor-wait'
@@ -164,7 +164,7 @@ export default function Dashboard() {
           ) : null}
         </div>
 
-        <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center shrink-0 transition-all duration-300 ${isThisUpdating
+        <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center shrink-0 transition-all duration-200 ${isThisUpdating
           ? 'border-white/20'
           : goal.completed
             ? 'bg-rose-500 border-rose-500 shadow-[0_0_15px_var(--color-rose-500)]'
@@ -349,7 +349,7 @@ export default function Dashboard() {
             </div>
             <div className="h-1.5 overflow-hidden rounded-full bg-white/5">
               <div
-                className="h-full bg-rose-500 transition-all duration-1000 ease-out"
+                className="h-full bg-rose-500 transition-all duration-250 ease-out"
                 style={{ width: `${(currentDay / 75) * 100}%` }}
               />
             </div>
@@ -374,7 +374,7 @@ export default function Dashboard() {
                     strokeWidth="2"
                   />
                   <path
-                    className={`transition-all duration-1000 ease-out ${progress === 100 ? 'text-emerald-600 dark:text-emerald-500' : 'text-rose-500'}`}
+                    className={`transition-all duration-250 ease-out ${progress === 100 ? 'text-emerald-600 dark:text-emerald-500' : 'text-rose-500'}`}
                     strokeDasharray={`${progress}, 100`}
                     d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                     fill="none"
@@ -512,7 +512,7 @@ export default function Dashboard() {
                       onClick={() => setSelectedSideQuest(quest)}
                       aria-label={`Abrir misión ${quest.title}: ${quest.progress} de ${quest.durationDays} días, dificultad ${quest.difficulty}`}
                       aria-haspopup="dialog"
-                      className="side-quest-card group w-full text-left bg-rose-950/20 border rounded-2xl p-5 transition-all duration-300" data-completed={quest.completed ? 'true' : 'false'}
+                      className="side-quest-card group w-full text-left bg-rose-950/20 border rounded-2xl p-5 transition-all duration-200" data-completed={quest.completed ? 'true' : 'false'}
                     >
                       <div className="flex items-center gap-5">
                         <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${quest.completed
@@ -549,7 +549,7 @@ export default function Dashboard() {
                           </div>
                         </div>
 
-                        <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all duration-300 ease-out ${quest.completed
+                        <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all duration-200 ease-out ${quest.completed
                           ? 'bg-emerald-500 border-emerald-500 scale-125 shadow-[0_0_15px_var(--color-emerald-500)]'
                           : 'border-rose-950/40 group-hover:border-emerald-500/50 group-active:scale-75 scale-100'
                           }`}>
@@ -562,7 +562,7 @@ export default function Dashboard() {
                         <div className="mt-4 flex flex-col gap-1.5">
                           <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
                             <div
-                              className="h-full bg-emerald-500 transition-all duration-500 ease-out"
+                              className="h-full bg-emerald-500 transition-all duration-200 ease-out"
                               style={{ width: `${(quest.progress / quest.durationDays) * 100}%` }}
                             />
                           </div>

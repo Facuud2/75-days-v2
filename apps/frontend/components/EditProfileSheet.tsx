@@ -1,13 +1,20 @@
 'use client';
 
 import { ChangeEvent, useEffect, useRef, useState } from 'react';
-import { Check, Eye, ImagePlus, Loader2, Upload, X } from 'lucide-react';
+import { motion, useDragControls, useReducedMotion } from 'motion/react';
+import { Check, Crop, Eye, ImagePlus, Loader2, Upload, X } from 'lucide-react';
 import { userService, UpdateProfilePayload } from '@/lib/api/users';
 import toast from 'react-hot-toast';
+import {
+  REDUCED_MOTION_TRANSITION,
+  SHEET_ENTER_SPRING,
+  shouldDismissSheet,
+} from '@/lib/motion/sheetPhysics';
 
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import ProfilePreview from '@/components/profile/ProfilePreview';
 import ProfilePreviewOverlay from '@/components/profile/ProfilePreviewOverlay';
+import ImageCropperModal from '@/components/profile/ImageCropperModal';
 
 export type ProfileEditMode = 'avatar' | 'banner' | 'name' | 'quote';
 
@@ -50,26 +57,29 @@ const copy: Record<ProfileEditMode, { title: string; description: string }> = {
 /** Alto del banner en el preview inline, según el layout real de cada dispositivo. */
 const PREVIEW_BANNER_HEIGHT = { mobile: 116, desktop: 96 };
 
-async function fileToDataUrl(file: File, maxSize = 1100): Promise<string> {
-  const source = await createImageBitmap(file);
-  const scale = Math.min(1, maxSize / Math.max(source.width, source.height));
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.round(source.width * scale);
-  canvas.height = Math.round(source.height * scale);
-  canvas.getContext('2d')?.drawImage(source, 0, 0, canvas.width, canvas.height);
-  source.close();
-  return canvas.toDataURL('image/jpeg', 0.72);
-}
-
 export default function EditProfileSheet({ mode, onClose, onSaved, initialValues }: EditProfileSheetProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [value, setValue] = useState(mode === 'avatar' ? initialValues.avatarUrl || '' : mode === 'banner' ? initialValues.bannerUrl || '' : mode === 'name' ? initialValues.name : initialValues.profileQuote || '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
+  const [rawSourceUrl, setRawSourceUrl] = useState<string | null>(null);
+  const [isDragOverFile, setIsDragOverFile] = useState(false);
+  const dragControls = useDragControls();
+  const reduceMotion = useReducedMotion();
   const isImage = mode === 'avatar' || mode === 'banner';
   const stock = mode === 'avatar' ? STOCK_AVATARS : STOCK_BANNERS;
   const hasCurrentImage = Boolean(mode === 'avatar' ? initialValues.avatarUrl : initialValues.bannerUrl);
+
+  // Liberar el object URL temporal si el usuario cargó una foto desde la galería.
+  useEffect(() => {
+    return () => {
+      if (rawSourceUrl?.startsWith('blob:')) {
+        URL.revokeObjectURL(rawSourceUrl);
+      }
+    };
+  }, [rawSourceUrl]);
 
   // La variante del preview sigue al ancho real de la ventana: al rotar el
   // teléfono o redimensionar el navegador se re-renderiza sin recargar.
@@ -101,11 +111,29 @@ export default function EditProfileSheet({ mode, onClose, onSaved, initialValues
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isPreviewOpen]);
 
-  const handleUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+  const handleUpload = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    try { setValue(await fileToDataUrl(file)); } catch { setError('No se pudo leer esa imagen.'); }
+    if (!file.type.startsWith('image/')) {
+      setError('Seleccioná un archivo de imagen válido.');
+      event.target.value = '';
+      return;
+    }
+    setError('');
+    const objectUrl = URL.createObjectURL(file);
+    setRawSourceUrl((prev) => {
+      if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev);
+      return objectUrl;
+    });
+    setCropSrc(objectUrl);
     event.target.value = '';
+  };
+
+  const handleOpenCropper = () => {
+    const source = rawSourceUrl || value;
+    if (!source) return;
+    setError('');
+    setCropSrc(source);
   };
 
   const handleSave = async () => {
@@ -144,10 +172,10 @@ export default function EditProfileSheet({ mode, onClose, onSaved, initialValues
 
   return (
     <div className="fixed inset-0 z-[100] flex items-end bg-black/60" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section role="dialog" aria-modal="true" aria-labelledby="profile-sheet-title" className="max-h-[calc(100dvh-0.5rem)] w-full overflow-y-auto rounded-t-[2rem] border border-zinc-800 bg-zinc-950 px-5 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] pt-3 shadow-2xl animate-in slide-in-from-bottom-4 duration-200 sm:mx-auto sm:max-w-xl">
+      <section role="dialog" aria-modal="true" aria-labelledby="profile-sheet-title" className="max-h-[calc(100dvh-0.5rem)] w-full overflow-y-auto rounded-t-[24px] border border-zinc-800 bg-zinc-950 px-5 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] pt-3 shadow-2xl animate-in slide-in-from-bottom-4 duration-200 sm:mx-auto sm:max-w-xl">
         <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-zinc-700" aria-hidden="true" />
         <header className="flex items-start justify-between">
-          <div><h2 id="profile-sheet-title" className="text-xl font-bold text-zinc-100">{copy[mode].title}</h2><p className="mt-1 text-sm text-zinc-500">{copy[mode].description}</p></div>
+          <div><h2 id="profile-sheet-title" className="text-xl font-bold tracking-tight text-zinc-100">{copy[mode].title}</h2><p className="mt-1 text-sm text-zinc-500">{copy[mode].description}</p></div>
           <button type="button" onClick={onClose} aria-label="Cerrar" className="rounded-xl p-2 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100"><X className="h-5 w-5" /></button>
         </header>
 
@@ -176,7 +204,19 @@ export default function EditProfileSheet({ mode, onClose, onSaved, initialValues
             </div>
           </div>
 
-          <button type="button" onClick={() => inputRef.current?.click()} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-rose-400 px-4 py-3 text-sm font-bold text-zinc-950 hover:bg-rose-300"><Upload className="h-4 w-4" /> Cargar desde galería</button>
+          <div className="flex flex-col gap-2.5 sm:flex-row">
+            <button type="button" onClick={() => inputRef.current?.click()} className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-rose-400 px-4 py-3 text-sm font-bold text-zinc-950 hover:bg-rose-300"><Upload className="h-4 w-4" /> Cargar desde galería</button>
+            {(value || rawSourceUrl) && (
+              <button
+                type="button"
+                onClick={handleOpenCropper}
+                className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm font-semibold text-zinc-100 transition hover:border-zinc-500 hover:bg-zinc-800"
+              >
+                <Crop className="h-4 w-4 text-rose-300" />
+                Ajustar recorte
+              </button>
+            )}
+          </div>
           <input ref={inputRef} type="file" accept="image/*" onChange={handleUpload} className="sr-only" />
           <div>
             <p className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-zinc-500">Fotos stock</p>
@@ -185,7 +225,10 @@ export default function EditProfileSheet({ mode, onClose, onSaved, initialValues
                 <button
                   key={url}
                   type="button"
-                  onClick={() => setValue(url)}
+                  onClick={() => {
+                    setRawSourceUrl(null);
+                    setValue(url);
+                  }}
                   className={`relative aspect-square overflow-hidden rounded-xl border-2 ${value === url ? 'border-rose-400' : 'border-transparent'}`}
                   aria-pressed={value === url}
                 >
@@ -218,6 +261,20 @@ export default function EditProfileSheet({ mode, onClose, onSaved, initialValues
         values={previewValues}
         isDesktop={isDesktop}
       />
+
+      {isImage && (
+        <ImageCropperModal
+          open={Boolean(cropSrc)}
+          src={cropSrc}
+          mode={mode === 'avatar' ? 'avatar' : 'banner'}
+          onCancel={() => setCropSrc(null)}
+          onApply={(croppedDataUrl) => {
+            setValue(croppedDataUrl);
+            setCropSrc(null);
+            setError('');
+          }}
+        />
+      )}
     </div>
   );
 }

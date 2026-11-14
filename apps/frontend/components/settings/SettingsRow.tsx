@@ -71,6 +71,7 @@ export function SettingsRow({
         {showChevron && !rightElement && (
           <ChevronRight
             className="h-4 w-4 shrink-0 text-[var(--text-muted)] opacity-70"
+            strokeWidth={2.1}
             aria-hidden="true"
           />
         )}

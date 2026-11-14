@@ -94,10 +94,11 @@ export async function baseRequest<T>(
         endpoint.includes('/auth/login') ||
         endpoint.includes('/auth/register') ||
         endpoint.includes('/auth/me');
-      if (!isAuthEndpoint && token) {
+      if (!isAuthEndpoint) {
         if (typeof window !== 'undefined') {
           localStorage.removeItem('auth-storage');
           localStorage.removeItem('challenge-storage');
+          window.dispatchEvent(new CustomEvent('auth:unauthorized'));
           const currentPath = window.location.pathname;
           if (currentPath !== '/login' && currentPath !== '/register' && currentPath !== '/') {
             window.location.replace('/login');
