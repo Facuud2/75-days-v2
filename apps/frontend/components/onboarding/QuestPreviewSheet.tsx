@@ -14,8 +14,15 @@ import {
   Trophy,
   X,
 } from 'lucide-react';
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { AnimatePresence, motion, useDragControls, useReducedMotion } from 'motion/react';
 import type { SideQuestTemplate, SideQuestTask } from '@/store/useQuestStore';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
+import {
+  REDUCED_MOTION_TRANSITION,
+  SHEET_ENTER_SPRING,
+  SHEET_EXIT_TRANSITION,
+  shouldDismissSheet,
+} from '@/lib/motion/sheetPhysics';
 
 type QuestFallback = {
   summary: string;
@@ -226,6 +233,8 @@ export default function QuestPreviewSheet({
   onClose,
 }: QuestPreviewSheetProps) {
   const reduceMotion = useReducedMotion();
+  const dragControls = useDragControls();
+  const isDesktop = useMediaQuery('(min-width: 640px)');
 
   useEffect(() => {
     if (!quest) return;
@@ -266,17 +275,36 @@ export default function QuestPreviewSheet({
 
           <motion.div
             initial={
-              reduceMotion ? { opacity: 0 } : { opacity: 0, y: 28, scale: 0.98 }
+              reduceMotion ? { opacity: 0 } : isDesktop ? { opacity: 0, y: 20, scale: 0.96 } : { y: '100%' }
             }
-            animate={{ opacity: 1, y: 0, scale: 1 }}
+            animate={
+              reduceMotion
+                ? { opacity: 1 }
+                : isDesktop
+                  ? { opacity: 1, y: 0, scale: 1 }
+                  : { y: 0 }
+            }
             exit={
-              reduceMotion ? { opacity: 0 } : { opacity: 0, y: 20, scale: 0.98 }
+              reduceMotion
+                ? { opacity: 0 }
+                : isDesktop
+                  ? { opacity: 0, y: 12, scale: 0.96, transition: SHEET_EXIT_TRANSITION }
+                  : { y: '100%', transition: SHEET_EXIT_TRANSITION }
             }
             transition={
               reduceMotion
-                ? { duration: 0.15 }
-                : { duration: 0.24, ease: EASE_OUT }
+                ? REDUCED_MOTION_TRANSITION
+                : SHEET_ENTER_SPRING
             }
+            drag={isDesktop ? false : 'y'}
+            dragListener={false}
+            dragControls={dragControls}
+            dragConstraints={{ top: 0, bottom: 0 }}
+            dragElastic={{ top: 0.04, bottom: 0.42 }}
+            dragTransition={{ bounceStiffness: 420, bounceDamping: 34 }}
+            onDragEnd={(_, info) => {
+              if (shouldDismissSheet(info.offset.y, info.velocity.y)) onClose();
+            }}
             className="relative w-full max-w-lg max-h-[86dvh] flex flex-col overflow-hidden rounded-t-3xl sm:rounded-3xl border shadow-2xl"
             style={{
               backgroundColor: 'var(--surface-card)',
@@ -284,6 +312,11 @@ export default function QuestPreviewSheet({
               color: 'var(--text-primary)',
             }}
           >
+            <div
+              className="mx-auto mt-2.5 h-1.5 w-10 shrink-0 cursor-grab touch-none rounded-full bg-[var(--border-control)]/50 active:cursor-grabbing sm:hidden"
+              aria-hidden="true"
+              onPointerDown={(event) => dragControls.start(event)}
+            />
             {/* Header */}
             <header
               className="shrink-0 flex items-start justify-between gap-3 px-5 pt-5 pb-4 border-b"

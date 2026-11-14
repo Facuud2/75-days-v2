@@ -111,12 +111,10 @@ export default function EditProfileSheet({ mode, onClose, onSaved, initialValues
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isPreviewOpen]);
 
-  const handleUpload = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+  const processImageFile = (file: File | undefined) => {
     if (!file) return;
     if (!file.type.startsWith('image/')) {
       setError('Seleccioná un archivo de imagen válido.');
-      event.target.value = '';
       return;
     }
     setError('');
@@ -126,7 +124,17 @@ export default function EditProfileSheet({ mode, onClose, onSaved, initialValues
       return objectUrl;
     });
     setCropSrc(objectUrl);
+  };
+
+  const handleUpload = (event: ChangeEvent<HTMLInputElement>) => {
+    processImageFile(event.target.files?.[0]);
     event.target.value = '';
+  };
+
+  const handleFileDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setIsDragOverFile(false);
+    processImageFile(event.dataTransfer.files?.[0]);
   };
 
   const handleOpenCropper = () => {
@@ -170,10 +178,39 @@ export default function EditProfileSheet({ mode, onClose, onSaved, initialValues
     } finally { setSaving(false); }
   };
 
+  const enterTransition = reduceMotion ? REDUCED_MOTION_TRANSITION : SHEET_ENTER_SPRING;
+
   return (
-    <div className="fixed inset-0 z-[100] flex items-end bg-black/60" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section role="dialog" aria-modal="true" aria-labelledby="profile-sheet-title" className="max-h-[calc(100dvh-0.5rem)] w-full overflow-y-auto rounded-t-[24px] border border-zinc-800 bg-zinc-950 px-5 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] pt-3 shadow-2xl animate-in slide-in-from-bottom-4 duration-200 sm:mx-auto sm:max-w-xl">
-        <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-zinc-700" aria-hidden="true" />
+    <motion.div
+      className="fixed inset-0 z-[100] flex items-end bg-black/60 backdrop-blur-[2px]"
+      role="presentation"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: reduceMotion ? 0.1 : 0.18 }}
+      onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}
+    >
+      <motion.section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="profile-sheet-title"
+        initial={reduceMotion ? { opacity: 0 } : { y: '100%' }}
+        animate={reduceMotion ? { opacity: 1 } : { y: 0, transition: enterTransition }}
+        drag="y"
+        dragListener={false}
+        dragControls={dragControls}
+        dragConstraints={{ top: 0, bottom: 0 }}
+        dragElastic={{ top: 0.04, bottom: 0.42 }}
+        dragTransition={{ bounceStiffness: 420, bounceDamping: 34 }}
+        onDragEnd={(_, info) => {
+          if (shouldDismissSheet(info.offset.y, info.velocity.y)) onClose();
+        }}
+        className="max-h-[calc(100dvh-0.5rem)] w-full overflow-y-auto overscroll-contain rounded-t-[24px] border border-zinc-800 bg-zinc-950 px-5 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] pt-3 shadow-2xl sm:mx-auto sm:max-w-xl"
+      >
+        <div
+          className="mx-auto mb-4 h-1.5 w-12 cursor-grab touch-none rounded-full bg-zinc-700 active:cursor-grabbing"
+          aria-hidden="true"
+          onPointerDown={(event) => dragControls.start(event)}
+        />
         <header className="flex items-start justify-between">
           <div><h2 id="profile-sheet-title" className="text-xl font-bold tracking-tight text-zinc-100">{copy[mode].title}</h2><p className="mt-1 text-sm text-zinc-500">{copy[mode].description}</p></div>
           <button type="button" onClick={onClose} aria-label="Cerrar" className="rounded-xl p-2 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100"><X className="h-5 w-5" /></button>
@@ -204,8 +241,32 @@ export default function EditProfileSheet({ mode, onClose, onSaved, initialValues
             </div>
           </div>
 
-          <div className="flex flex-col gap-2.5 sm:flex-row">
-            <button type="button" onClick={() => inputRef.current?.click()} className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-rose-400 px-4 py-3 text-sm font-bold text-zinc-950 hover:bg-rose-300"><Upload className="h-4 w-4" /> Cargar desde galería</button>
+          <div
+            className={`flex flex-col gap-2.5 rounded-2xl border border-dashed p-2 transition-colors sm:flex-row ${isDragOverFile ? 'border-rose-400 bg-rose-500/10 shadow-[0_0_24px_rgba(244,63,94,0.22)]' : 'border-transparent p-0'}`}
+            onDragEnter={(event) => {
+              event.preventDefault();
+              setIsDragOverFile(true);
+            }}
+            onDragOver={(event) => {
+              event.preventDefault();
+              if (!isDragOverFile) setIsDragOverFile(true);
+            }}
+            onDragLeave={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+                setIsDragOverFile(false);
+              }
+            }}
+            onDrop={handleFileDrop}
+          >
+            <motion.button
+              type="button"
+              onClick={() => inputRef.current?.click()}
+              animate={reduceMotion ? undefined : { scale: isDragOverFile ? 1.03 : 1 }}
+              transition={{ type: 'spring', bounce: 0.25, duration: 0.28 }}
+              className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-rose-400 px-4 py-3 text-sm font-bold text-zinc-950 hover:bg-rose-300"
+            >
+              <Upload className="h-4 w-4" /> {isDragOverFile ? 'Soltá la imagen acá' : 'Cargar o arrastrar imagen'}
+            </motion.button>
             {(value || rawSourceUrl) && (
               <button
                 type="button"
@@ -253,7 +314,7 @@ export default function EditProfileSheet({ mode, onClose, onSaved, initialValues
 
         {error && <p className="mt-4 text-sm text-red-400">{error}</p>}
         <footer className="sticky bottom-0 mt-5 flex justify-end gap-3 border-t border-zinc-800 bg-zinc-950 pb-1 pt-4"><button type="button" onClick={onClose} className="rounded-xl px-4 py-2.5 text-sm font-medium text-zinc-400 hover:text-zinc-100">Cancelar</button><button type="button" onClick={handleSave} disabled={saving} className="flex items-center gap-2 rounded-xl bg-rose-400 px-5 py-2.5 text-sm font-semibold text-zinc-950 hover:bg-rose-300 disabled:opacity-60">{saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Guardando...</> : 'Guardar'}</button></footer>
-      </section>
+      </motion.section>
 
       <ProfilePreviewOverlay
         open={isPreviewOpen}
@@ -275,6 +336,6 @@ export default function EditProfileSheet({ mode, onClose, onSaved, initialValues
           }}
         />
       )}
-    </div>
+    </motion.div>
   );
 }
