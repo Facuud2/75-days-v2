@@ -1,28 +1,6 @@
 import { create } from 'zustand';
 import { apiClient } from '@/lib/api/client';
 
-import type { InternalAxiosRequestConfig } from 'axios';
-import { useAuthStore } from './useAuthStore';
-
-// NOTE: apiClient now handles auth via shared getAuthToken() in lib/api/base.ts.
-// The axios interceptor below is kept only for the quest store's own axios instance
-// during the migration. Once useQuestStore fully uses apiClient, this can be removed.
-const api = (() => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const axios: any = require('axios');
-  const instance = axios.create({
-    baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api',
-  });
-  instance.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-    const token = useAuthStore.getState().token;
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  });
-  return instance;
-})();
-
 export interface SideQuest {
   id: string;
   userId: string;

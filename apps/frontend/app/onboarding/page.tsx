@@ -17,10 +17,9 @@ export default function Onboarding() {
   const router = useRouter();
 
   // Carga de quests con estado de loading
-  const [fetchQuestsStatus, setFetchQuestsStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [fetchQuestsStatus, setFetchQuestsStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('loading');
 
   useEffect(() => {
-    setFetchQuestsStatus('loading');
     fetchAvailableQuests().finally(() => setFetchQuestsStatus('success'));
   }, [fetchAvailableQuests]);
 

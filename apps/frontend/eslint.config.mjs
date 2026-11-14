@@ -8,7 +8,7 @@ const __dirname = path.dirname(__filename);
 
 export default defineConfig([
     {
-        ignores: [".next/**", ".next-dev/**", "dist/**", "node_modules/**", "test-results/**", "playwright-report/**"],
+        ignores: [".next/**", ".next-*/**", ".next-dev/**", "dist/**", "node_modules/**", "test-results/**", "playwright-report/**"],
     },
     {
         extends: [...next],
