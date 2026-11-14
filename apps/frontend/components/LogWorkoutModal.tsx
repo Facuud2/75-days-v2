@@ -122,8 +122,8 @@ export default function LogWorkoutModal({ isOpen, onClose, date, onSaved, initia
     };
 
     return (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-end justify-center sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="workout-modal-title">
-            <div className="bg-zinc-950 border border-zinc-800 w-full max-w-md rounded-t-[2rem] sm:rounded-2xl overflow-hidden shadow-2xl relative animate-in fade-in zoom-in-95 duration-200 max-h-[92dvh] sm:max-h-none">
+        <div className="mobile-sheet-root fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-end justify-center sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="workout-modal-title">
+            <div className="mobile-sheet-panel bg-zinc-950 border border-zinc-800 w-full max-w-md rounded-t-[2rem] sm:rounded-2xl overflow-hidden shadow-2xl relative animate-in fade-in zoom-in-95 duration-200 max-h-[92dvh] sm:max-h-none">
 
                 {/* Header */}
                 <div className="flex items-center justify-between p-4 sm:p-5 border-b border-zinc-900 bg-zinc-900/50">

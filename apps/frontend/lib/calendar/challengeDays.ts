@@ -49,6 +49,41 @@ export function buildChallengeDays(
   });
 }
 
+export type ChallengeWeek = ChallengeDay[];
+
+/** Agrupa los días en semanas de 7, conservando el número de semana del modelo. */
+export function groupChallengeWeeks(days: ChallengeDay[], size = 7): ChallengeWeek[] {
+  const weeks: ChallengeWeek[] = [];
+  for (let index = 0; index < days.length; index += size) {
+    const week = days.slice(index, index + size);
+    if (week.length) weeks.push(week);
+  }
+  return weeks;
+}
+
+/**
+ * Semana que conviene mostrar al abrir la agenda: la actual y, si el reto no
+ * está en curso, la primera.
+ */
+export function getDefaultWeekIndex(weeks: ChallengeWeek[], currentDay?: number | null): number {
+  const current = getCurrentWeekIndex(weeks, currentDay);
+  return current >= 0 ? current : 0;
+}
+
+/**
+ * Índice de la semana "actual": la que contiene el día en curso del reto. Manda
+ * `currentDay` (el día que el reto considera hoy) y, si no llega, el día con
+ * `isToday`. Devuelve -1 cuando el reto no está en curso o `currentDay` cae
+ * fuera de los días disponibles.
+ */
+export function getCurrentWeekIndex(weeks: ChallengeWeek[], currentDay?: number | null): number {
+  if (currentDay && currentDay >= 1) {
+    const index = weeks.findIndex((week) => week.some((day) => day.dayNumber === currentDay));
+    if (index >= 0) return index;
+  }
+  return weeks.findIndex((week) => week.some((day) => day.isToday));
+}
+
 export function getChallengeSummary(days: ChallengeDay[]) {
   return days.reduce(
     (summary, day) => {

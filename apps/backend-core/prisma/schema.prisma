@@ -10,6 +10,9 @@ datasource db {
 model User {
   id                  String   @id @default(uuid())
   name                String
+  avatarUrl           String?
+  bannerUrl           String?
+  profileQuote        String?
   email               String   @unique
   passwordHash        String
   age                 Int?
@@ -78,16 +81,22 @@ model DailyGoal {
 }
 
 model SideQuest {
-  id           String   @id @default(uuid())
-  userId       String
-  title        String
-  difficulty   String
-  durationDays Int
-  startedAt    DateTime @default(now())
-  progress     Int      @default(0)
-  completed    Boolean  @default(false)
+  id              String   @id @default(uuid())
+  userId          String
+  templateId      String?
+  title           String
+  description     String?
+  difficulty      String
+  durationDays    Int
+  icon            String?
+  startedAt       DateTime @default(now())
+  progress        Int      @default(0)
+  completed       Boolean  @default(false)
+  completionCount Int      @default(0)
 
-  user User @relation(fields: [userId], references: [id])
+  user     User             @relation(fields: [userId], references: [id])
+  template SideQuestTemplate? @relation(fields: [templateId], references: [id])
+  runs     SideQuestRun[]
 }
 
 model SideQuestTemplate {
@@ -97,6 +106,59 @@ model SideQuestTemplate {
   difficulty   String
   durationDays Int
   icon         String?
+
+  quests SideQuest[]
+  tasks  SideQuestTaskTemplate[]
+}
+
+model SideQuestTaskTemplate {
+  id           String   @id @default(uuid())
+  templateId   String
+  title        String
+  description  String?
+  icon         String?
+  order        Int      @default(0)
+  frequency    String   @default("daily")
+  targetValue  Int?
+  targetUnit   String?
+
+  template SideQuestTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  tasks    SideQuestTask[]
+}
+
+model SideQuestRun {
+  id          String    @id @default(uuid())
+  sideQuestId String
+  runNumber   Int
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+  completed   Boolean   @default(false)
+
+  sideQuest SideQuest       @relation(fields: [sideQuestId], references: [id], onDelete: Cascade)
+  tasks     SideQuestTask[]
+
+  @@unique([sideQuestId, runNumber])
+  @@index([sideQuestId, completed])
+}
+
+model SideQuestTask {
+  id                 String    @id @default(uuid())
+  runId              String
+  templateTaskId     String?
+  title              String
+  description        String?
+  icon               String?
+  order              Int       @default(0)
+  frequency          String    @default("daily")
+  targetValue        Int?
+  targetUnit         String?
+  completed          Boolean   @default(false)
+  completedAt        DateTime?
+
+  run          SideQuestRun           @relation(fields: [runId], references: [id], onDelete: Cascade)
+  templateTask SideQuestTaskTemplate? @relation(fields: [templateTaskId], references: [id], onDelete: SetNull)
+
+  @@index([runId, order])
 }
 
 model Achievement {

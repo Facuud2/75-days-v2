@@ -4,6 +4,9 @@ export interface UserProfileResponse {
     user: {
         id: string;
         name: string;
+        avatarUrl?: string | null;
+        bannerUrl?: string | null;
+        profileQuote?: string | null;
         email: string;
         registeredAt: string;
         initialWeight: number;
@@ -11,6 +14,7 @@ export interface UserProfileResponse {
         targetWeight: number;
         height?: number;
         weightHistory?: { date: string; weight: number }[];
+        sideQuests?: { id: string; title: string; completionCount: number; completed: boolean }[];
     };
     stats: {
         totalChallengesCompleted: number;
@@ -32,6 +36,9 @@ export interface UserProfileResponse {
 
 export interface UpdateProfilePayload {
     name?: string;
+    avatarUrl?: string | null;
+    bannerUrl?: string | null;
+    profileQuote?: string | null;
     email?: string;
     age?: number;
     weight?: number;
@@ -49,7 +56,7 @@ export const userService = {
         return apiClient<UserProfileResponse>('/users/profile');
     },
     updateProfile: (payload: UpdateProfilePayload) => {
-        return apiClient<{ user: { id: string; name: string; email: string; age?: number; weight?: number; targetWeight?: number; height?: number } }>('/users/profile', {
+        return apiClient<{ user: { id: string; name: string; email: string; avatarUrl?: string | null; bannerUrl?: string | null; profileQuote?: string | null; age?: number; weight?: number; targetWeight?: number; height?: number } }>('/users/profile', {
             method: 'PUT',
             body: JSON.stringify(payload),
         });
@@ -61,4 +68,3 @@ export const userService = {
         });
     },
 };
-

@@ -1,19 +1,38 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useChallengeStore } from '@/store/useChallengeStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useQuestStore } from '@/store/useQuestStore';
+import dynamic from 'next/dynamic';
 import { format, addDays, differenceInDays, startOfMonth, endOfMonth, getDay, isSameDay, subMonths, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Check, Utensils, Dumbbell, Sun, Droplet, Book, Camera, Target, ChevronLeft, ChevronRight, PlusCircle, Trophy } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import DayDetailsModal from '@/components/DayDetailsModal';
-import SideQuestsModal from '@/components/SideQuestsModal';
 import { DEFAULT_GOALS } from '@/lib/constants/plans';
+import type { DevDataset } from '@/components/dev/DevDatasetPicker';
+import { DEV_DATASETS } from '@/components/dev/DevDatasetPicker';
+import DashboardLoading from './loading';
+
+// Lazy-loaded modals for dashboard (vercel-react-best-practices: bundle-dynamic-imports)
+const DayDetailsModal = dynamic(() => import('@/components/DayDetailsModal'), { ssr: false });
+const SideQuestsModal = dynamic(() => import('@/components/SideQuestsModal'), { ssr: false });
+const SideQuestDetailModal = dynamic(() => import('@/components/SideQuestDetailModal'), { ssr: false });
 
 type TabView = 'plan' | 'missions';
+
+/**
+ * Sólo dev: alterna los fixtures de break-ui sobre este mismo dashboard.
+ * `next dev` lo carga en un chunk aparte; en producción el JSX de abajo no se
+ * renderiza y el chunk no se referencia en el HTML servido.
+ */
+const DevDatasetPicker = dynamic(
+  () => import('@/components/dev/DevDatasetPicker'),
+  { ssr: false }
+);
+
+const IS_DEV_BUILD = process.env.NODE_ENV === 'development';
 
 const iconMap: Record<string, any> = {
   utensils: Utensils,
@@ -37,7 +56,7 @@ export default function Dashboard() {
     checkDailyReset,
     isLoading: isChallengeLoading
   } = useChallengeStore();
-  const { quests, fetchQuests, progressQuest, isLoading: isQuestsLoading } = useQuestStore();
+  const { quests, fetchQuests, fetchAvailableQuests, isLoading: isQuestsLoading } = useQuestStore();
 
   const router = useRouter();
 
@@ -47,7 +66,17 @@ export default function Dashboard() {
   const [currentMonthDate, setCurrentMonthDate] = useState(new Date());
   const [updatingGoalId, setUpdatingGoalId] = useState<string | null>(null);
   const [isSideQuestsModalOpen, setIsSideQuestsModalOpen] = useState(false);
+  const [selectedSideQuest, setSelectedSideQuest] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<TabView>('plan');
+
+  // ── break-ui · dataset del laboratorio (sólo dev) ──────────────────────────
+  // El estado por defecto deja la página exactamente como se diseñó; los demás
+  // datasets sólo reemplazan los valores derivados del challenge y las quests.
+  const [devDataset, setDevDataset] = useState<DevDataset>(() => {
+    if (!IS_DEV_BUILD || typeof window === 'undefined') return 'demo';
+    const value = new URLSearchParams(window.location.search).get('data') as DevDataset | null;
+    return value && DEV_DATASETS.includes(value) ? value : 'demo';
+  });
 
   const hasCheckedReset = React.useRef(false);
 
@@ -55,37 +84,129 @@ export default function Dashboard() {
     if (hasCheckedReset.current || !user) return;
     hasCheckedReset.current = true;
 
-    // F-45: no dependemos de challenge-storage para descubrir el reto. Con
-    // storage limpio, primero consultamos al backend y recién después
-    // decidimos si hay que mostrar onboarding.
+    // F-01: todos los fetches son independientes — lanzarlos en paralelo.
     (async () => {
-      await fetchCurrentChallenge();
+      await Promise.all([
+        fetchCurrentChallenge(),
+        checkDailyReset(),
+        fetchQuests(),
+        fetchAvailableQuests(),
+      ]);
       const current = useChallengeStore.getState();
       if (!current.isActive) {
         if (user.onboardingCompleted !== true) router.push('/onboarding');
-        return;
       }
-      await checkDailyReset();
-      await fetchQuests();
     })();
-  }, [user, router, checkDailyReset, fetchCurrentChallenge, fetchQuests]);
+  }, [user, router, checkDailyReset, fetchCurrentChallenge, fetchQuests, fetchAvailableQuests]);
 
-  // Loading state prevents returning generic null silently
+  // Loading state prevents returning generic null silently (U-09: full layout skeleton)
   if (isChallengeLoading || (isActive && !todayLog)) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-        <div className="w-12 h-12 rounded-full border-4 border-white/10 border-t-rose-500 animate-spin" />
-        <p className="text-white/50 font-medium">Cargando tu desafío...</p>
-      </div>
-    );
+    return <DashboardLoading />;
   }
 
   if (!isActive) return null;
 
-  const completedTasks = todayLog.goals.filter(g => g.completed).length;
-  const totalTasks = todayLog.goals.length;
+  // ── Fixture de dev ────────────────────────────────────────────────────────
+  // Cada dataset cambia sólo los datos que la página ya renderiza; con 'demo'
+  // todo queda exactamente como vino del store.
+  const isWorst = devDataset === 'worst';
+  const isThousand = devDataset === 'thousand';
+  const isOne = devDataset === 'one';
+  const isEmpty = devDataset === 'empty';
+
+  // ── Datos de la página (normalmente del store) ────────────────────────────
+  // `devGoals` y `devQuests` son el único punto de entrada del fixture: mismas
+  // formas que `todayLog.goals` y `quests`, así que todo lo que sigue no sabe
+  // si está mirando datos de demo o un caso límite.
+  const devGoals: typeof todayLog.goals = isEmpty
+    ? []
+    : isWorst
+      ? [
+          {
+            id: 'dev-goal-long',
+            title: 'Beber 3,5 litros de agua antes de las 21:00 y registrar cada vaso en la aplicación',
+            completed: true,
+            description: 'Hidratación · recordatorio cada 45 minutos mientras entrenás',
+            icon: 'droplet',
+          },
+          {
+            id: 'dev-goal-script',
+            title: '<script>alert(1)</script>',
+            completed: false,
+            description: 'Texto literal que no debe ejecutarse como HTML',
+            icon: 'book',
+          },
+          {
+            id: 'dev-goal-emoji',
+            title: '🦊 Meditar 10 minutos',
+            completed: false,
+            description: '',
+            icon: 'sun',
+          },
+          {
+            id: 'dev-goal-rtl',
+            title: 'نور الهدى عبد الرحمن تسجيل البيانات',
+            completed: true,
+            description: 'RTL · texto árabe dentro de una fila LTR',
+            icon: 'target',
+          },
+        ] as typeof todayLog.goals
+      : isOne
+        ? [todayLog.goals[0]]
+        : isThousand
+          ? Array.from({ length: 1000 }, (_, index) => ({
+              ...todayLog.goals[index % todayLog.goals.length],
+              id: `dev-goal-${index + 1}`,
+              title: `${todayLog.goals[index % todayLog.goals.length].title} #${index + 1}`,
+            }))
+          : todayLog.goals;
+
+  const devLog =
+    devDataset === 'demo'
+      ? todayLog
+      : {
+          ...todayLog,
+          goals: devGoals,
+          status: (isEmpty || devGoals.some((goal) => !goal.completed) ? 'pending' : 'success') as typeof todayLog.status,
+        };
+
+  const devQuests: typeof quests = isEmpty
+    ? []
+    : isWorst
+      ? [
+          {
+            ...quests[0],
+            id: 'dev-quest-long',
+            title:
+              'Completar bartholomew.fitzgerald@northwind-industries-holdings.example.com antes de las 21:00 y registrar cada vaso de agua en la aplicación',
+            progress: 1284,
+            durationDays: 365,
+            completed: false,
+            completionCount: 0,
+          },
+          {
+            ...quests[quests.length - 1],
+            id: 'dev-quest-one',
+            title: 'Leer 20 páginas antes de dormir',
+            progress: 1,
+            durationDays: 7,
+            completed: false,
+            completionCount: 1,
+          },
+        ]
+      : isOne
+        ? [quests[0]]
+        : isThousand
+          ? (Array.from({ length: 1000 }, (_, index) => ({
+              ...quests[index % quests.length],
+              id: `dev-quest-${index + 1}`,
+            })) as typeof quests)
+          : quests;
+
+  const completedTasks = devLog.goals.filter(g => g.completed).length;
+  const totalTasks = devLog.goals.length;
   const remainingTasks = totalTasks - completedTasks;
-  const progress = Math.round((completedTasks / totalTasks) * 100);
+  const progress = totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
 
   // Calendar logic
   const now = new Date();
@@ -124,14 +245,14 @@ export default function Dashboard() {
     Object.values(DEFAULT_GOALS).flatMap(goals => goals.map(g => g.title.toLowerCase()))
   );
 
-  const baseGoals = todayLog.goals.filter(g => allDefaultTitles.has(g.title.toLowerCase()));
-  const customGoals = todayLog.goals.filter(g => !allDefaultTitles.has(g.title.toLowerCase()));
+  const baseGoals = devLog.goals.filter(g => allDefaultTitles.has(g.title.toLowerCase()));
+  const customGoals = devLog.goals.filter(g => !allDefaultTitles.has(g.title.toLowerCase()));
 
   // Determine current active plan name mapped to UI strings
   const currentPlanName = useChallengeStore.getState().difficulty || 'Activo';
 
 
-  const renderGoalItem = (goal: any) => {
+  const renderGoalItem = useCallback((goal: any) => {
     const IconComponent = iconMap[goal.icon || 'target'] || Target;
     const isThisUpdating = updatingGoalId === goal.id;
     const isLocked = updatingGoalId !== null && !isThisUpdating;
@@ -147,19 +268,22 @@ export default function Dashboard() {
     };
 
     return (
-      <div
+      <button
+        type="button"
         key={goal.id}
         onClick={handleClick}
-        className={`group bg-rose-950/20 border rounded-2xl p-5 flex items-center gap-5 transition-all duration-300 ${isLocked
+        disabled={isLocked}
+        aria-pressed={goal.completed}
+        className={`group w-full text-left bg-rose-950/20 border rounded-2xl px-3.5 py-3 sm:p-5 flex items-center gap-3 sm:gap-5 transition-all duration-300 min-h-14 ${isLocked
           ? 'border-[#361726] opacity-40 cursor-not-allowed select-none'
           : isThisUpdating
             ? 'border-rose-500/20 cursor-wait'
             : goal.completed
-              ? 'border-rose-500/30 bg-rose-500/5 cursor-pointer'
-              : 'border-[#361726] hover:border-rose-500/50 hover:bg-rose-950/40 cursor-pointer'
+              ? 'border-rose-500/30 bg-rose-500/5'
+              : 'border-[#361726] hover:border-rose-500/50 hover:bg-rose-950/40 active:scale-[0.99]'
           }`}
       >
-        <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${isThisUpdating
+        <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0 transition-colors ${isThisUpdating
           ? 'bg-white/10 text-white/40'
           : goal.completed
             ? 'bg-rose-500/20 text-rose-500'
@@ -167,30 +291,32 @@ export default function Dashboard() {
           }`}>
           {isThisUpdating
             ? <div className="w-5 h-5 rounded-full border-2 border-white/20 border-t-white/60 animate-spin" />
-            : <IconComponent size={24} strokeWidth={1.5} />
+            : <IconComponent size={20} strokeWidth={1.5} className="sm:w-6 sm:h-6" />
           }
         </div>
 
-        <div className="flex-1">
-          <h3 className={`font-bold text-lg mb-1 transition-colors ${goal.completed ? 'text-white/70 line-through' : 'text-white'}`}>
+        <div className="flex-1 min-w-0">
+          <h3 className={`font-semibold text-base sm:text-lg sm:mb-1 transition-colors ${goal.completed ? 'text-white/70 line-through' : 'text-white'}`}>
             {goal.title}
           </h3>
-          <p className={`text-sm transition-colors ${goal.completed ? 'text-white/50' : 'text-white/60'}`}>
-            {goal.description || 'Completar esta tarea para avanzar en el desafío.'}
-          </p>
+          {goal.description ? (
+            <p className={`hidden sm:block text-sm transition-colors ${goal.completed ? 'text-white/50' : 'text-white/60'}`}>
+              {goal.description}
+            </p>
+          ) : null}
         </div>
 
-        <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${isThisUpdating
+        <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center shrink-0 transition-all duration-300 ${isThisUpdating
           ? 'border-white/20'
           : goal.completed
-            ? 'bg-rose-500 border-rose-500 scale-110 shadow-[0_0_15px_var(--color-rose-500)]'
+            ? 'bg-rose-500 border-rose-500 shadow-[0_0_15px_var(--color-rose-500)]'
             : 'border-rose-950/40 group-hover:border-rose-500/50'
           }`}>
           {goal.completed && !isThisUpdating && <Check size={16} className="text-white" strokeWidth={3} />}
         </div>
-      </div>
+      </button>
     );
-  };
+  }, [updatingGoalId, todayStr, logDailyGoal]);
 
 
   return (
@@ -200,7 +326,7 @@ export default function Dashboard() {
       <div className="min-w-0 space-y-4 sm:space-y-6 lg:col-span-4">
 
         {/* RESUMEN DEL DÍA: une avance del desafío y estado de las tareas */}
-        <section className="bg-rose-950/20 border border-rose-950/40 rounded-3xl p-5 sm:p-6 shadow-lg" aria-labelledby="today-summary-title">
+        <section className="bg-rose-950/20 border border-rose-950/40 rounded-3xl p-4 sm:p-6 shadow-lg" aria-labelledby="today-summary-title">
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-rose-500 text-[10px] font-bold tracking-[0.2em] uppercase">Resumen de hoy</p>
@@ -212,7 +338,7 @@ export default function Dashboard() {
           </div>
 
           <div className="mt-3 flex items-baseline gap-1">
-            <span className="text-6xl font-bold tracking-tighter text-white sm:text-7xl">{currentDay}</span>
+            <span className="text-5xl font-bold tracking-tighter text-white tabular-nums sm:text-7xl">{currentDay}</span>
             <span className="text-xl font-bold text-white/40 sm:text-2xl">/ 75 días</span>
           </div>
 
@@ -370,7 +496,7 @@ export default function Dashboard() {
 
       {/* Right Column */}
       <div className="lg:col-span-8">
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-8 gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-4 sm:mb-8 gap-3 sm:gap-4">
           <div>
             <h1 className="text-2xl font-bold text-rose-400 tracking-tight">Tareas de Hoy</h1>
             <span className="text-white/60 text-sm font-medium capitalize">
@@ -379,10 +505,10 @@ export default function Dashboard() {
           </div>
 
           {/* Pills Toggle */}
-          <div className="flex bg-rose-950/20 p-1.5 rounded-2xl border border-rose-950/40">
+          <div className="flex w-full sm:w-auto bg-rose-950/20 p-1 rounded-2xl border border-rose-950/40">
             <button
               onClick={() => setActiveTab('plan')}
-              className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === 'plan'
+              className={`flex-1 sm:flex-none min-h-11 px-4 sm:px-6 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === 'plan'
                 ? 'bg-rose-400 text-zinc-950 shadow-lg shadow-rose-500/20'
                 : 'text-white/60 hover:text-white hover:bg-white/5'
                 }`}
@@ -391,23 +517,23 @@ export default function Dashboard() {
             </button>
             <button
               onClick={() => setActiveTab('missions')}
-              className={`px-6 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${activeTab === 'missions'
+              className={`flex-1 sm:flex-none min-h-11 px-4 sm:px-6 py-2 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${activeTab === 'missions'
                 ? 'bg-rose-400 text-zinc-950 shadow-lg shadow-rose-500/20'
                 : 'text-white/60 hover:text-white hover:bg-white/5'
                 }`}
             >
               Misiones
-              {quests.filter(q => !q.completed).length > 0 && (
+              {devQuests.filter(q => !q.completed).length > 0 && (
                 <span className={`w-5 h-5 flex items-center justify-center rounded-full text-[10px] ${activeTab === 'missions' ? 'bg-white text-rose-500' : 'bg-rose-500/20 text-rose-500'
                   }`}>
-                  {quests.filter(q => !q.completed).length}
+                  {devQuests.filter(q => !q.completed).length}
                 </span>
               )}
             </button>
           </div>
         </div>
 
-        <div className="space-y-8 min-h-[400px]">
+        <div className="space-y-6 sm:space-y-8 min-h-[280px] sm:min-h-[400px]">
           {activeTab === 'plan' ? (
             /* TAB: PLAN ACTIVO */
             <>
@@ -418,7 +544,7 @@ export default function Dashboard() {
                     <PlusCircle size={16} /> Metas Personalizadas
                   </h2>
                   <div className="space-y-3">
-                    {todayLog.goals.map(renderGoalItem)}
+                    {devLog.goals.map(renderGoalItem)}
                   </div>
                 </div>
               ) : (
@@ -469,20 +595,20 @@ export default function Dashboard() {
               </div>
 
               <div className="space-y-4">
-                {isQuestsLoading && quests.length === 0 ? (
+                {isQuestsLoading && devQuests.length === 0 && devDataset === 'demo' ? (
                   <div className="flex flex-col items-center justify-center py-12">
-                    <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-rose-500 animate-spin mb-4" />
-                    <p className="text-white/50 text-sm">Cargando misiones...</p>
+                    <div className="pv2-skeleton w-8 h-8 rounded-full" />
+                    <div className="pv2-skeleton w-40 h-4 mt-4" />
                   </div>
-                ) : quests.length > 0 ? (
-                  quests.map(quest => (
-                    <div
+                ) : devQuests.length > 0 ? (
+                  devQuests.map(quest => (
+                    <button
                       key={quest.id}
-                      onClick={() => !quest.completed && progressQuest(quest.id)}
-                      className={`group bg-rose-950/20 border rounded-2xl p-5 transition-all duration-300 ${quest.completed
-                        ? 'border-emerald-500/30 bg-emerald-500/5'
-                        : 'border-[#361726] hover:border-emerald-500/50 hover:bg-emerald-950/20 cursor-pointer active:scale-[0.98]'
-                        }`}
+                      type="button"
+                      onClick={() => setSelectedSideQuest(quest)}
+                      aria-label={`Abrir misión ${quest.title}: ${quest.progress} de ${quest.durationDays} días, dificultad ${quest.difficulty}`}
+                      aria-haspopup="dialog"
+                      className="side-quest-card group w-full text-left bg-rose-950/20 border rounded-2xl p-5 transition-all duration-300" data-completed={quest.completed ? 'true' : 'false'}
                     >
                       <div className="flex items-center gap-5">
                         <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${quest.completed
@@ -513,6 +639,9 @@ export default function Dashboard() {
                             <span className="text-xs font-semibold text-white/40">
                               Progreso: <span className="text-white">{quest.progress}</span> / {quest.durationDays}
                             </span>
+                            <span className="text-xs font-semibold text-white/40">
+                              Completada: <span className="text-emerald-300">{quest.completionCount} {quest.completionCount === 1 ? 'vez' : 'veces'}</span>
+                            </span>
                           </div>
                         </div>
 
@@ -535,7 +664,7 @@ export default function Dashboard() {
                           </div>
                         </div>
                       )}
-                    </div>
+                    </button>
                   ))
                 ) : (
                   <div className="text-center py-12 border border-dashed border-white/10 rounded-2xl bg-white/5">
@@ -555,6 +684,17 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* break-ui · toggle de datasets (sólo dev). El componente entero se
+          reemplaza por `undefined` en producción, así que webpack elimina el
+          import dinámico y su chunk no se genera ni se referencia. */}
+      {IS_DEV_BUILD && (
+        <DevDatasetPicker
+          selected={devDataset}
+          onSelect={setDevDataset}
+          positionClassName="bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] lg:bottom-6"
+        />
+      )}
+
       {selectedDate && (
         <DayDetailsModal
           date={selectedDate}
@@ -566,6 +706,9 @@ export default function Dashboard() {
         <SideQuestsModal
           onClose={() => setIsSideQuestsModalOpen(false)}
         />
+      )}
+      {selectedSideQuest && (
+        <SideQuestDetailModal quest={selectedSideQuest} onClose={() => setSelectedSideQuest(null)} />
       )}
     </div>
   );

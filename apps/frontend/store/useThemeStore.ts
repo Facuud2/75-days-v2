@@ -5,7 +5,7 @@ import { persist } from 'zustand/middleware';
 export type AppearanceMode = 'dark' | 'light' | 'system';
 
 // ─── Named colour palettes ──────────────────────────────────────────────────
-export type ColorPalette = 'pink-neon' | 'soft-blue' | 'bamboo-green' | 'custom';
+export type ColorPalette = 'pink-neon' | 'fitness' | 'bamboo-green' | 'custom';
 
 // Keep ThemeType as an alias so older imports don't break
 export type ThemeType = AppearanceMode;
@@ -30,12 +30,12 @@ export const PALETTES: Record<
     accent: '#fb7185',
     preview: ['#f43f5e', '#be123c', '#fb7185'],
   },
-  'soft-blue': {
-    label: 'Soft Blue Neon',
-    primary: '#3b82f6',
-    secondary: '#1d4ed8',
-    accent: '#60a5fa',
-    preview: ['#3b82f6', '#1d4ed8', '#60a5fa'],
+  fitness: {
+    label: 'Fitness',
+    primary: '#ff9500',
+    secondary: '#34c759',
+    accent: '#30d158',
+    preview: ['#ff9500', '#34c759', '#30d158'],
   },
   'bamboo-green': {
     label: 'Bamboo Green',
@@ -72,14 +72,18 @@ export const useThemeStore = create<ThemeState>()(
     (set, get) => ({
       appearance: 'dark',
       colorPalette: 'pink-neon',
-      customPalette: { primary: '#a855f7', secondary: '#7c3aed', accent: '#c084fc' },
+      customPalette: { primary: '#ff9500', secondary: '#d95f00', accent: '#34c759' },
 
       setAppearance: (mode) => set({ appearance: mode, theme: mode }),
       setColorPalette: (palette) => set({ colorPalette: palette }),
       setCustomPalette: (colors) =>
         set((state) => ({ customPalette: { ...state.customPalette, ...colors } })),
       resetTheme: () =>
-        set({ appearance: 'dark', colorPalette: 'pink-neon', theme: 'dark' }),
+        set({
+          colorPalette: 'pink-neon',
+          customPalette: { primary: '#f43f5e', secondary: '#be123c', accent: '#fb7185' },
+          customColors: { primary: '#f43f5e', secondary: '#be123c', accent: '#fb7185' },
+        }),
 
       // ── legacy compat ──────────────────────────────────────────────────────
       theme: 'dark',
@@ -88,6 +92,18 @@ export const useThemeStore = create<ThemeState>()(
       setCustomColors: (colors) =>
         set((state) => ({ customColors: { ...state.customColors, ...colors } })),
     }),
-    { name: 'theme-storage' }
+    {
+      name: 'theme-storage',
+      version: 2,
+      migrate: (persistedState) => {
+        const state = persistedState as ThemeState;
+        // Soft Blue Neon was replaced by Fitness. Keep existing users on the
+        // new palette instead of leaving them with an unsupported data attr.
+        if (state.colorPalette === ('soft-blue' as ColorPalette)) {
+          return { ...state, colorPalette: 'fitness' };
+        }
+        return state;
+      },
+    }
   )
 );

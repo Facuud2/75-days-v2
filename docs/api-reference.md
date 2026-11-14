@@ -51,7 +51,7 @@ Convenciones:
 |---|---|---|---|---|
 | GET | `/api/quests` | Auth | — | 200 `SideQuest[]` del usuario |
 | GET | `/api/quests/available` | Auth | — | 200 `SideQuestTemplate[]` · **500 hoy** (tabla ausente) |
-| POST | `/api/quests` | Auth | `title`, `difficulty` (`Easy`\|`Medium`\|`Hard`), `durationDays` | 201 `SideQuest` |
+| POST | `/api/quests` | Auth | Plantilla: `title`, `difficulty` (`Easy`\|`Medium`\|`Hard`), `durationDays`. Personalizada: además `description`, `icon` y `tasks[]` (`title`, `description`, `frequency`, `targetValue`, `targetUnit`, `icon`) | 201 `SideQuest` |
 | PUT | `/api/quests/:id/progress` | Auth | — | 200 `SideQuest` · 400 si ya está completa |
 
 ### Usuarios

@@ -16,6 +16,8 @@ export interface RegisterData {
     age?: number;
     weight?: number;
     height?: number;
+    difficulty?: 'Soft' | 'Medium' | 'Hard' | 'Custom';
+    customGoalsTemplate?: Array<{ title: string; description?: string; icon?: string }>;
 }
 
 // Authentication Service
@@ -23,7 +25,9 @@ export const authService = {
     register: (data: RegisterData) => {
         return apiClient<{ token: string; user: User }>('/auth/register', {
             method: 'POST',
-            body: JSON.stringify(data),
+            // El servidor corre en UTC: le enviamos el offset del navegador para
+            // que el "Día 1" caiga en el calendario del usuario, no en el de UTC.
+            body: JSON.stringify({ ...data, timezoneOffset: new Date().getTimezoneOffset() }),
         });
     },
 

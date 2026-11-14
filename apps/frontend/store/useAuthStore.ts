@@ -6,6 +6,9 @@ import { useThemeStore } from './useThemeStore';
 export interface User {
   id: string;
   name: string;
+  avatarUrl?: string | null;
+  bannerUrl?: string | null;
+  profileQuote?: string | null;
   email: string;
   age?: number;
   weight?: number;

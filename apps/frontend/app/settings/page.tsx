@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { startCircularReveal } from '@/lib/themeTransition';
 import { useThemeStore, ColorPalette, AppearanceMode, PALETTES, PaletteConfig } from '@/store/useThemeStore';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -15,6 +16,23 @@ import {
   Sliders, Target,
 } from 'lucide-react';
 import { userService, UpdateProfilePayload } from '@/lib/api/users';
+import { readDevDataset } from '@/components/dev/DevDatasetPicker';
+import type { DevDataset } from '@/components/dev/DevDatasetPicker';
+
+// Chrome de desarrollo: en producción el fragmento no se renderiza y el chunk
+// del selector no se referencia en el HTML servido.
+const DevDatasetPicker = dynamic(() => import('@/components/dev/DevDatasetPicker'), { ssr: false });
+
+const IS_DEV_BUILD = process.env.NODE_ENV === 'development';
+
+const DEV_SAVE_ERRORS: Record<Exclude<DevDataset, 'demo'>, string> = {
+  worst:
+    'No pudimos guardar los cambios: el servidor rechazó el nombre porque excede el máximo de 120 caracteres permitido para tu plan.',
+  empty: '',
+  one: 'Ingresá tu contraseña actual.',
+  thousand:
+    'No pudimos guardar los cambios. El campo altura está fuera del rango permitido (100-250 cm).',
+};
 
 // ─────────────────────────────────────────────
 // Types
@@ -102,6 +120,26 @@ export default function SettingsPage() {
   const { openPlansModal } = useUIStore();
   const { isActive } = useChallengeStore();
 
+  // Keep custom colours local until the user confirms them. This prevents
+  // three separate native colour inputs from changing the whole app while the
+  // palette is still being composed.
+  const [customDraft, setCustomDraft] = useState(customPalette);
+  const [isCustomEditorOpen, setIsCustomEditorOpen] = useState(colorPalette === 'custom');
+  const customEditorRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isCustomEditorOpen) return;
+
+    // The editor is below the palette on small screens. Bring it into view so
+    // opening Custom always produces an obvious result for the user.
+    window.requestAnimationFrame(() => {
+      customEditorRef.current?.scrollIntoView({
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+        block: 'center',
+      });
+    });
+  }, [isCustomEditorOpen]);
+
   // ── Animated appearance switch ───────────────────────────────────────────
   const switchAppearance = (mode: AppearanceMode, e: React.MouseEvent) => {
     const isDark = mode === 'dark' || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
@@ -110,6 +148,7 @@ export default function SettingsPage() {
       isDark ? root.classList.add('dark') : root.classList.remove('dark');
       root.setAttribute('data-appearance', isDark ? 'dark' : 'light');
       setAppearance(mode);
+      setIsCustomEditorOpen(false);
     });
   };
 
@@ -130,6 +169,28 @@ export default function SettingsPage() {
         roseShades.forEach((s) => root.style.removeProperty(`--color-rose-${s}`));
       }
       setColorPalette(palette);
+      setIsCustomEditorOpen(false);
+    });
+  };
+
+  const openCustomEditor = () => {
+    setCustomDraft(customPalette);
+    setIsCustomEditorOpen(true);
+  };
+
+  const saveCustomPalette = (e: React.MouseEvent<HTMLButtonElement>) => {
+    startCircularReveal(e, () => {
+      const root = document.documentElement;
+      root.setAttribute('data-palette', 'custom');
+      root.style.setProperty('--color-rose-400', customDraft.accent);
+      root.style.setProperty('--color-rose-500', customDraft.primary);
+      root.style.setProperty('--color-rose-600', customDraft.secondary);
+      root.style.setProperty('--color-rose-700', customDraft.secondary);
+      root.style.setProperty('--color-rose-900', customDraft.secondary);
+      root.style.setProperty('--color-rose-950', customDraft.secondary);
+      setCustomPalette(customDraft);
+      setColorPalette('custom');
+      setIsCustomEditorOpen(false);
     });
   };
 
@@ -157,9 +218,48 @@ export default function SettingsPage() {
   const [notifAchievements, setNotifAchievements] = useState(false);
   const [notifWeekly, setNotifWeekly] = useState(false);
 
+  // ── break-ui · dataset de dev ─────────────────────────────────────────────
+  const [devDataset, setDevDataset] = useState<DevDataset>(() => readDevDataset());
+  const isDevDataset = IS_DEV_BUILD && devDataset !== 'demo';
+
+  // Los campos del formulario arrancan con los datos del usuario; el fixture
+  // reemplaza esos valores de entrada, no el markup. Editar vuelve a 'demo'.
+  const devName = devDataset === 'worst'
+    ? 'Alejandra María de los Ángeles Wiśniewska-Kowalczyk'
+    : devDataset === 'one'
+      ? 'Jo'
+      : devDataset === 'empty'
+        ? ''
+        : name;
+  const devEmail = devDataset === 'worst'
+    ? 'bartholomew.fitzgerald@northwind-industries-holdings.example.com'
+    : devDataset === 'one'
+      ? 'jo@b.co'
+      : devDataset === 'empty'
+        ? ''
+        : email;
+  const devAge = devDataset === 'worst' ? '999' : devDataset === 'one' ? '1' : devDataset === 'empty' ? '' : age;
+  const devWeight = devDataset === 'worst' ? '1284' : devDataset === 'one' ? '0' : devDataset === 'empty' ? '' : weight;
+  const devTargetWeight = devDataset === 'worst' ? '78' : devDataset === 'one' ? '0' : devDataset === 'empty' ? '' : targetWeight;
+  const devHeight = devDataset === 'worst' ? '250' : devDataset === 'one' ? '100' : devDataset === 'empty' ? '' : height;
+
+  const updateDevField = (setter: (value: string) => void) => (value: string) => {
+    setter(value);
+    if (isDevDataset) setDevDataset('demo');
+  };
+
   // ── Save handler ──────────────────────────────────────────────────────────
   const handleSave = async () => {
     setAlert(null);
+    // El fixture de dev inyecta un error de guardado plausible (límites del
+    // backend) sin tocar la red; editar cualquier campo vuelve a 'demo'.
+    if (isDevDataset && DEV_SAVE_ERRORS[devDataset as Exclude<DevDataset, 'demo'>]) {
+      setSaving(true);
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      setAlert({ type: 'error', message: DEV_SAVE_ERRORS[devDataset as Exclude<DevDataset, 'demo'>] });
+      setSaving(false);
+      return;
+    }
     if (showPassword && (currentPassword || newPassword || confirmPassword)) {
       if (!currentPassword) { setAlert({ type: 'error', message: 'Ingresá tu contraseña actual.' }); return; }
       if (newPassword.length < 6) { setAlert({ type: 'error', message: 'La nueva contraseña debe tener al menos 6 caracteres.' }); return; }
@@ -272,14 +372,14 @@ export default function SettingsPage() {
             </div>
           )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field label="Nombre" value={name} onChange={setName} placeholder="Tu nombre" />
-            <Field label="Email" type="email" value={email} onChange={setEmail} placeholder="tu@email.com" />
+            <Field label="Nombre" value={devName} onChange={updateDevField(setName)} placeholder="Tu nombre" />
+            <Field label="Email" type="email" value={devEmail} onChange={updateDevField(setEmail)} placeholder="tu@email.com" />
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <Field label="Edad" type="number" value={age} onChange={setAge} min={10} max={120} />
-            <Field label="Peso (kg)" type="number" value={weight} onChange={setWeight} min={20} step={0.1} />
-            <Field label="Meta (kg)" type="number" value={targetWeight} onChange={setTargetWeight} min={20} step={0.1} />
-            <Field label="Altura (cm)" type="number" value={height} onChange={setHeight} min={100} max={250} />
+            <Field label="Edad" type="number" value={devAge} onChange={updateDevField(setAge)} min={10} max={120} />
+            <Field label="Peso (kg)" type="number" value={devWeight} onChange={updateDevField(setWeight)} min={20} step={0.1} />
+            <Field label="Meta (kg)" type="number" value={devTargetWeight} onChange={updateDevField(setTargetWeight)} min={20} step={0.1} />
+            <Field label="Altura (cm)" type="number" value={devHeight} onChange={updateDevField(setHeight)} min={100} max={250} />
           </div>
           <div className="border border-zinc-800 rounded-xl overflow-hidden">
             <button
@@ -392,7 +492,7 @@ export default function SettingsPage() {
                 const active = colorPalette === 'custom';
                 return (
                   <button
-                    onClick={(e) => switchPalette('custom', e)}
+                    onClick={openCustomEditor}
                     className={`relative flex flex-col items-start gap-3 p-4 rounded-2xl border-2 transition-all text-left ${active
                       ? 'border-white/30 bg-white/5 shadow-md'
                       : 'border-zinc-800 bg-zinc-800/30 hover:bg-zinc-800/60 hover:border-zinc-700'
@@ -424,9 +524,9 @@ export default function SettingsPage() {
               })()}
             </div>
 
-            {/* Custom colour pickers — shown only when 'custom' is active */}
-            {colorPalette === 'custom' && (
-              <div className="mt-4 p-4 bg-zinc-800/30 border border-zinc-700/50 rounded-2xl space-y-4 animate-in fade-in slide-in-from-top-2">
+            {/* Custom colour editor — changes are applied only after saving */}
+            {isCustomEditorOpen && (
+              <div ref={customEditorRef} className="mt-4 p-4 bg-zinc-800/30 border border-zinc-700/50 rounded-2xl space-y-4 animate-in fade-in slide-in-from-top-2" role="dialog" aria-label="Personalizar colores">
                 <p className="text-xs font-semibold text-zinc-400 flex items-center gap-2">
                    <Sliders className="w-3.5 h-3.5 text-rose-300" />
                   Personalizá tus colores
@@ -434,25 +534,26 @@ export default function SettingsPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   {colorKeys.map(({ key, label }) => (
                     <div key={key}>
-                      <label className="block text-xs text-zinc-500 mb-2 font-medium">{label}</label>
+                      <label htmlFor={`picker-${key}`} className="block text-xs text-zinc-500 mb-2 font-medium">{label}</label>
                       <div className="flex items-center gap-3 bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2.5 cursor-pointer hover:border-zinc-600 transition-colors"
                         onClick={() => document.getElementById(`picker-${key}`)?.click()}
                       >
                         <div className="relative">
                           <span
                             className="w-7 h-7 rounded-lg border border-white/20 shadow block cursor-pointer"
-                            style={{ backgroundColor: customPalette[key] }}
+                            style={{ backgroundColor: customDraft[key] }}
                           />
                           <input
                             id={`picker-${key}`}
                             type="color"
-                            value={customPalette[key]}
-                            onChange={(e) => setCustomPalette({ [key]: e.target.value })}
+                            aria-label={`Color ${label}`}
+                            value={customDraft[key]}
+                            onChange={(e) => setCustomDraft((draft) => ({ ...draft, [key]: e.target.value }))}
                             className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
                           />
                         </div>
                         <span className="text-xs font-mono text-zinc-300">
-                          {customPalette[key]}
+                          {customDraft[key]}
                         </span>
                       </div>
                     </div>
@@ -461,9 +562,25 @@ export default function SettingsPage() {
 
                 {/* Live preview strip */}
                 <div className="flex rounded-xl overflow-hidden h-3 shadow-inner">
-                  <div className="flex-1" style={{ backgroundColor: customPalette.primary }} />
-                  <div className="flex-1" style={{ backgroundColor: customPalette.secondary }} />
-                  <div className="flex-1" style={{ backgroundColor: customPalette.accent }} />
+                  <div className="flex-1" style={{ backgroundColor: customDraft.primary }} />
+                  <div className="flex-1" style={{ backgroundColor: customDraft.secondary }} />
+                  <div className="flex-1" style={{ backgroundColor: customDraft.accent }} />
+                </div>
+                <div className="flex items-center justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setIsCustomEditorOpen(false)}
+                    className="rounded-xl px-4 py-2 text-xs font-semibold text-zinc-400 transition-colors hover:bg-zinc-700/50 hover:text-zinc-200"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={saveCustomPalette}
+                    className="rounded-xl bg-rose-400 px-5 py-2 text-xs font-bold text-zinc-950 transition-colors hover:bg-rose-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900"
+                  >
+                    Guardar colores
+                  </button>
                 </div>
               </div>
             )}
@@ -575,6 +692,15 @@ export default function SettingsPage() {
           <p className="text-center text-xs text-zinc-600 mt-2">Los pagos son procesados de forma segura. Podés cancelar en cualquier momento.</p>
         </div>
       </Section>
+
+      {/* break-ui · selector de datasets (sólo dev) */}
+      {IS_DEV_BUILD && (
+        <DevDatasetPicker
+          selected={devDataset}
+          onSelect={setDevDataset}
+          positionClassName="bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] lg:bottom-6"
+        />
+      )}
 
     </div>
   );

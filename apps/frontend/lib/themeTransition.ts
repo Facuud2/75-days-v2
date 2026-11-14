@@ -18,8 +18,20 @@ export function startCircularReveal(
     e: { clientX: number; clientY: number },
     domMutation: () => void
 ): void {
-    if (typeof document === 'undefined' || !('startViewTransition' in document)) {
+    if (typeof document === 'undefined') {
         domMutation();
+        return;
+    }
+
+    const root = document.documentElement;
+
+    // Firefox and older mobile WebViews do not expose View Transitions. Keep
+    // the same duration and colour interpolation there instead of silently
+    // changing the entire page in one frame.
+    if (!('startViewTransition' in document)) {
+        root.classList.add('theme-transition-fallback');
+        domMutation();
+        window.setTimeout(() => root.classList.remove('theme-transition-fallback'), 560);
         return;
     }
 
@@ -30,7 +42,6 @@ export function startCircularReveal(
         Math.max(y, window.innerHeight - y)
     );
 
-    const root = document.documentElement;
     root.style.setProperty('--vt-x', `${x}px`);
     root.style.setProperty('--vt-y', `${y}px`);
     root.style.setProperty('--vt-r', `${maxRadius}px`);

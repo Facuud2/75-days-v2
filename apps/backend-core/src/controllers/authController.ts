@@ -4,15 +4,17 @@ import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { prisma } from '../utils/prisma';
 import { AuthRequest } from '../middlewares/auth';
-import { format } from 'date-fns';
 import { config } from '../config';
 import { DEFAULT_GOALS } from '../constants/defaultGoals';
+import { localChallengeDate, parseTimezoneOffset } from '../utils/challengeDate';
 
 const registerSchema = z.object({
     name: z.string().min(2),
     email: z.string().email(),
     password: z.string().min(6),
     difficulty: z.enum(['Soft', 'Medium', 'Hard', 'Custom']).default('Medium'),
+    // Minutos de `getTimezoneOffset()` del navegador. Ausente = servidor en UTC.
+    timezoneOffset: z.number().optional(),
     customGoalsTemplate: z.array(z.object({
         title: z.string(),
         description: z.string().optional(),
@@ -23,7 +25,7 @@ const registerSchema = z.object({
 export const register = async (req: Request, res: Response) => {
     try {
         const validatedData = registerSchema.parse(req.body);
-        const { name, email, password, difficulty, customGoalsTemplate } = validatedData;
+        const { name, email, password, difficulty, customGoalsTemplate, timezoneOffset } = validatedData;
 
         // F-01: `Custom` sin plantilla reventaba con 500 al indexar
         // DEFAULT_GOALS['Custom'] (undefined). Devolvemos 400 como hace
@@ -47,7 +49,7 @@ export const register = async (req: Request, res: Response) => {
                 data: { name, email, passwordHash },
             });
 
-            const today = format(new Date(), 'yyyy-MM-dd');
+            const today = localChallengeDate(parseTimezoneOffset(timezoneOffset));
             const templatesToUse = difficulty === 'Custom' && customGoalsTemplate
                 ? customGoalsTemplate
                 : DEFAULT_GOALS[difficulty as keyof typeof DEFAULT_GOALS];
@@ -130,6 +132,9 @@ export const login = async (req: Request, res: Response) => {
             user: {
                 id: user.id,
                 name: user.name,
+                avatarUrl: user.avatarUrl,
+                bannerUrl: user.bannerUrl,
+                profileQuote: user.profileQuote,
                 email: user.email,
                 age: user.age,
                 weight: user.weight,
@@ -154,7 +159,7 @@ export const getMe = async (req: AuthRequest, res: Response) => {
 
         const user = await prisma.user.findUnique({
             where: { id: userId },
-            select: { id: true, name: true, email: true, age: true, weight: true, height: true, registeredAt: true, onboardingCompleted: true }
+            select: { id: true, name: true, email: true, avatarUrl: true, bannerUrl: true, profileQuote: true, age: true, weight: true, height: true, registeredAt: true, onboardingCompleted: true }
         });
 
         if (!user) return res.status(404).json({ error: 'User not found' });
@@ -210,6 +215,9 @@ export const completeOnboarding = async (req: AuthRequest, res: Response) => {
                 id: true,
                 name: true,
                 email: true,
+                avatarUrl: true,
+                bannerUrl: true,
+                profileQuote: true,
                 age: true,
                 weight: true,
                 targetWeight: true,

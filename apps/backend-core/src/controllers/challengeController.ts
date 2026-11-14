@@ -1,9 +1,9 @@
 import { Request, Response } from 'express';
 import { prisma } from '../utils/prisma';
 import { AuthRequest } from '../middlewares/auth';
-import { format } from 'date-fns';
 import { z } from 'zod';
 import { DEFAULT_GOALS } from '../constants/defaultGoals';
+import { localChallengeDate, parseTimezoneOffset } from '../utils/challengeDate';
 
 export const getCurrentChallenge = async (req: AuthRequest, res: Response) => {
     try {
@@ -31,6 +31,8 @@ export const getCurrentChallenge = async (req: AuthRequest, res: Response) => {
 
 const startChallengeSchema = z.object({
     difficulty: z.enum(['Soft', 'Medium', 'Hard', 'Custom']),
+    // Minutos de `getTimezoneOffset()` del navegador. Ausente = servidor en UTC.
+    timezoneOffset: z.number().optional(),
     customGoalsTemplate: z.array(z.object({
         title: z.string(),
         description: z.string().optional(),
@@ -38,18 +40,19 @@ const startChallengeSchema = z.object({
     })).optional()
 });
 
+/** Dos listas de metas son el mismo plan si coinciden título e ícono, en orden. */
+function isSameGoalTemplate(
+    a: ReadonlyArray<{ title: string; icon?: string | null }>,
+    b: ReadonlyArray<{ title: string; icon?: string | null }>
+): boolean {
+    if (a.length !== b.length) return false;
+    return a.every((goal, index) => goal.title === b[index].title && (goal.icon ?? 'target') === (b[index].icon ?? 'target'));
+}
+
 export const startChallenge = async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user!.id;
-        const { difficulty, customGoalsTemplate } = startChallengeSchema.parse(req.body);
-
-        // Inactivate any existing active challenge
-        await prisma.challenge.updateMany({
-            where: { userId, isActive: true },
-            data: { isActive: false }
-        });
-
-        const today = format(new Date(), 'yyyy-MM-dd');
+        const { difficulty, customGoalsTemplate, timezoneOffset } = startChallengeSchema.parse(req.body);
 
         if (difficulty === 'Custom' && (!customGoalsTemplate || customGoalsTemplate.length === 0)) {
             return res.status(400).json({ error: 'Custom plans require at least one custom goal.' });
@@ -58,6 +61,28 @@ export const startChallenge = async (req: AuthRequest, res: Response) => {
         const templatesToUse = (difficulty === 'Custom' && customGoalsTemplate)
             ? customGoalsTemplate
             : DEFAULT_GOALS[difficulty as keyof typeof DEFAULT_GOALS] ?? DEFAULT_GOALS['Hard'];
+
+        // Reiniciar con el plan que ya está activo no es un reinicio: destruiría
+        // el historial del usuario sin cambiarle nada. Devolvemos el reto tal
+        // cual para que el frontend no muestre un progreso en cero.
+        const activeChallenge = await prisma.challenge.findFirst({
+            where: { userId, isActive: true },
+            include: { customGoalsTemplate: true, dailyLogs: { include: { goals: true }, orderBy: { date: 'desc' } } }
+        });
+
+        if (activeChallenge
+            && activeChallenge.difficulty === difficulty
+            && isSameGoalTemplate(activeChallenge.customGoalsTemplate, templatesToUse)) {
+            return res.status(200).json({ ...activeChallenge, unchanged: true });
+        }
+
+        // Inactivate any existing active challenge
+        await prisma.challenge.updateMany({
+            where: { userId, isActive: true },
+            data: { isActive: false }
+        });
+
+        const today = localChallengeDate(parseTimezoneOffset(timezoneOffset));
 
         const challenge = await prisma.challenge.create({
             data: {

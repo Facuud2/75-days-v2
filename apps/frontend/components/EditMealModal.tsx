@@ -81,10 +81,10 @@ export default function EditMealModal({ isOpen, onClose, onSaved, meal, date }: 
 
     return (
         <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+            className="mobile-sheet-root fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
             onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
         >
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm shadow-2xl flex flex-col max-h-[85vh]">
+            <div className="mobile-sheet-panel bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm shadow-2xl flex flex-col max-h-[85vh]">
 
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 shrink-0">

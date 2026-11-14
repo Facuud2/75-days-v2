@@ -3,6 +3,7 @@ import { prisma } from '../utils/prisma';
 import { AuthRequest } from '../middlewares/auth';
 import { z } from 'zod';
 import { format, differenceInCalendarDays, subDays } from 'date-fns';
+import { parseTimezoneOffset } from '../utils/challengeDate';
 
 export const getLogs = async (req: AuthRequest, res: Response) => {
     try {
@@ -196,7 +197,7 @@ export const updateMetrics = async (req: AuthRequest, res: Response) => {
 export const checkDailyReset = async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user!.id;
-        const { timezoneOffset } = req.body || {};
+        const timezoneOffset = parseTimezoneOffset((req.body || {}).timezoneOffset);
 
         const now = new Date();
         const targetDate = typeof timezoneOffset === 'number'
@@ -239,7 +240,7 @@ export const checkDailyReset = async (req: AuthRequest, res: Response) => {
                     });
                 }
             }
-        } else if (differenceInCalendarDays(new Date(), new Date(challenge.startDate)) > 0) {
+        } else if (differenceInCalendarDays(targetDate, localStartDate) > 0) {
             newStreak = 0;
         }
 

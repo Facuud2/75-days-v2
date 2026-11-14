@@ -132,7 +132,15 @@ export const useChallengeStore = create<ChallengeState>()(
       startChallenge: async (difficulty, customGoalsTemplate) => {
         set({ isLoading: true, error: null });
         try {
-          const { dailyLogs, ...restData } = (await challengeService.startChallenge({ difficulty, customGoalsTemplate })) as any;
+          const response = (await challengeService.startChallenge({ difficulty, customGoalsTemplate })) as any;
+          // El backend devuelve `unchanged` cuando se pide reiniciar con el plan
+          // que ya está activo: no hay reto nuevo, así que conservamos el estado
+          // en pantalla en vez de pintar un progreso en cero.
+          if (response?.unchanged) {
+            set({ isLoading: false });
+            return;
+          }
+          const { dailyLogs, ...restData } = response;
           const parsedLogs = Array.isArray(dailyLogs) ? normalizeLogs(dailyLogs) : get().logs;
           set({ ...restData, logs: parsedLogs, isActive: true, isLoading: false });
         } catch (error: any) {

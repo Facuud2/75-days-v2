@@ -28,7 +28,7 @@ La única relación entre ambas es el campo `userId`, guardado como texto en `Us
 
 `status` de `DailyLog` es `String` con valores `pending` / `success` / `fail` / `rest`. `rest` está declarado en un comentario del esquema y **nunca se escribe** en el código: no hay lógica de día de descanso.
 
-`SideQuest` tiene progreso incremental y un flag `completed`; `SideQuestTemplate` es el catálogo. `Achievement` guarda progreso y desbloqueo por usuario, con unicidad por `(userId, title)`.
+`SideQuest` tiene progreso incremental y un flag `completed`; `SideQuestTemplate` es el catálogo. Una misión personalizada guarda su descripción/icono directamente en `SideQuest` y copia sus tareas a la primera `SideQuestRun`, por lo que queda aislada del catálogo y de otros usuarios. `Achievement` guarda progreso y desbloqueo por usuario, con unicidad por `(userId, title)`.
 
 ## Salud (health)
 

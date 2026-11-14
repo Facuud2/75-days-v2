@@ -16,7 +16,9 @@ export const challengeService = {
     startChallenge: (data: StartChallengeData) => {
         return apiClient<ChallengeState>('/challenges/start', {
             method: 'POST',
-            body: JSON.stringify(data),
+            // Sin el offset, el "Día 1" se guarda con la fecha UTC y a partir de
+            // las 21:00 de Argentina aparecen dos logs para el mismo día.
+            body: JSON.stringify({ ...data, timezoneOffset: new Date().getTimezoneOffset() }),
         });
     },
 

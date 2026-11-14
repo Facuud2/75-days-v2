@@ -1,7 +1,24 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Clock3, Dumbbell, Flame, Footprints, Mail, ShieldAlert, Trophy, Utensils } from 'lucide-react';
+import type { DatasetOption } from '@/components/dev/DatasetToggle';
+
+// Chrome de desarrollo: se carga sólo en cliente para que no forme parte del
+// bundle de ninguna ruta de producción.
+const DatasetToggle = dynamic(
+  () => import('@/components/dev/DatasetToggle'),
+  { ssr: false }
+);
+
+const DATASETS: DatasetOption[] = [
+  { value: 'demo', label: 'Demo data' },
+  { value: 'worst', label: 'Worst case (plausible extremes)' },
+  { value: 'empty', label: 'Empty / no results' },
+  { value: 'one', label: 'Just one row' },
+  { value: 'thousand', label: '1,000 rows (performance stress)' },
+];
 
 type Dataset = 'demo' | 'worst' | 'empty' | 'one' | 'thousand';
 
@@ -116,10 +133,12 @@ export default function EdgeCasesPage() {
 
   const items = useMemo(() => makeItems(dataset), [dataset]);
 
-  const selectDataset = (next: Dataset) => {
-    setDataset(next);
+  const selectDataset = (next: string) => {
+    if (!DATASETS.some((option) => option.value === next)) return;
+    const value = next as Dataset;
+    setDataset(value);
     const url = new URL(window.location.href);
-    url.searchParams.set('data', next);
+    url.searchParams.set('data', value);
     window.history.replaceState({}, '', url);
   };
 
@@ -128,7 +147,7 @@ export default function EdgeCasesPage() {
   }
 
   return (
-    <main dir="auto" className="min-h-screen bg-zinc-950 text-zinc-100 p-4 pb-28 md:p-8 md:pb-28">
+    <main dir="auto" className="min-h-screen bg-zinc-950 text-zinc-100 p-4 pb-32 md:p-8 md:pb-32">
       <div className="mx-auto max-w-7xl space-y-8">
         <header className="space-y-3">
           <div className="flex flex-wrap items-center gap-3">
@@ -221,18 +240,7 @@ export default function EdgeCasesPage() {
         </section>
       </div>
 
-      <nav aria-label="Edge case dataset" className="fixed bottom-4 left-1/2 z-50 flex max-w-[calc(100%-2rem)] -translate-x-1/2 flex-wrap justify-center gap-1 rounded-2xl border border-zinc-700 bg-zinc-900/95 p-1.5 font-sans text-xs shadow-2xl backdrop-blur">
-        {(['demo', 'worst', 'empty', 'one', 'thousand'] as Dataset[]).map(option => (
-          <button
-            key={option}
-            type="button"
-            onClick={() => selectDataset(option)}
-            className={`rounded-xl px-3 py-2 capitalize transition-none ${dataset === option ? 'bg-white text-zinc-900' : 'text-zinc-400 hover:text-white'}`}
-          >
-            {option === 'thousand' ? '1,000 rows' : option === 'one' ? 'One' : option}
-          </button>
-        ))}
-      </nav>
+      <DatasetToggle selected={dataset} options={DATASETS} onSelect={selectDataset} />
     </main>
   );
 }

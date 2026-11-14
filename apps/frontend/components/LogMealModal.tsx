@@ -284,13 +284,13 @@ export default function LogMealModal({ isOpen, onClose, onSaved, date }: LogMeal
 
     return (
         <div
-            className="fixed inset-0 z-[100] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center sm:p-4"
+            className="mobile-sheet-root fixed inset-0 z-[100] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center sm:p-4"
             role="dialog"
             aria-modal="true"
             aria-labelledby="meal-modal-title"
             onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
         >
-            <div className="bg-zinc-900 border border-zinc-800 rounded-t-[2rem] sm:rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[92dvh] sm:max-h-[85vh] overflow-hidden">
+            <div className="mobile-sheet-panel bg-zinc-900 border border-zinc-800 rounded-t-[2rem] sm:rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[92dvh] sm:max-h-[85vh] overflow-hidden">
 
                 {/* Header */}
                 <div className="flex items-center justify-between px-4 py-4 sm:px-6 border-b border-zinc-800 shrink-0">

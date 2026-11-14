@@ -32,7 +32,8 @@ app.use(cors({
     methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
 }));
-app.use(express.json());
+// Profile images are sent as optimized data URLs by the profile editor.
+app.use(express.json({ limit: '5mb' }));
 
 app.get('/health', (req, res) => {
     res.json({ status: 'ok' });

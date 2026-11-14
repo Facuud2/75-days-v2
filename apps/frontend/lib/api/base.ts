@@ -1,0 +1,104 @@
+/**
+ * Base API utilities shared across all API clients.
+ * Centralizes auth token retrieval, error handling, and request logic.
+ */
+
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+export const HEALTH_API_BASE_URL = process.env.NEXT_PUBLIC_HEALTH_API_URL || 'http://localhost:3002/api';
+
+/**
+ * Retrieves the auth token from localStorage.
+ * Shared across all API clients to avoid duplication.
+ */
+export function getAuthToken(): string | null {
+  if (typeof window !== 'undefined') {
+    const authStateStr = localStorage.getItem('auth-storage');
+    if (authStateStr) {
+      try {
+        const authState = JSON.parse(authStateStr);
+        return authState?.state?.token ?? null;
+      } catch (error) {
+        console.error('Failed to parse auth storage', error);
+        return null;
+      }
+    }
+  }
+  return null;
+}
+
+export interface RequestOptions extends RequestInit {
+  /** Override the base URL (defaults to API_BASE_URL) */
+  baseUrl?: string;
+}
+
+/**
+ * Core fetch wrapper with shared auth, error handling, and 401 redirect.
+ * Used by both apiClient and healthClient.
+ */
+export async function baseRequest<T>(
+  endpoint: string,
+  options: RequestOptions = {}
+): Promise<T> {
+  const baseUrl = options.baseUrl ?? API_BASE_URL;
+  const token = getAuthToken();
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(options.headers as Record<string, string> || {}),
+  };
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const config: RequestInit = {
+    ...options,
+    headers,
+  };
+  // Remove baseUrl so it's not forwarded to fetch
+  delete (config as any).baseUrl;
+
+  const response = await fetch(`${baseUrl}${endpoint}`, config);
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      const isAuthEndpoint =
+        endpoint.includes('/auth/login') ||
+        endpoint.includes('/auth/register') ||
+        endpoint.includes('/auth/me');
+      if (!isAuthEndpoint) {
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('auth-storage');
+          localStorage.removeItem('challenge-storage');
+          const currentPath = window.location.pathname;
+          if (currentPath !== '/login' && currentPath !== '/register' && currentPath !== '/') {
+            window.location.href = '/login';
+            return new Promise(() => {}) as Promise<T>;
+          }
+        }
+      }
+    }
+
+    const errorBody = await response.json().catch(() => ({}));
+    let errorMessage =
+      errorBody.message || errorBody.error || `API request failed with status ${response.status}`;
+
+    if (errorBody.details && Array.isArray(errorBody.details)) {
+      errorMessage +=
+        ': ' +
+        errorBody.details
+          .map((d: any) => `${d.path?.join('.') || 'Field'}: ${d.message}`)
+          .join(', ');
+    }
+
+    const error = new Error(errorMessage) as Error & { status?: number };
+    error.status = response.status;
+    throw error;
+  }
+
+  if (response.status === 204) {
+    return {} as T;
+  }
+
+  return response.json();
+}

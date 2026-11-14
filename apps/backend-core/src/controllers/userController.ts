@@ -144,6 +144,9 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
             user: {
                 id: user.id,
                 name: user.name,
+                avatarUrl: user.avatarUrl,
+                bannerUrl: user.bannerUrl,
+                profileQuote: user.profileQuote,
                 email: user.email,
                 registeredAt: user.registeredAt,
                 initialWeight: initialWeight,
@@ -151,6 +154,12 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
                 targetWeight: user.targetWeight || 0,
                 height: user.height || 0,
                 weightHistory,
+                sideQuests: user.sideQuests.map((quest) => ({
+                    id: quest.id,
+                    title: quest.title,
+                    completionCount: quest.completionCount,
+                    completed: quest.completed,
+                })),
             },
             stats: {
                 totalChallengesCompleted,
@@ -168,6 +177,9 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
 // --- PUT /users/profile ---
 const updateProfileSchema = z.object({
     name: z.string().min(2).optional(),
+    avatarUrl: z.string().max(2_000_000).nullable().optional(),
+    bannerUrl: z.string().max(2_000_000).nullable().optional(),
+    profileQuote: z.string().max(120).nullable().optional(),
     email: z.string().email().optional(),
     age: z.number().int().positive().optional(),
     weight: z.number().positive().optional(),
@@ -194,6 +206,9 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
             where: { id: userId },
             data: {
                 ...(data.name !== undefined && { name: data.name }),
+                ...(data.avatarUrl !== undefined && { avatarUrl: data.avatarUrl }),
+                ...(data.bannerUrl !== undefined && { bannerUrl: data.bannerUrl }),
+                ...(data.profileQuote !== undefined && { profileQuote: data.profileQuote }),
                 ...(data.email !== undefined && { email: data.email }),
                 ...(data.age !== undefined && { age: data.age }),
                 ...(data.weight !== undefined && { weight: data.weight }),
@@ -201,7 +216,7 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
                 ...(data.height !== undefined && { height: data.height }),
             },
             select: {
-                id: true, name: true, email: true,
+                id: true, name: true, email: true, avatarUrl: true, bannerUrl: true, profileQuote: true,
                 age: true, weight: true, targetWeight: true, height: true,
                 registeredAt: true, onboardingCompleted: true
             }

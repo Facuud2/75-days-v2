@@ -1,47 +1,110 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import dynamic from 'next/dynamic';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { format } from 'date-fns';
+import toast from 'react-hot-toast';
+import {
+  AlertCircle,
+  ChevronRight,
+  LogOut,
+  Pencil,
+  Settings,
+} from 'lucide-react';
+
 import { useAuthStore } from '@/store/useAuthStore';
 import { useChallengeStore } from '@/store/useChallengeStore';
+import type { Goal } from '@/store/useChallengeStore';
 import { useQuestStore } from '@/store/useQuestStore';
+import type { SideQuest } from '@/store/useQuestStore';
+import { useUIStore } from '@/store/useUIStore';
 import { userService, UserProfileResponse } from '@/lib/api/users';
-import { healthService, DailyStats } from '@/lib/api/health';
-import { format } from 'date-fns';
+import { healthService, DailyStats, Meal } from '@/lib/api/health';
 import { getLocalDateString } from '@/lib/utils/date';
-import { Trophy, Calendar, Scale, Award, Flame, Target, ChevronRight, CheckCircle2, Lock, Activity, BarChart3, Footprints, Clock, Zap, Pencil, PieChart as PieChartIcon, RefreshCw, Sun, Moon, Dumbbell, Book, Droplet, Apple } from 'lucide-react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, PieChart, Pie, Cell, Legend } from 'recharts';
-import toast from 'react-hot-toast';
-import AchievementsModal from '@/components/AchievementsModal';
-import EditProfileModal from '@/components/EditProfileModal';
-import LogMealModal from '@/components/LogMealModal';
-import EditMealModal from '@/components/EditMealModal';
-import LogWorkoutModal from '@/components/LogWorkoutModal';
-import { Meal } from '@/lib/api/health';
+import {
+  formatDecimal,
+  formatMemberSince,
+  formatNumber,
+  safeNumber,
+} from '@/lib/utils/display';
 
-const iconMap: Record<string, any> = {
-  droplet: Droplet,
-  dumbbell: Dumbbell,
-  book: Book,
-  sun: Sun,
-  moon: Moon,
-  target: Target,
-  apple: Apple,
-  footprints: Footprints,
-  clock: Clock,
-};
+import ProfileHeader from '@/components/profile/ProfileHeader';
+import ProfileSection from '@/components/profile/ProfileSection';
+import ProfileChallenges from '@/components/profile/ProfileChallenges';
+import ProfileHealth from '@/components/profile/ProfileHealth';
+import ProfileAchievements from '@/components/profile/ProfileAchievements';
+import ProfileEditMenu from '@/components/profile/ProfileEditMenu';
+import { readDevDataset } from '@/components/dev/DevDatasetPicker';
+import type { DevDataset } from '@/components/dev/DevDatasetPicker';
+import { buildDevProfileData, DEV_PROFILE_NAME } from '@/components/dev/profileFixtures';
+
+// Chrome de desarrollo: en producción el fragmento no se renderiza y el chunk
+// del selector no se referencia en el HTML servido.
+const DevDatasetPicker = dynamic(() => import('@/components/dev/DevDatasetPicker'), { ssr: false });
+
+// Lazy-loaded modal & sheet components (vercel-react-best-practices: bundle-dynamic-imports)
+const ActivitiesSheet = dynamic(() => import('@/components/profile/ActivitiesSheet'), { ssr: false });
+const AchievementsSheet = dynamic(() => import('@/components/profile/AchievementsSheet'), { ssr: false });
+const LogoutConfirmSheet = dynamic(() => import('@/components/profile/LogoutConfirmSheet'), { ssr: false });
+const EditProfileSheet = dynamic(() => import('@/components/EditProfileSheet'), { ssr: false });
+const LogMealModal = dynamic(() => import('@/components/LogMealModal'), { ssr: false });
+const EditMealModal = dynamic(() => import('@/components/EditMealModal'), { ssr: false });
+const LogWorkoutModal = dynamic(() => import('@/components/LogWorkoutModal'), { ssr: false });
+const SideQuestDetailModal = dynamic(() => import('@/components/SideQuestDetailModal'), { ssr: false });
+const SideQuestsModal = dynamic(() => import('@/components/SideQuestsModal'), { ssr: false });
+
+const IS_DEV_BUILD = process.env.NODE_ENV === 'development';
+import type {
+  AvailableQuestSummary,
+  ChallengeSummary,
+  HealthSummary,
+  MealSummary,
+  ProfileAchievement,
+  QuestSummary,
+  WorkoutSummary,
+} from '@/components/profile/types';
+
+import type { ProfileEditMode } from '@/components/EditProfileSheet';
+
+function getBmiLabel(bmi: number | null): string {
+  if (bmi === null || bmi <= 0) return 'Sin datos';
+  if (bmi < 18.5) return 'Bajo peso';
+  if (bmi < 25) return 'Normal';
+  if (bmi < 30) return 'Sobrepeso';
+  return 'Obesidad';
+}
+
+function toQuestSummary(quest: SideQuest): QuestSummary {
+  return {
+    id: quest.id,
+    title: quest.title,
+    description: quest.description,
+    difficulty: quest.difficulty,
+    durationDays: quest.durationDays,
+    icon: quest.icon,
+    progress: safeNumber(quest.progress) ?? 0,
+    completed: quest.completed,
+    completionCount: safeNumber(quest.completionCount) ?? 0,
+  };
+}
 
 export default function Profile() {
-  const { user, updateProfile: updateAuthUser } = useAuthStore();
+  const router = useRouter();
+  const { user, logout, updateProfile: updateAuthUser } = useAuthStore();
   const {
     isActive,
     difficulty,
     streak,
     currentDay,
     points,
-    achievements,
-    bestWeight,
-    challengesCompleted
+    challengesCompleted,
+    logs,
+    customGoalsTemplate,
+    fetchCurrentChallenge,
   } = useChallengeStore();
+  const { openPlansModal } = useUIStore();
 
   const {
     quests,
@@ -49,76 +112,86 @@ export default function Profile() {
     fetchQuests,
     fetchAvailableQuests,
     subscribeToQuest,
-    progressQuest
   } = useQuestStore();
 
   const [profileData, setProfileData] = useState<UserProfileResponse | null>(null);
   const [dailyStats, setDailyStats] = useState<DailyStats | null>(null);
-  const [loadingProfile, setLoadingProfile] = useState(true);
-  const [isAchievementsModalOpen, setIsAchievementsModalOpen] = useState(false);
-  const [isEditProfileModalOpen, setIsEditProfileModalOpen] = useState(false);
+  const [recentWorkouts, setRecentWorkouts] = useState<any[]>([]);
+  const [isStravaConnected, setIsStravaConnected] = useState(false);
+  const [syncingStrava, setSyncingStrava] = useState(false);
+  const [stravaError, setStravaError] = useState<string | null>(null);
+
+  const [hasLoadedProfile, setHasLoadedProfile] = useState(false);
+  const [hasLoadedStats, setHasLoadedStats] = useState(false);
+  const [challengeReady, setChallengeReady] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+
+  const [profileEditMode, setProfileEditMode] = useState<ProfileEditMode | null>(null);
+  const [isEditMenuOpen, setIsEditMenuOpen] = useState(false);
+  const [isActivitiesSheetOpen, setIsActivitiesSheetOpen] = useState(false);
+  const [isAchievementsSheetOpen, setIsAchievementsSheetOpen] = useState(false);
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
+  const [isSideQuestsModalOpen, setIsSideQuestsModalOpen] = useState(false);
+
   const [isLogMealModalOpen, setIsLogMealModalOpen] = useState(false);
   const [isLogWorkoutModalOpen, setIsLogWorkoutModalOpen] = useState(false);
   const [editingMeal, setEditingMeal] = useState<Meal | null>(null);
   const [editingWorkout, setEditingWorkout] = useState<any | null>(null);
-  const [chartsReady, setChartsReady] = useState(false);
-
-  // Strava State
-  const [isStravaConnected, setIsStravaConnected] = useState(false);
-  const [syncingStrava, setSyncingStrava] = useState(false);
-  const [authError, setAuthError] = useState<string | null>(null);
-  const [recentWorkouts, setRecentWorkouts] = useState<any[]>([]);
+  const [selectedSideQuest, setSelectedSideQuest] = useState<SideQuest | null>(null);
   const [subscribingTo, setSubscribingTo] = useState<string | null>(null);
+  const [devDataset, setDevDataset] = useState<DevDataset>(() => readDevDataset());
 
   const fetchProfile = useCallback(() => {
-    if (user) {
-      const today = getLocalDateString();
-      Promise.all([
-        // F-31: si el perfil falla, no debe arrastrar consigo los datos de
-        // salud y Strava que sí responden.
-        userService.getProfile().catch(() => null),
-        healthService.getDailyStats(today).catch(() => null),
-        healthService.getStravaStatus().catch(() => ({ connected: false })),
-        healthService.getRecentWorkouts().catch(() => ({ workouts: [] }))
-      ])
-        .then(([profile, healthData, stravaStatus, workoutsData]) => {
-          if (profile) setProfileData(profile);
-          setDailyStats(healthData);
-          setIsStravaConnected(stravaStatus.connected);
-          setRecentWorkouts(workoutsData?.workouts || []);
-          setLoadingProfile(false);
-        })
-        .catch(err => {
-          console.error('Error fetching data:', err);
-          setLoadingProfile(false);
-        });
-    }
+    if (!user) return;
+
+    const today = getLocalDateString();
+    setProfileError(null);
+
+    userService
+      .getProfile()
+      .then(setProfileData)
+      .catch((error) => {
+        console.error('Error fetching profile:', error);
+        setProfileError('No pudimos cargar tu perfil.');
+      })
+      .finally(() => setHasLoadedProfile(true));
+
+    healthService
+      .getDailyStats(today)
+      .then(setDailyStats)
+      .catch(() => setDailyStats(null))
+      .finally(() => setHasLoadedStats(true));
+
+    healthService
+      .getStravaStatus()
+      .then(({ connected }) => setIsStravaConnected(connected))
+      .catch(() => setIsStravaConnected(false));
+
+    healthService
+      .getRecentWorkouts()
+      .then(({ workouts }) => setRecentWorkouts(workouts || []))
+      .catch(() => setRecentWorkouts([]));
   }, [user]);
 
   useEffect(() => {
-    fetchProfile();
-    fetchQuests();
-    fetchAvailableQuests();
+    // F-04: todos estos fetches son independientes — lanzarlos en paralelo.
+    Promise.allSettled([
+      fetchProfile(),
+      fetchCurrentChallenge().finally(() => setChallengeReady(true)),
+      fetchQuests(),
+      fetchAvailableQuests(),
+    ]);
 
-    let secondFrame = 0;
-    const firstFrame = requestAnimationFrame(() => {
-      secondFrame = requestAnimationFrame(() => setChartsReady(true));
-    });
-
-    // Check for OAuth callbacks in URL
+    // Manejo de callbacks de Strava OAuth
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('strava') === 'success') {
       setIsStravaConnected(true);
       window.history.replaceState({}, document.title, window.location.pathname);
     } else if (urlParams.get('strava') === 'error') {
-      setAuthError('Error al conectar con Strava');
+      setStravaError('No pudimos conectar con Strava.');
       window.history.replaceState({}, document.title, window.location.pathname);
     }
-    return () => {
-      cancelAnimationFrame(firstFrame);
-      if (secondFrame) cancelAnimationFrame(secondFrame);
-    };
-  }, [fetchProfile, fetchQuests, fetchAvailableQuests]);
+  }, [fetchProfile, fetchCurrentChallenge, fetchQuests, fetchAvailableQuests]);
 
   const handleConnectStrava = async () => {
     try {
@@ -126,877 +199,530 @@ export default function Profile() {
       window.location.href = url;
     } catch (error) {
       console.error('Failed to get Strava auth URL', error);
-      setAuthError('No se pudo iniciar la conexión con Strava.');
+      setStravaError('No pudimos iniciar la conexión con Strava.');
     }
   };
 
   const handleSyncStrava = async () => {
     if (syncingStrava) return;
     setSyncingStrava(true);
+    setStravaError(null);
     try {
       const result = await healthService.syncStravaWorkouts();
-      // Refetch profile to update stats (assuming workouts affect daily stats if today)
       fetchProfile();
       toast.success(result.message);
     } catch (error) {
       console.error('Error syncing strava', error);
-      toast.error('Error sincronizando entrenamientos.');
+      toast.error('No pudimos sincronizar los entrenamientos.');
     } finally {
       setSyncingStrava(false);
     }
   };
 
-  const handleSubscribe = async (title: string, difficulty: string, durationDays: number) => {
-    setSubscribingTo(title);
+  const handleSubscribe = async (quest: AvailableQuestSummary) => {
+    setSubscribingTo(quest.title);
     try {
-      await subscribeToQuest(title, difficulty, durationDays);
+      await subscribeToQuest(quest.title, quest.difficulty, quest.durationDays);
+      const error = useQuestStore.getState().error;
+      if (error) {
+        toast.error('No pudimos suscribirte a la actividad.');
+      } else {
+        toast.success(`Te suscribiste a ${quest.title}.`);
+        await Promise.all([fetchQuests(), fetchAvailableQuests()]);
+      }
     } finally {
       setSubscribingTo(null);
     }
   };
 
-  if (!user || loadingProfile) return <div className="p-8 text-center text-zinc-400 min-h-screen bg-zinc-950">Cargando perfil...</div>;
-
-  const mockWeightLost = Number((profileData?.stats.totalWeightLost || 0).toFixed(2));
-  const mockChallengesCount = profileData?.stats.totalChallengesCompleted || 0;
-  const mockTotalDays = profileData?.stats.totalDaysCompleted || 0;
-
-  const mockInitialWeight = profileData?.user.initialWeight || 0;
-  const mockGoalWeight = profileData?.user.targetWeight || 0;
-  const mockCurrentWeight = profileData?.user.currentWeight || user?.weight || 0;
-
-  // Only calculate "to lose" if a goal is set and we're above it
-  const mockToLose = mockGoalWeight > 0
-    ? Math.max(0, mockCurrentWeight - mockGoalWeight).toFixed(1)
-    : "0.0";
-
-  // Macros Pie Chart Data
-  const macrosData = dailyStats && dailyStats.macros ? [
-    { name: 'Proteínas', value: dailyStats.macros.proteinG, color: '#3b82f6' }, // Blue
-    { name: 'Carbos', value: dailyStats.macros.carbG, color: '#f59e0b' },    // Yellow
-    { name: 'Grasas', value: dailyStats.macros.fatG, color: '#ef4444' }       // Red
-  ] : [];
-  const hasMacros = macrosData.some(m => m.value > 0);
-
-  const weightHistoryData = profileData?.user.weightHistory || [];
-
-  // Keeping these at 0 since there are no fields yet for this
-  const mockWeeklyWorkouts = 0;
-  const mockWeeklyCals = 0;
-  const mockWeeklyHours = 0;
-
-  const mockTotalDistance = 0;
-  const mockTotalHours = 0;
-  const mockTotalCals = 0;
-
-  const mockHeightMeters = (profileData?.user.height || user?.height || 0) / 100;
-  const mockBMI = mockHeightMeters > 0 ? Number((mockCurrentWeight / (mockHeightMeters * mockHeightMeters)).toFixed(1)) : 0;
-
-  const getBMICategory = (bmi: number) => {
-    if (bmi === 0) return { label: 'Sin datos', color: 'text-zinc-500', bg: 'bg-zinc-800' };
-    if (bmi < 18.5) return { label: 'Bajo peso', color: 'text-yellow-400', bg: 'bg-yellow-500/20' };
-    if (bmi < 25) return { label: 'Normal', color: 'text-green-400', bg: 'bg-green-500/20' };
-    if (bmi < 30) return { label: 'Sobrepeso', color: 'text-orange-400', bg: 'bg-orange-500/20' };
-    return { label: 'Obesidad', color: 'text-red-400', bg: 'bg-red-500/20' };
+  const handleOpenQuest = (quest: QuestSummary) => {
+    const fullQuest = quests.find((item) => item.id === quest.id);
+    setIsActivitiesSheetOpen(false);
+    if (fullQuest) setSelectedSideQuest(fullQuest);
   };
-  const bmiCategory = getBMICategory(mockBMI);
 
-  const mockCompletedChallenges: any[] = [];
-  const achievementsList = profileData?.achievements || [];
-  const unlockedAchievementsCount = achievementsList.filter(a => a.unlocked).length;
-  const achievementsPercentage = achievementsList.length > 0 ? Math.round((unlockedAchievementsCount / achievementsList.length) * 100) : 0;
+  const handleCreateCustom = () => {
+    setIsActivitiesSheetOpen(false);
+    setIsSideQuestsModalOpen(true);
+  };
 
-  const level = Math.floor(points / 100) + 1;
+  const handleEditSelect = (mode: ProfileEditMode) => {
+    setIsEditMenuOpen(false);
+    setProfileEditMode(mode);
+  };
+
+   const handleLogout = () => {
+     setIsLogoutConfirmOpen(false);
+     logout();
+     toast.success('Sesión cerrada correctamente.');
+     router.push('/login');
+   };
+
+  const level = Math.floor((safeNumber(points) ?? 0) / 100) + 1;
+  const memberSince = formatMemberSince(profileData?.user.registeredAt);
+
+  const today = getLocalDateString();
+  const todayGoals: Goal[] =
+    logs[today]?.goals ??
+    customGoalsTemplate.map((goal, index) => ({
+      ...goal,
+      id: `template-${index}`,
+      completed: false,
+    }));
+
+  const currentWeight =
+    safeNumber(profileData?.user.currentWeight) ?? safeNumber(user?.weight) ?? null;
+  const initialWeight = safeNumber(profileData?.user.initialWeight) ?? null;
+  const goalWeight =
+    safeNumber(profileData?.user.targetWeight) ?? safeNumber(user?.targetWeight) ?? null;
+  // Negativo = el usuario subió de peso. `ProfileHealth` decide el tono y el
+  // texto ("ganados") a partir del signo; clampear a 0 ocultaba la subida.
+  const weightLost =
+    safeNumber(profileData?.stats.totalWeightLost) ??
+    (initialWeight !== null && currentWeight !== null
+      ? initialWeight - currentWeight
+      : null);
+  // Distancia a la meta en cualquier dirección: alguien por debajo de su meta
+  // (p. ej. ganando masa muscular) también tiene kilómetros por recorrer.
+  const toGoal =
+    goalWeight !== null && currentWeight !== null
+      ? Math.abs(currentWeight - goalWeight)
+      : null;
+
+  const heightMeters =
+    (safeNumber(profileData?.user.height) ?? safeNumber(user?.height) ?? 0) / 100;
+  const bmi =
+    heightMeters > 0 && currentWeight !== null
+      ? Number((currentWeight / (heightMeters * heightMeters)).toFixed(1))
+      : null;
+
+  const weightHistory = useMemo(
+    () =>
+      (profileData?.user.weightHistory || [])
+        .map((point) => ({ date: point.date, weight: safeNumber(point.weight) }))
+        .filter((point): point is { date: string; weight: number } => point.weight !== null),
+    [profileData?.user.weightHistory],
+  );
+   // F-07: combinar iteraciones sobre quests en un solo pase + Set para O(1) lookup.
+   const { activeQuests, completedQuests, activeTitles } = useMemo(() => {
+     const active: typeof quests = [];
+     const completed: typeof quests = [];
+     quests.forEach((q) => (q.completed ? completed : active).push(q));
+     const titles = new Set(active.map((q) => q.title));
+     return { activeQuests: active, completedQuests: completed, activeTitles: titles };
+   }, [quests]);
+
+   const availableToSubscribe = useMemo(
+     () => availableQuests.filter((q) => !activeTitles.has(q.title)),
+     [availableQuests, activeTitles],
+   );
+
+  const achievements = (profileData?.achievements || []) as ProfileAchievement[];
+  const unlockedAchievements = achievements.filter((achievement) => achievement.unlocked).length;
+
+  const challengeData: ChallengeSummary = {
+    isActive,
+    difficulty,
+    currentDay: safeNumber(currentDay) ?? 0,
+    streak: safeNumber(streak) ?? 0,
+    challengesCompleted: safeNumber(challengesCompleted) ?? 0,
+    todayGoals: todayGoals.map((goal) => ({
+      id: goal.id,
+      title: goal.title,
+      completed: goal.completed,
+      icon: goal.icon,
+    })),
+    activeQuests: activeQuests.map(toQuestSummary),
+    completedQuestsCount: completedQuests.length,
+  };
+
+  const healthData: HealthSummary = {
+    currentWeight,
+    initialWeight,
+    goalWeight,
+    weightLost,
+    toGoal,
+    bmi,
+    bmiLabel: getBmiLabel(bmi),
+    weightHistory,
+    nutrition: dailyStats
+      ? {
+          consumed: safeNumber(dailyStats.consumed) ?? 0,
+          dailyGoal: safeNumber(dailyStats.dailyGoal) ?? 0,
+          remainingToGoal: safeNumber(dailyStats.remainingToGoal) ?? 0,
+          macros: {
+            proteinG: safeNumber(dailyStats.macros?.proteinG) ?? 0,
+            carbG: safeNumber(dailyStats.macros?.carbG) ?? 0,
+            fatG: safeNumber(dailyStats.macros?.fatG) ?? 0,
+            goals: dailyStats.macros?.goals
+              ? {
+                  proteinG: safeNumber(dailyStats.macros.goals.proteinG) ?? 0,
+                  carbG: safeNumber(dailyStats.macros.goals.carbG) ?? 0,
+                  fatG: safeNumber(dailyStats.macros.goals.fatG) ?? 0,
+                }
+              : undefined,
+          },
+          meals: (dailyStats.meals || []).map((meal) => ({
+            id: meal.id,
+            mealType: meal.mealType,
+            name: meal.name,
+            calories: safeNumber(meal.calories) ?? 0,
+            proteinG: safeNumber(meal.proteinG) ?? 0,
+            carbG: safeNumber(meal.carbG) ?? 0,
+            fatG: safeNumber(meal.fatG) ?? 0,
+          })),
+        }
+      : null,
+    workouts: (recentWorkouts || []).map((workout) => ({
+      id: workout.id,
+      sport: workout.sport || 'Entrenamiento',
+      notes: workout.notes ?? null,
+      durationMin: safeNumber(workout.durationMin),
+      caloriesBurned: safeNumber(workout.caloriesBurned),
+      distanceKm: safeNumber(workout.distanceKm),
+    })),
+    isStravaConnected,
+    todayWorkoutMinutes: safeNumber(dailyStats?.totalWorkoutMin),
+  };
+
+  // El fixture entra en el mismo punto donde se arma el dato: los componentes
+  // de perfil reciben props de la misma forma, sin saber cuál está activo.
+  // `challengeData` / `healthData` / `achievements` se recalculan en cada render
+  // (dependen de la API y del store), así que no hay nada que memoizar aquí:
+  // `buildDevProfileData` devuelve la misma referencia con `demo`.
+  const devFixture = buildDevProfileData(devDataset, {
+    challenge: challengeData,
+    health: healthData,
+    achievements,
+  });
+  const activeChallenge = IS_DEV_BUILD ? devFixture.challenge : challengeData;
+  const activeHealth = IS_DEV_BUILD ? devFixture.health : healthData;
+  const activeAchievements = IS_DEV_BUILD ? devFixture.achievements : achievements;
+  const isDevDataset = IS_DEV_BUILD && devDataset !== 'demo';
+  const unlockedCount = activeAchievements.filter((achievement) => achievement.unlocked).length;
+  const displayName = isDevDataset && devDataset === 'worst' ? DEV_PROFILE_NAME : user?.name ?? '';
+
+  const handleEditMeal = (meal: MealSummary) => {
+    setEditingMeal(meal as Meal);
+  };
+
+  const handleEditWorkout = (workout: WorkoutSummary) => {
+    setEditingWorkout(workout);
+    setIsLogWorkoutModalOpen(true);
+  };
+
+  const retosSummary = activeChallenge.isActive
+    ? `Día ${formatNumber(activeChallenge.currentDay)}/75`
+    : 'Sin reto activo';
+  const saludSummary = [
+    activeHealth.currentWeight !== null ? `${formatDecimal(activeHealth.currentWeight)} kg` : null,
+    dailyStats ? `${formatNumber(activeHealth.nutrition?.consumed ?? dailyStats.consumed)} kcal` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const logrosSummary = `${formatNumber(unlockedCount)}/${formatNumber(activeAchievements.length)}`;
+
+  if (!user) return <ProfileSkeleton />;
+
+  const headerLoading = !hasLoadedProfile && !profileData;
 
   return (
-    <div className="profile-surface w-full max-w-7xl mx-auto space-y-6 pb-8 animate-in fade-in text-zinc-100 font-sans">
+    <div className="pv2-page mx-auto w-full max-w-6xl pb-6">
+      <div className="lg:grid lg:grid-cols-[300px_minmax(0,1fr)] lg:items-start lg:gap-10">
+        <aside className="lg:sticky lg:top-24 lg:self-start">
+          <ProfileHeader
+            name={displayName}
+            avatarUrl={user.avatarUrl}
+            level={level}
+            memberSince={memberSince}
+            quote={user.profileQuote}
+            onEdit={() => setIsEditMenuOpen(true)}
+            onAvatar={() => setProfileEditMode('avatar')}
+            loading={headerLoading}
+          />
+        </aside>
 
-      {/* Identity-first profile header */}
-      <section aria-labelledby="profile-heading" className="profile-identity-card relative overflow-hidden rounded-[2rem] border shadow-[0_24px_70px_rgba(0,0,0,0.22)]">
-        <div className="profile-identity-hero relative min-h-[168px] overflow-hidden px-5 pb-12 pt-5 sm:min-h-[198px] sm:px-8 sm:pt-7">
-          <div className="absolute -right-16 -top-20 h-56 w-56 rounded-full bg-[#f7b7a7]/70 blur-2xl" aria-hidden="true" />
-          <div className="absolute bottom-[-80px] left-1/3 h-44 w-72 rounded-full bg-[#d6d9f0]/80 blur-2xl" aria-hidden="true" />
-          <div className="absolute inset-x-0 bottom-0 h-20 bg-[#211d24]/10" aria-hidden="true" />
-          <div className="relative flex items-start justify-between gap-4">
-            <div>
-              <p className="profile-identity-hero-muted mb-1 text-[11px] font-bold uppercase tracking-[0.18em]">Mi perfil</p>
-              <p className="profile-identity-hero-muted max-w-[18rem] text-sm font-medium leading-relaxed sm:max-w-sm">Tu constancia también merece un lugar visible.</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setIsEditProfileModalOpen(true)}
-              className="profile-identity-action inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-colors hover:bg-rose-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[#f0dce2]"
-            >
-              Editar <Pencil className="h-4 w-4" aria-hidden="true" />
-            </button>
-          </div>
-        </div>
-
-        <div className="relative px-5 pb-5 sm:px-8 sm:pb-7">
-          <div className="-mt-14 flex flex-col gap-4 sm:-mt-16 sm:flex-row sm:items-end sm:justify-between">
-            <div className="flex items-end gap-4">
-              <div className="profile-identity-avatar flex h-28 w-28 shrink-0 items-center justify-center rounded-full border-[6px] bg-zinc-900 text-4xl font-bold uppercase shadow-xl sm:h-32 sm:w-32 sm:text-5xl" aria-label={`Avatar de ${user.name}`}>
-                {user.name.charAt(0)}
-              </div>
-              <div className="pb-1">
-                <div className="mb-1 flex flex-wrap items-center gap-2">
-                  <h1 id="profile-heading" className="text-2xl font-bold tracking-tight text-[var(--profile-shell-text)] sm:text-3xl">{user.name}</h1>
-                  <span className="profile-identity-level rounded-full border px-2.5 py-1 text-[11px] font-bold">Nivel {level}</span>
-                </div>
-                <p className="text-sm text-[var(--profile-shell-muted)]">Miembro desde {format(new Date(user.registeredAt), 'MMMM yyyy')}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="profile-identity-stats mt-6 grid grid-cols-2 divide-x divide-[var(--profile-stat-border)] overflow-hidden rounded-2xl border sm:grid-cols-4">
-            <div className="px-3 py-4 text-center sm:px-5"><p className="profile-identity-stats-value text-2xl font-bold tracking-tight">{streak}</p><p className="profile-identity-stats-muted mt-1 text-xs">Días de racha</p></div>
-            <div className="px-3 py-4 text-center sm:px-5"><p className="profile-identity-stats-value text-2xl font-bold tracking-tight">{mockTotalDays}</p><p className="profile-identity-stats-muted mt-1 text-xs">Días completados</p></div>
-            <div className="border-t border-[var(--profile-stat-border)] px-3 py-4 text-center sm:border-t-0 sm:px-5"><p className="profile-identity-stats-value text-2xl font-bold tracking-tight">{mockWeightLost}</p><p className="profile-identity-stats-muted mt-1 text-xs">Kg perdidos</p></div>
-            <div className="border-t border-[var(--profile-stat-border)] px-3 py-4 text-center sm:border-t-0 sm:px-5"><p className="profile-identity-stats-value text-2xl font-bold tracking-tight">{mockChallengesCount}</p><p className="profile-identity-stats-muted mt-1 text-xs">Retos completados</p></div>
-          </div>
-        </div>
-      </section>
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-
-        {/* Left Column - Main Content (Spans 2 cols) */}
-        <div className="space-y-6 lg:col-span-2">
-
-          {/* Active Challenge Banner */}
-          <section aria-labelledby="challenge-heading" className="rounded-[1.75rem] border border-zinc-800/80 bg-zinc-900 p-4 sm:p-6">
-            <div className="mb-5 flex flex-wrap items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-300">
-                <Target className="h-5 w-5" aria-hidden="true" />
-              </div>
-              <div>
-                <h2 id="challenge-heading" className="text-xl font-semibold tracking-tight">Tu reto actual</h2>
-                <p className="text-sm text-zinc-500">{mockChallengesCount} completados · {isActive ? '1' : '0'} en progreso</p>
-              </div>
-            </div>
-
-            {isActive ? (
-              <div className="profile-challenge relative overflow-hidden rounded-2xl border border-rose-500/20 p-5 sm:p-6">
-                <div className="absolute left-0 top-0 bottom-0 w-1 bg-rose-500"></div>
-                <div className="mb-4 flex items-start justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                     <Flame className="w-6 h-6 text-orange-400 shrink-0" aria-hidden="true" />
-                    <div>
-                      <div className="flex items-center gap-2">
-                         <h3 className="text-lg font-bold tracking-tight">Desafío 75 {difficulty?.toUpperCase() || 'HARD'}</h3>
-                         <span className="profile-challenge-status rounded bg-rose-500/20 px-2 py-0.5 text-xs font-medium">En Progreso</span>
-                      </div>
-                       <p className="profile-challenge-muted mt-1 text-sm">75 días de entrenamiento diario, dieta estricta, sin alcohol, leer 10 páginas</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Progress Bar inside Active Challenge */}
-                <div className="space-y-2 mt-4">
-                  <div className="h-2 w-full bg-zinc-800 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-rose-500 rounded-full transition-all duration-1000 ease-out"
-                      style={{ width: `${Math.min(100, (currentDay / 75) * 100)}%` }}
-                    />
-                  </div>
-                   <div className="profile-challenge-muted flex justify-end text-xs font-medium">
-                    {currentDay}/75 días
-                  </div>
+        <div className="mt-3 space-y-3 lg:mt-0">
+          {profileError && !profileData ? (
+            <div className="pv2-card p-4" role="alert">
+              <div className="flex items-start gap-3">
+                <AlertCircle
+                  size={18}
+                  strokeWidth={1.5}
+                  className="mt-0.5 shrink-0"
+                  style={{ color: 'var(--status-danger)' }}
+                  aria-hidden="true"
+                />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                    {profileError}
+                  </p>
+                  <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
+                    Revisa tu conexión e inténtalo de nuevo.
+                  </p>
+                  <button type="button" onClick={fetchProfile} className="pv2-ghost mt-3">
+                    Reintentar
+                  </button>
                 </div>
               </div>
-            ) : (
-              <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-950/50 p-5 text-center text-zinc-400">
-                No hay ningún desafío activo en este momento.
-              </div>
-            )}
-
-            {/* Completed Challenges Grid */}
-            <div className="mt-8">
-              <h3 className="text-xs font-bold text-zinc-500 mb-4">Completados</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {mockCompletedChallenges.map((challenge, i) => (
-                  <div key={i} className="bg-zinc-950/40 border border-zinc-800/80 rounded-xl p-4 flex flex-col justify-between hover:border-zinc-700 transition-colors">
-                    <div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-xl">{challenge.icon}</span>
-                        <span className="font-semibold text-sm flex-1 truncate">{challenge.title}</span>
-                        <CheckCircle2 className="w-4 h-4 text-green-500" />
-                      </div>
-                      <p className="text-xs text-zinc-400 line-clamp-2">{challenge.desc}</p>
-                    </div>
-                    <span className="text-[10px] text-zinc-500 font-medium mt-4 block">{challenge.date}</span>
-                  </div>
-                ))}
-              </div>
             </div>
-          </section>
+          ) : null}
 
-          {/* Achievements Section */}
-          <div
-            className="group relative cursor-pointer overflow-hidden rounded-[1.75rem] border border-zinc-800/80 bg-zinc-900 p-4 transition-colors hover:border-zinc-700 sm:p-6"
-            onClick={() => setIsAchievementsModalOpen(true)}
+          <ProfileSection
+            id="retos"
+            index="01"
+            title="Retos"
+            summary={retosSummary}
+            defaultOpen
           >
-            {/* Subtle interactive hover highlight */}
-            <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
+            <ProfileChallenges
+              data={activeChallenge}
+              loading={!challengeReady}
+              onContinue={() => router.push('/dashboard')}
+              onStartChallenge={openPlansModal}
+              onDiscoverActivities={() => setIsActivitiesSheetOpen(true)}
+              onOpenQuest={handleOpenQuest}
+            />
+          </ProfileSection>
 
-            <div className="flex items-center text-zinc-100 justify-between mb-6 pb-4 border-b border-zinc-800/50 relative z-10">
-              <div className="flex items-center gap-3">
-                <div className="bg-yellow-500/20 p-2 rounded-lg">
-                  <Award className="text-yellow-500 w-5 h-5" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold leading-tight group-hover:text-yellow-400 transition-colors flex items-center gap-2">
-                    Logros <ChevronRight className="w-4 h-4 opacity-50 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
-                  </h2>
-                  <p className="text-sm text-zinc-400">{unlockedAchievementsCount} de {achievementsList.length} desbloqueados</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <span className="text-xl font-bold">{achievementsPercentage}%</span>
-                <p className="text-xs text-zinc-500">Completado</p>
-              </div>
-            </div>
+          <ProfileSection
+            id="salud"
+            index="02"
+            title="Salud"
+            summary={saludSummary || 'Sin datos'}
+          >
+            <ProfileHealth
+              data={activeHealth}
+              loading={headerLoading}
+              loadingNutrition={!hasLoadedStats}
+              onLogMeal={() => setIsLogMealModalOpen(true)}
+              onEditMeal={handleEditMeal}
+              onLogWorkout={() => {
+                setEditingWorkout(null);
+                setIsLogWorkoutModalOpen(true);
+              }}
+              onEditWorkout={handleEditWorkout}
+              onConnectStrava={handleConnectStrava}
+              onSyncStrava={handleSyncStrava}
+              syncingStrava={syncingStrava}
+              stravaError={stravaError}
+            />
+          </ProfileSection>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 relative z-10">
-              {achievementsList.slice(0, 4).map((ach) => (
-                <div key={ach.id} className={`p-4 rounded-xl border flex gap-4 ${ach.unlocked
-                  ? 'bg-zinc-950/40 border-zinc-800'
-                   : 'bg-zinc-950/20 border-zinc-800/40'
-                  }`}>
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 text-xl shadow-inner ${ach.color}`}>
-                    {ach.icon}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-1 gap-2">
-                       <h3 className="font-semibold text-sm truncate">{ach.title}</h3>
-                      {ach.unlocked && <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />}
-                    </div>
-                    <p className="text-xs text-zinc-400 line-clamp-1 mb-2">{ach.description}</p>
+          <ProfileSection
+            id="logros"
+            index="03"
+            title="Logros"
+            summary={activeAchievements.length > 0 ? `${logrosSummary} desbloqueados` : 'Sin logros'}
+          >
+            <ProfileAchievements
+              achievements={activeAchievements}
+              loading={headerLoading}
+              onOpenAll={() => setIsAchievementsSheetOpen(true)}
+            />
+          </ProfileSection>
 
-                    {ach.unlocked ? (
-                      <span className="text-[10px] text-yellow-500/80 font-medium">
-                        Desbloqueado {ach.unlockedAt ? new Date(ach.unlockedAt).toLocaleDateString() : ''}
-                      </span>
-                    ) : (
-                      <div className="flex items-center gap-2 mt-auto">
-                        <span className="text-[10px] text-zinc-500">Progreso</span>
-                        <div className="flex-1 h-1 bg-zinc-800 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-zinc-600 rounded-full transition-all duration-1000 ease-out"
-                            style={{ width: `${Math.min(100, (ach.progress / ach.total) * 100)}%` }}
-                          />
-                        </div>
-                        <span className="text-[10px] text-zinc-500">{ach.progress} / {ach.total}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {achievementsList.length > 4 && (
-              <div className="mt-4 text-center text-xs text-zinc-500 group-hover:text-zinc-400 transition-colors">
-                Haz clic para ver los {achievementsList.length} logros
-              </div>
-            )}
-          </div>
-
-          {/* Dynamic Activities Section */}
-          <section aria-labelledby="activity-heading" className="relative overflow-hidden rounded-[1.75rem] border border-zinc-800/80 bg-zinc-900 p-5 sm:p-6">
-            {/* Subtle background glow */}
-            <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-900/5 rounded-full blur-3xl -z-10 pointer-events-none"></div>
-
-            <div className="flex items-center text-zinc-100 justify-between mb-8 relative z-10 border-b border-zinc-800/50 pb-4">
-              <div className="flex items-center gap-3">
-                <div className="bg-emerald-500/20 p-2 rounded-lg">
-                  <Target className="text-emerald-500 w-5 h-5" />
-                </div>
-                <div>
-                   <h2 id="activity-heading" className="text-lg font-semibold leading-tight">Actividades Dinámicas</h2>
-                  <p className="text-sm text-zinc-400">Misiones secundarias para potenciar tu progreso</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-8 relative z-10">
-              {/* Suscribed Quests */}
-              <div>
-                <h3 className="text-xs font-bold text-zinc-500 mb-4 flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500/70" />
-                  Mis Actividades
-                </h3>
-
-                {quests.length > 0 ? (
-                  <div className="grid grid-cols-1 gap-3">
-                    {quests.map(quest => {
-                      const IconComponent = Trophy;
-                      return (
-                        <div
-                          key={quest.id}
-                          onClick={() => !quest.completed && progressQuest(quest.id)}
-                          className={`group border rounded-xl p-4 flex items-center gap-4 transition-all duration-300 ${quest.completed
-                            ? 'border-emerald-500/30 bg-emerald-500/5 cursor-default'
-                            : 'border-zinc-800/80 bg-zinc-950/40 hover:border-emerald-500/50 hover:bg-zinc-900/60 cursor-pointer active:scale-[0.99]'
-                            }`}
-                        >
-                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 transition-colors ${quest.completed
-                            ? 'bg-emerald-500/20 text-emerald-500'
-                            : 'bg-zinc-800/80 text-emerald-500/70 group-hover:text-emerald-500'
-                            }`}>
-                            <IconComponent size={20} strokeWidth={1.5} />
-                          </div>
-
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between mb-1 gap-2">
-                              <h3 className={`font-semibold text-sm truncate transition-colors ${quest.completed ? 'text-zinc-500 line-through' : 'text-zinc-200 group-hover:text-white'}`}>
-                                {quest.title}
-                              </h3>
-                              {quest.completed && (
-                                <span className="text-[10px] uppercase font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-md shrink-0">
-                                  Completada
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-3 mt-1">
-                              <span className="text-[10px] font-semibold text-zinc-500">
-                                Nivel: <span className={
-                                  quest.difficulty === 'Easy' ? 'text-emerald-400' :
-                                    quest.difficulty === 'Medium' ? 'text-amber-400' : 'text-red-400'
-                                }>{quest.difficulty === 'Easy' ? 'Fácil' : quest.difficulty === 'Medium' ? 'Medio' : 'Difícil'}</span>
-                              </span>
-                            </div>
-
-                            {!quest.completed && (
-                              <div className="flex items-center gap-2 mt-3">
-                                <div className="flex-1 h-1 bg-zinc-800 rounded-full overflow-hidden">
-                                  <div
-                                    className="h-full bg-emerald-500 transition-all duration-500 ease-out"
-                                    style={{ width: `${(quest.progress / quest.durationDays) * 100}%` }}
-                                  />
-                                </div>
-                                <span className="text-[10px] text-zinc-500 whitespace-nowrap font-medium">{quest.progress} / {quest.durationDays}</span>
-                              </div>
-                            )}
-                          </div>
-
-                          <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-all duration-300 ease-out ${quest.completed
-                            ? 'bg-emerald-500 border-emerald-500'
-                            : 'border-zinc-700/50 group-hover:border-emerald-500/50'
-                            }`}>
-                            {quest.completed && <CheckCircle2 size={12} className="text-zinc-950" strokeWidth={4} />}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                ) : (
-                  <div className="text-center py-6 bg-zinc-950/30 rounded-xl border border-dashed border-zinc-800/80">
-                    <p className="text-sm text-zinc-500">Aún no te has suscrito a ninguna actividad.</p>
-                    <p className="text-xs text-zinc-600 mt-1">Explora las misiones disponibles abajo y comienza una nueva.</p>
-                  </div>
-                )}
-              </div>
-
-              {/* Available Quests */}
-              <div className="pt-2">
-                <h3 className="text-xs font-bold text-zinc-500 mb-4 flex items-center gap-2">
-                  <Target className="w-4 h-4 text-rose-500/70" />
-                  Nuevas Actividades Disponibles
-                </h3>
-
-                {(() => {
-                  const activeQuestTitles = quests.filter(q => !q.completed).map(q => q.title);
-                  const availableToSubscribe = availableQuests.filter(q => !activeQuestTitles.includes(q.title));
-
-                  if (availableToSubscribe.length === 0) {
-                    return (
-                      <div className="text-center py-6 bg-zinc-950/30 rounded-xl border border-dashed border-zinc-800/80">
-                        <Trophy className="mx-auto w-8 h-8 text-yellow-500/40 mb-2" />
-                        <p className="text-sm text-zinc-400">¡Has completado o tienes activas todas las misiones!</p>
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {availableToSubscribe.map(quest => {
-                        const IconComponent = quest.icon && iconMap[quest.icon] ? iconMap[quest.icon] : Trophy;
-                        const isSubscribing = subscribingTo === quest.title;
-
-                        return (
-                          <div key={quest.title} className="bg-zinc-950/40 border border-zinc-800/80 rounded-xl p-4 flex flex-col hover:border-zinc-700/80 transition-colors group">
-                            <div className="flex items-start gap-3 mb-2">
-                              <div className="w-10 h-10 rounded-lg bg-zinc-900 flex items-center justify-center text-zinc-400 group-hover:text-rose-400 transition-colors shrink-0">
-                                <IconComponent size={20} strokeWidth={1.5} />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-start justify-between gap-2">
-                                  <h4 className="font-semibold text-sm truncate text-zinc-200 group-hover:text-white transition-colors">{quest.title}</h4>
-                                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md shrink-0 ${quest.difficulty === 'Easy' ? 'bg-emerald-500/10 text-emerald-500' :
-                                    quest.difficulty === 'Medium' ? 'bg-amber-500/10 text-amber-500' :
-                                      'bg-red-500/10 text-red-500'
-                                    }`}>
-                                    {quest.difficulty === 'Easy' ? 'Fácil' : quest.difficulty === 'Medium' ? 'Medio' : 'Difícil'}
-                                  </span>
-                                </div>
-                                <p className="text-xs text-zinc-500 mt-1 line-clamp-2">{quest.description}</p>
-                                <div className="text-[10px] font-semibold text-zinc-600 mt-2 bg-zinc-900 inline-block px-1.5 py-0.5 rounded">
-                                  {quest.durationDays} Días
-                                </div>
-                              </div>
-                            </div>
-                            <button
-                              onClick={() => handleSubscribe(quest.title, quest.difficulty, quest.durationDays)}
-                              disabled={subscribingTo !== null}
-                              className="mt-3 w-full py-2 bg-rose-500/10 text-rose-500 text-xs font-bold rounded-lg hover:bg-rose-500 hover:text-white transition-all disabled:opacity-50 disabled:bg-zinc-800 disabled:text-zinc-500 flex items-center justify-center h-8"
-                            >
-                              {isSubscribing ? (
-                                <div className="w-4 h-4 rounded-full border-2 border-white/20 border-t-white animate-spin" />
-                              ) : (
-                                'Suscribirse'
-                              )}
-                            </button>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )
-                })()}
-              </div>
-            </div>
-          </section>
-
-        </div>
-
-        {/* Right Column - Sidebar Widgets (Spans 1 col) */}
-        <div className="space-y-6">
-
-          {/* Weight Progress Widget */}
-          <section aria-labelledby="weight-heading" className="rounded-[1.75rem] border border-zinc-800/80 bg-zinc-900 p-5 sm:p-6">
-              <h3 id="weight-heading" className="text-sm font-semibold flex items-center justify-between mb-4 text-zinc-300">
-              <span className="flex items-center gap-2">
-                <Scale className="w-4 h-4 text-green-400" />
-                Progreso de Peso
-              </span>
-              {mockBMI > 0 && (
-                <div className={`px-2.5 py-1 rounded-md text-[10px] font-bold ${bmiCategory.bg} ${bmiCategory.color}`}>
-                  IMC: {mockBMI} ({bmiCategory.label})
-                </div>
-              )}
-            </h3>
-            <div className="mb-6">
-              <div className="text-3xl font-bold">{mockCurrentWeight} kg</div>
-              <div className="text-sm text-green-400 font-medium mt-1">↓ {mockWeightLost} kg total</div>
-            </div>
-
-            {/* Dynamic Graph Line using Recharts */}
-            <div className="w-full h-32 flex items-end mb-6 relative -ml-2">
-              {weightHistoryData.length > 0 && chartsReady ? (
-                <div className="w-full overflow-hidden">
-                  <AreaChart width={320} height={128} data={weightHistoryData} margin={{ top: 5, right: 0, left: -25, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="colorWeight" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="var(--color-rose-500)" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="var(--color-rose-500)" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <XAxis dataKey="date" stroke="#52525b" fontSize={10} tickLine={false} axisLine={false} dy={10} />
-                    <YAxis stroke="#52525b" fontSize={10} tickLine={false} axisLine={false} domain={['dataMin - 1', 'dataMax + 1']} />
-                    <Tooltip
-                      contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', borderRadius: '8px', fontSize: '12px' }}
-                      itemStyle={{ color: 'var(--color-rose-500)', fontWeight: 'bold' }}
-                      labelStyle={{ color: '#a1a1aa', marginBottom: '4px' }}
-                      formatter={(value: number | undefined) => [`${value} kg`, 'Peso Registrado']}
-                    />
-                    {mockInitialWeight > 0 && (
-                      <ReferenceLine y={mockInitialWeight} stroke="#a1a1aa" strokeDasharray="3 3" opacity={0.5} />
-                    )}
-                    <Area type="monotone" dataKey="weight" name="Peso (kg)" stroke="var(--color-rose-500)" strokeWidth={3} fillOpacity={1} fill="url(#colorWeight)" activeDot={{ r: 6, fill: 'var(--color-rose-500)', stroke: '#18181b', strokeWidth: 2 }} />
-                  </AreaChart>
-                </div>
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-zinc-500 text-xs text-center px-4">
-                  Registra tu peso diariamente para ver tu progreso aquí.
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between items-center border-b border-zinc-800/50 pb-2">
-                <span className="text-zinc-400">Peso Inicial</span>
-                <span className="font-medium">{mockInitialWeight.toFixed(1)} kg</span>
-              </div>
-              <div className="flex justify-between items-center border-b border-zinc-800/50 pb-2">
-                <span className="text-zinc-400">Meta Final</span>
-                <span className="font-medium text-rose-400">{mockGoalWeight.toFixed(1)} kg</span>
-              </div>
-              <div className="flex justify-between items-center pb-1">
-                <span className="text-zinc-400">Por Perder</span>
-                <span className="font-medium flex items-center gap-1">
-                  {mockToLose === "0.0" ? <span className="text-green-500">0 kg <CheckCircle2 className="w-3 h-3 inline" /></span> : `${mockToLose} kg`}
-                </span>
-              </div>
-            </div>
-          </section>
-
-          {/* Daily Nutrition Widget */}
-          <section aria-labelledby="nutrition-heading" className="group relative overflow-hidden rounded-[1.75rem] border border-zinc-800/80 bg-zinc-900 p-5 sm:p-6">
-            <div className="flex items-center justify-between mb-4">
-               <h3 id="nutrition-heading" className="text-sm font-semibold flex items-center gap-2 text-zinc-300">
-                <PieChartIcon className="w-4 h-4 text-orange-400" />
-                Nutrición de Hoy
-              </h3>
+          <footer className="pt-2">
+            <div className="pv2-card overflow-hidden">
               <button
-                onClick={() => setIsLogMealModalOpen(true)}
-                className="text-xs font-bold text-orange-400 hover:text-orange-300 transition-colors"
+                type="button"
+                onClick={() => setIsEditMenuOpen(true)}
+                className="pv2-row pv2-row--interactive border-b"
+                style={{ borderColor: 'var(--divider)' }}
               >
-                + Registrar
+                <Pencil size={18} strokeWidth={1.5} className="shrink-0" style={{ color: 'var(--text-muted)' }} aria-hidden="true" />
+                <span className="min-w-0 flex-1 text-sm" style={{ color: 'var(--text-primary)' }}>
+                  Editar perfil
+                </span>
+                <ChevronRight size={16} strokeWidth={1.5} className="shrink-0" style={{ color: 'var(--text-muted)' }} aria-hidden="true" />
+              </button>
+
+              <Link
+                href="/settings"
+                className="pv2-row pv2-row--interactive border-b"
+                style={{ borderColor: 'var(--divider)' }}
+              >
+                <Settings size={18} strokeWidth={1.5} className="shrink-0" style={{ color: 'var(--text-muted)' }} aria-hidden="true" />
+                <span className="min-w-0 flex-1 text-sm" style={{ color: 'var(--text-primary)' }}>
+                  Ajustes
+                </span>
+                <ChevronRight size={16} strokeWidth={1.5} className="shrink-0" style={{ color: 'var(--text-muted)' }} aria-hidden="true" />
+              </Link>
+
+              <button
+                type="button"
+                onClick={() => setIsLogoutConfirmOpen(true)}
+                className="pv2-row pv2-row--interactive"
+                style={{ color: 'var(--status-danger)' }}
+              >
+                <LogOut size={18} strokeWidth={1.5} className="shrink-0" aria-hidden="true" />
+                <span className="min-w-0 flex-1 text-sm font-medium">Cerrar sesión</span>
               </button>
             </div>
-
-            {dailyStats ? (
-              <div className="space-y-6">
-                {/* Calories Summary */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-zinc-950/50 rounded-xl p-3 text-center border border-zinc-800">
-                    <div className="text-xs text-zinc-500 mb-1">Consumido</div>
-                    <div className="font-bold text-orange-400">{dailyStats.consumed} kcal</div>
-                  </div>
-                  <div className="bg-zinc-950/50 rounded-xl p-3 text-center border border-zinc-800">
-                    <div className="text-xs text-zinc-500 mb-1">Restante</div>
-                    <div className="font-bold text-green-400">{dailyStats.remainingToGoal > 0 ? dailyStats.remainingToGoal : 0} kcal</div>
-                  </div>
-                </div>
-
-                {/* Progress Bar for Calories */}
-                <div className="space-y-1">
-                  <div className="flex justify-between text-xs text-zinc-400">
-                    <span>0</span>
-                    <span>Meta: {dailyStats.dailyGoal} kcal</span>
-                  </div>
-                  <div className="h-2 w-full bg-zinc-800 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-1000 ${dailyStats.consumed > dailyStats.dailyGoal ? 'bg-red-500' : 'bg-orange-500'}`}
-                      style={{ width: `${Math.min(100, (dailyStats.consumed / (dailyStats.dailyGoal || 1)) * 100)}%` }}
-                    />
-                  </div>
-                </div>
-
-                {/* Macros Donut Chart */}
-                <div className="pt-2">
-                  <h4 className="text-xs font-semibold text-zinc-400 mb-2 text-center">Macronutrientes</h4>
-                   {hasMacros && chartsReady ? (
-                    <div className="h-48 relative">
-                      <div className="w-full flex justify-center overflow-hidden">
-                        <PieChart width={240} height={192}>
-                          <Pie
-                            data={macrosData}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={50}
-                            outerRadius={75}
-                            paddingAngle={5}
-                            dataKey="value"
-                            stroke="none"
-                          >
-                            {macrosData.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={entry.color} />
-                            ))}
-                          </Pie>
-                          <Tooltip
-                            contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', borderRadius: '8px', fontSize: '12px' }}
-                            itemStyle={{ color: '#fff' }}
-                            formatter={(value: any) => [`${value}g`, '']}
-                          />
-                          <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
-                        </PieChart>
-                      </div>
-                      {/* Center absolute text */}
-                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none pb-8 text-center pt-[15px]">
-                        <span className="text-lg font-bold text-zinc-300">{(macrosData[0].value * 4 + macrosData[1].value * 4 + macrosData[2].value * 9).toFixed(0)} <br /><span className="text-[10px] text-zinc-500 font-medium">kcal</span></span>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="h-24 bg-zinc-950/50 rounded-xl border border-zinc-800 flex items-center justify-center text-xs text-zinc-500 text-center px-4 mt-4">
-                      No has registrado comidas hoy.
-                    </div>
-                  )}
-                </div>
-
-                {/* Registered Meals Feed */}
-                <div className="pt-2 border-t border-zinc-800/80">
-                  <h4 className="text-xs font-semibold text-zinc-400 mb-3">Últimas Comidas</h4>
-
-                  {(!dailyStats.meals || dailyStats.meals.length === 0) ? (
-                    <div className="text-center text-xs text-zinc-500 py-4 bg-zinc-950/30 rounded-lg">
-                      No hay registros
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {dailyStats.meals.map(meal => (
-                        <button
-                          key={meal.id}
-                          onClick={() => setEditingMeal(meal)}
-                          className="w-full text-left flex justify-between items-center bg-zinc-950/40 border border-zinc-800/50 p-3 rounded-xl hover:border-zinc-700 hover:bg-zinc-900/50 transition-colors group cursor-pointer"
-                        >
-                          <div className="flex flex-col">
-                            <span className="text-sm font-semibold text-zinc-200 group-hover:text-amber-400 transition-colors">{meal.name}</span>
-                            <span className="text-[10px] text-zinc-500 uppercase font-medium">{meal.mealType} • {meal.proteinG}g P, {meal.carbG}g C, {meal.fatG}g G</span>
-                          </div>
-                          <div className="text-sm font-bold text-orange-400 flex items-center gap-2">
-                            {meal.calories} <span className="text-[10px] text-zinc-500 font-normal">kcal</span>
-                            <Pencil className="w-3 h-3 text-zinc-600 group-hover:text-amber-400 transition-colors" />
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="text-center text-sm text-zinc-500 py-8 bg-zinc-950/50 rounded-xl border border-zinc-800">
-                Información nutricional no disponible.
-              </div>
-            )}
-          </section>
-
-          {/* Sports Activity Widget */}
-          <section aria-labelledby="sports-heading" className="group relative overflow-hidden rounded-[1.75rem] border border-zinc-800/80 bg-zinc-900 p-5 sm:p-6">
-            <div className="flex items-center justify-between mb-4">
-               <h3 id="sports-heading" className="text-sm font-semibold flex items-center gap-2 text-zinc-300">
-                <Footprints className="w-4 h-4 text-[#fc4c02]" />
-                Actividad Deportiva
-              </h3>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    setEditingWorkout(null);
-                    setIsLogWorkoutModalOpen(true);
-                  }}
-                  className="text-xs font-bold text-zinc-400 hover:text-white transition-colors flex items-center gap-1 bg-zinc-800/50 px-2 py-1.5 rounded-md border border-zinc-700/50"
-                  title="Registrar Actividad Manual"
-                >
-                  + Registrar
-                </button>
-                {isStravaConnected ? (
-                  <button
-                    onClick={handleSyncStrava}
-                    disabled={syncingStrava}
-                    className="text-xs font-bold text-zinc-400 hover:text-white transition-colors flex items-center gap-1 bg-zinc-800/50 px-2 py-1.5 rounded-md border border-zinc-700/50"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${syncingStrava ? 'animate-spin' : ''}`} />
-                    {syncingStrava ? 'Sincronizando...' : 'Strava'}
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleConnectStrava}
-                    className="text-xs font-bold text-[#fc4c02] hover:text-[#e34402] transition-colors flex items-center gap-1"
-                  >
-                    + Conectar Strava
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              {!isStravaConnected ? (
-                <div className="bg-zinc-950/50 rounded-xl p-4 text-center border border-zinc-800 border-dashed">
-                  <p className="text-xs text-zinc-400 mb-3">Conecta tu cuenta de Strava para sincronizar tus entrenamientos automáticamente.</p>
-                  <div className="flex justify-center flex-col items-center gap-2">
-                    {authError && <p className="text-xs text-red-400 font-semibold mb-1">{authError}</p>}
-                    <button
-                      onClick={handleConnectStrava}
-                      className="px-4 py-2 bg-[#fc4c02]/10 hover:bg-[#fc4c02]/20 text-[#fc4c02] border border-[#fc4c02]/30 text-xs font-bold rounded-lg transition-all flex items-center gap-2"
-                    >
-                      <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
-                        <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" />
-                      </svg>
-                      Conectar con Strava
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-
-              <div className="pt-2 border-t border-zinc-800/80">
-                <h4 className="text-xs font-semibold text-zinc-400 mb-3">Historial Reciente</h4>
-                {!recentWorkouts || recentWorkouts.length === 0 ? (
-                  <div className="text-center text-xs text-zinc-500 py-4 bg-zinc-950/30 rounded-lg">
-                    No hay entrenamientos registrados recientemente.
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {recentWorkouts.map((workout: any, i: number) => (
-                      <button
-                        key={workout.id || i}
-                        onClick={() => {
-                          setEditingWorkout(workout);
-                          setIsLogWorkoutModalOpen(true);
-                        }}
-                        className="w-full text-left flex justify-between items-center bg-zinc-950/40 border border-zinc-800/50 p-3 rounded-xl hover:border-zinc-700 hover:bg-zinc-900/50 transition-colors group"
-                      >
-                        <div className="flex flex-col">
-                          <span className="text-sm font-semibold text-zinc-200 group-hover:text-white transition-colors">{workout.notes || workout.sport}</span>
-                          <span className="text-[10px] text-zinc-500 uppercase font-medium">
-                            {workout.sport} • {workout.durationMin} min
-                          </span>
-                        </div>
-                        <div className="text-sm font-bold text-[#fc4c02] flex items-center gap-1">
-                          {workout.caloriesBurned ? Math.round(workout.caloriesBurned) : 0} <span className="text-[10px] text-zinc-500 font-normal">kcal</span>
-                          {workout.distanceKm && workout.distanceKm > 0 && (
-                            <span className="text-[10px] text-zinc-400 font-normal ml-1">({workout.distanceKm} km)</span>
-                          )}
-                          <Pencil className="w-3.5 h-3.5 text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity ml-1" />
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </section>
-
-          {/* Global Stats Widget
-          <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6">
-            <h3 className="text-sm font-semibold flex items-center gap-2 mb-5 text-zinc-300">
-              <Target className="w-4 h-4 text-yellow-500" />
-              Estadísticas Globales
-            </h3>
-            <div className="space-y-5 flex flex-col">
-
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="text-zinc-400">Días Completados</span>
-                  <span className="font-bold">{mockTotalDays}</span>
-                </div>
-                <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-rose-500 w-[65%]" />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="text-zinc-400">Racha Actual</span>
-                  <span className="font-bold">{streak} días</span>
-                </div>
-                <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-orange-500 w-[45%]" />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="text-zinc-400">Logros</span>
-                  <span className="font-bold">3/6</span>
-                </div>
-                <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-yellow-500 w-[50%]" />
-                </div>
-              </div>
-            </div>
-          </div>
-          */}
-
-          {/* Total Metrics Widget */}
-          {/* <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6">
-            <h3 className="text-sm font-semibold flex items-center gap-2 mb-4 text-zinc-300">
-              <Zap className="w-4 h-4 text-orange-400" />
-              Métricas Totales
-            </h3>
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between items-center text-zinc-400">
-                <span>Distancia Total</span>
-                <span className="text-zinc-100 font-medium">{mockTotalDistance} km</span>
-              </div>
-              <div className="flex justify-between items-center text-zinc-400">
-                <span>Tiempo Ejercicio</span>
-                <span className="text-zinc-100 font-medium">{mockTotalHours} hrs</span>
-              </div>
-              <div className="flex justify-between items-center text-zinc-400">
-                <span>Calorías Totales</span>
-                <span className="text-zinc-100 font-medium">{mockTotalCals.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between items-center text-zinc-400">
-                <span>IMC Actual</span>
-                <span className="text-zinc-100 font-medium">{mockBMI}</span>
-              </div>
-            </div>
-          </div> */}
-
+          </footer>
         </div>
       </div>
 
-      <AchievementsModal
-        isOpen={isAchievementsModalOpen}
-        onClose={() => setIsAchievementsModalOpen(false)}
-        achievements={achievementsList}
+      {/* break-ui · selector de datasets (sólo dev) */}
+      {IS_DEV_BUILD && (
+        <DevDatasetPicker
+          selected={devDataset}
+          onSelect={setDevDataset}
+          positionClassName="bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] lg:bottom-6"
+        />
+      )}
+
+      <ProfileEditMenu
+        open={isEditMenuOpen}
+        onClose={() => setIsEditMenuOpen(false)}
+        onSelect={handleEditSelect}
       />
 
-      <EditProfileModal
-        isOpen={isEditProfileModalOpen}
-        onClose={() => setIsEditProfileModalOpen(false)}
-        onSaved={(updated) => {
-          // Immediately sync auth store with the new values —
-          // this triggers a re-render of every component that reads from useAuthStore()
-          updateAuthUser({
-            ...(updated.name !== undefined && { name: updated.name }),
-            ...(updated.email !== undefined && { email: updated.email }),
-            ...(updated.age !== undefined && { age: updated.age }),
-            ...(updated.weight !== undefined && { weight: updated.weight }),
-            ...(updated.targetWeight !== undefined && { targetWeight: updated.targetWeight }),
-            ...(updated.height !== undefined && { height: updated.height }),
-          });
-          // Also re-fetch profile stats (weight history, achievements, etc.)
-          fetchProfile();
-        }}
-        initialValues={{
-          name: user.name,
-          email: user.email,
-          age: user.age ?? undefined,
-          weight: user.weight ?? undefined,
-          targetWeight: user.targetWeight ?? undefined,
-          height: user.height ?? undefined,
-        }}
-      />
+      {isActivitiesSheetOpen && (
+        <ActivitiesSheet
+          open={isActivitiesSheetOpen}
+          onClose={() => setIsActivitiesSheetOpen(false)}
+          activeQuests={activeQuests.map(toQuestSummary)}
+          completedQuests={completedQuests.map(toQuestSummary)}
+          availableQuests={availableToSubscribe}
+          onSubscribe={handleSubscribe}
+          subscribingTo={subscribingTo}
+          onOpenQuest={handleOpenQuest}
+          onCreateCustom={handleCreateCustom}
+        />
+      )}
 
-      <LogMealModal
-        isOpen={isLogMealModalOpen}
-        onClose={() => setIsLogMealModalOpen(false)}
-        date={format(new Date(), 'yyyy-MM-dd')}
-        onSaved={() => {
-          // Re-fetch health stats specifically
-          fetchProfile();
-        }}
-      />
+      {isAchievementsSheetOpen && (
+        <AchievementsSheet
+          open={isAchievementsSheetOpen}
+          onClose={() => setIsAchievementsSheetOpen(false)}
+          achievements={achievements}
+        />
+      )}
 
-      <EditMealModal
-        isOpen={!!editingMeal}
-        meal={editingMeal}
-        date={format(new Date(), 'yyyy-MM-dd')}
-        onClose={() => setEditingMeal(null)}
-        onSaved={() => {
-          fetchProfile();
-          setEditingMeal(null);
-        }}
-      />
+      {isLogoutConfirmOpen && (
+        <LogoutConfirmSheet
+          open={isLogoutConfirmOpen}
+          onClose={() => setIsLogoutConfirmOpen(false)}
+          onConfirm={handleLogout}
+        />
+      )}
 
-      <LogWorkoutModal
-        isOpen={isLogWorkoutModalOpen}
-        onClose={() => {
-          setIsLogWorkoutModalOpen(false);
-          setEditingWorkout(null);
-        }}
-        date={format(new Date(), 'yyyy-MM-dd')}
-        initialData={editingWorkout}
-        onDelete={(deletedId) => {
-          setRecentWorkouts(prev => prev.filter(w => w.id !== deletedId));
-          // Refetch to update totals
-          fetchProfile();
-        }}
-        onSaved={() => {
-          fetchProfile();
-          setEditingWorkout(null);
-        }}
-      />
+      {profileEditMode ? (
+        <EditProfileSheet
+          mode={profileEditMode}
+          onClose={() => setProfileEditMode(null)}
+          onSaved={(updated) => {
+            updateAuthUser({
+              ...(updated.name !== undefined && { name: updated.name }),
+              ...(updated.avatarUrl !== undefined && { avatarUrl: updated.avatarUrl }),
+              ...(updated.bannerUrl !== undefined && { bannerUrl: updated.bannerUrl }),
+              ...(updated.profileQuote !== undefined && { profileQuote: updated.profileQuote }),
+              ...(updated.email !== undefined && { email: updated.email }),
+              ...(updated.age !== undefined && { age: updated.age }),
+              ...(updated.weight !== undefined && { weight: updated.weight }),
+              ...(updated.targetWeight !== undefined && { targetWeight: updated.targetWeight }),
+              ...(updated.height !== undefined && { height: updated.height }),
+            });
+            fetchProfile();
+          }}
+          initialValues={{
+            name: user.name,
+            avatarUrl: user.avatarUrl,
+            bannerUrl: user.bannerUrl,
+            profileQuote: user.profileQuote,
+            level,
+            registeredAt: profileData?.user.registeredAt ?? user.registeredAt,
+          }}
+        />
+      ) : null}
+
+      {isLogMealModalOpen && (
+        <LogMealModal
+          isOpen={isLogMealModalOpen}
+          onClose={() => setIsLogMealModalOpen(false)}
+          date={format(new Date(), 'yyyy-MM-dd')}
+          onSaved={fetchProfile}
+        />
+      )}
+
+      {editingMeal && (
+        <EditMealModal
+          isOpen={!!editingMeal}
+          meal={editingMeal}
+          date={format(new Date(), 'yyyy-MM-dd')}
+          onClose={() => setEditingMeal(null)}
+          onSaved={() => {
+            fetchProfile();
+            setEditingMeal(null);
+          }}
+        />
+      )}
+
+      {isLogWorkoutModalOpen && (
+        <LogWorkoutModal
+          isOpen={isLogWorkoutModalOpen}
+          onClose={() => {
+            setIsLogWorkoutModalOpen(false);
+            setEditingWorkout(null);
+          }}
+          date={format(new Date(), 'yyyy-MM-dd')}
+          initialData={editingWorkout}
+          onDelete={(deletedId) => {
+            setRecentWorkouts((previous) => previous.filter((workout) => workout.id !== deletedId));
+            fetchProfile();
+          }}
+          onSaved={() => {
+            fetchProfile();
+            setEditingWorkout(null);
+          }}
+        />
+      )}
+
+      {isSideQuestsModalOpen ? (
+        <SideQuestsModal
+          onClose={() => {
+            setIsSideQuestsModalOpen(false);
+            fetchQuests();
+            fetchAvailableQuests();
+          }}
+        />
+      ) : null}
+
+      {selectedSideQuest ? (
+        <SideQuestDetailModal quest={selectedSideQuest} onClose={() => setSelectedSideQuest(null)} />
+      ) : null}
+    </div>
+  );
+}
+
+function ProfileSkeleton() {
+  return (
+    <div className="pv2-page mx-auto w-full max-w-6xl pb-6" aria-busy="true" aria-label="Cargando perfil">
+      <span className="pv2-sr-only">Cargando perfil…</span>
+      <div className="lg:grid lg:grid-cols-[300px_minmax(0,1fr)] lg:items-start lg:gap-10">
+        <aside>
+          <ProfileHeader
+            name=""
+            level={1}
+            memberSince={null}
+            onEdit={() => {}}
+            onAvatar={() => {}}
+            loading
+          />
+        </aside>
+        <div className="mt-3 space-y-3 lg:mt-0">
+          {['01', '02', '03'].map((index) => (
+            <div key={index} className="pv2-section p-4">
+              <div className="flex items-center gap-3">
+                <div className="pv2-skeleton h-3 w-6" />
+                <div className="pv2-skeleton h-5 w-24" />
+              </div>
+              <div className="pv2-skeleton mt-4 h-16 w-full" />
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

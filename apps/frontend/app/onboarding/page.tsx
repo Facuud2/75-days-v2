@@ -5,19 +5,23 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { useChallengeStore, Difficulty } from '@/store/useChallengeStore';
 import { useQuestStore } from '@/store/useQuestStore';
 import { useRouter } from 'next/navigation';
-import { ChevronRight, ChevronLeft, SkipForward, Calendar, X } from 'lucide-react';
+import { ChevronRight, ChevronLeft, SkipForward, Calendar, X, Pencil } from 'lucide-react';
 import { PLANS } from '@/components/PlansModal';
 
 export default function Onboarding() {
   const [step, setStep] = useState(1);
+  const [isChallengeLoading, setIsChallengeLoading] = useState(false);
   const { updateProfile, completeOnboarding } = useAuthStore();
   const { startChallenge } = useChallengeStore();
   const { availableQuests, fetchAvailableQuests, subscribeToQuest } = useQuestStore();
   const router = useRouter();
 
-  // Load available dynamic quests
+  // Carga de quests con estado de loading
+  const [fetchQuestsStatus, setFetchQuestsStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+
   useEffect(() => {
-    fetchAvailableQuests();
+    setFetchQuestsStatus('loading');
+    fetchAvailableQuests().finally(() => setFetchQuestsStatus('success'));
   }, [fetchAvailableQuests]);
 
   // Step 1: Biometrics
@@ -25,6 +29,11 @@ export default function Onboarding() {
   const [weight, setWeight] = useState('');
   const [targetWeight, setTargetWeight] = useState('');
   const [height, setHeight] = useState('');
+  const [touched, setTouched] = useState<{ age?: boolean; weight?: boolean; height?: boolean }>({});
+
+  const isAgeValid = age !== '' && !isNaN(parseFloat(age)) && parseFloat(age) > 0;
+  const isWeightValid = weight !== '' && !isNaN(parseFloat(weight)) && parseFloat(weight) > 0;
+  const isHeightValid = height !== '' && !isNaN(parseFloat(height)) && parseFloat(height) > 0;
 
   // Step 2: Side Quests
   const [selectedQuests, setSelectedQuests] = useState<string[]>([]);
@@ -81,10 +90,15 @@ export default function Onboarding() {
       );
       setStep(3);
     } else if (step === 3) {
-      const formattedCustomGoals = customGoals.map(g => ({ title: g }));
-      await startChallenge(difficulty, difficulty === 'Custom' ? formattedCustomGoals : undefined);
-      await completeOnboarding();
-      router.push('/dashboard');
+      setIsChallengeLoading(true);
+      try {
+        const formattedCustomGoals = customGoals.map(g => ({ title: g }));
+        await startChallenge(difficulty, difficulty === 'Custom' ? formattedCustomGoals : undefined);
+        await completeOnboarding();
+        router.push('/dashboard');
+      } catch {
+        setIsChallengeLoading(false);
+      }
     }
   };
 
@@ -123,31 +137,45 @@ export default function Onboarding() {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-1">
+                <label htmlFor="onboarding-age" className="block text-sm font-medium mb-1">
                   Edad <span className="text-red-500">*</span>
                 </label>
                 <input
+                  id="onboarding-age"
                   type="number"
                   value={age}
                   onChange={e => setAge(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-800 border-none outline-none"
+                  onBlur={() => setTouched(prev => ({ ...prev, age: true }))}
+                  aria-invalid={touched.age && !isAgeValid ? true : undefined}
+                  aria-describedby={touched.age && !isAgeValid ? 'onboarding-age-error' : undefined}
+                  className={`w-full px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-800 border outline-none transition-colors ${touched.age && !isAgeValid ? 'border-red-500 dark:border-red-400' : 'border-transparent'}`}
                   placeholder="ej. 25"
                   min={1}
                 />
+                {touched.age && !isAgeValid && (
+                  <p id="onboarding-age-error" role="alert" className="mt-1 text-xs text-red-500 dark:text-red-400">
+                    Ingresá una edad válida mayor a 0.
+                  </p>
+                )}
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">
+                <label htmlFor="onboarding-weight-kg" className="block text-sm font-medium mb-1">
                   Peso actual (kg) <span className="text-red-500">*</span>
                 </label>
                 <div className="flex items-center gap-2">
                   <select
+                    id="onboarding-weight-kg"
+                    aria-label="Kilogramos de peso actual"
+                    aria-invalid={touched.weight && !isWeightValid ? true : undefined}
+                    aria-describedby={touched.weight && !isWeightValid ? 'onboarding-weight-error' : undefined}
                     value={weight === '' ? '' : Math.floor(Number(weight))}
+                    onBlur={() => setTouched(prev => ({ ...prev, weight: true }))}
                     onChange={(e) => {
                       const newInt = e.target.value;
                       const currentDec = weight === '' ? '0' : Math.round((Number(weight) - Math.floor(Number(weight))) * 10).toString();
                       setWeight(`${newInt}.${currentDec}`);
                     }}
-                    className="flex-1 px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-800 border-none outline-none appearance-none"
+                    className={`flex-1 px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-800 border outline-none appearance-none transition-colors ${touched.weight && !isWeightValid ? 'border-red-500 dark:border-red-400' : 'border-transparent'}`}
                   >
                     <option value="" disabled>Peso</option>
                     {Array.from({ length: 271 }, (_, i) => i + 30).map((kg) => (
@@ -156,13 +184,15 @@ export default function Onboarding() {
                   </select>
                   <span className="text-xl font-bold text-zinc-400 dark:text-zinc-500">.</span>
                   <select
+                    aria-label="Décimas de kilogramo de peso actual"
                     value={weight === '' ? '' : Math.round((Number(weight) - Math.floor(Number(weight))) * 10)}
+                    onBlur={() => setTouched(prev => ({ ...prev, weight: true }))}
                     onChange={(e) => {
                       const newDec = e.target.value;
                       const currentInt = weight === '' ? '75' : Math.floor(Number(weight)).toString();
                       setWeight(`${currentInt}.${newDec}`);
                     }}
-                    className="w-24 px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-800 border-none outline-none appearance-none text-center"
+                    className={`w-24 px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-800 border outline-none appearance-none text-center transition-colors ${touched.weight && !isWeightValid ? 'border-red-500 dark:border-red-400' : 'border-transparent'}`}
                   >
                     <option value="" disabled>Gr</option>
                     {Array.from({ length: 10 }, (_, i) => i).map((g) => (
@@ -170,13 +200,20 @@ export default function Onboarding() {
                     ))}
                   </select>
                 </div>
+                {touched.weight && !isWeightValid && (
+                  <p id="onboarding-weight-error" role="alert" className="mt-1 text-xs text-red-500 dark:text-red-400">
+                    Seleccioná tu peso actual.
+                  </p>
+                )}
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">
+                <label htmlFor="onboarding-target-weight-kg" className="block text-sm font-medium mb-1">
                   Meta de peso (kg) <span className="text-zinc-500 font-normal text-xs ml-1">(Opcional)</span>
                 </label>
                 <div className="flex items-center gap-2">
                   <select
+                    id="onboarding-target-weight-kg"
+                    aria-label="Kilogramos de meta de peso"
                     value={targetWeight === '' ? '' : Math.floor(Number(targetWeight))}
                     onChange={(e) => {
                       const newInt = e.target.value;
@@ -192,6 +229,7 @@ export default function Onboarding() {
                   </select>
                   <span className="text-xl font-bold text-zinc-400 dark:text-zinc-500">.</span>
                   <select
+                    aria-label="Décimas de kilogramo de meta de peso"
                     value={targetWeight === '' ? '' : Math.round((Number(targetWeight) - Math.floor(Number(targetWeight))) * 10)}
                     onChange={(e) => {
                       const newDec = e.target.value;
@@ -208,17 +246,26 @@ export default function Onboarding() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">
+                <label htmlFor="onboarding-height" className="block text-sm font-medium mb-1">
                   Altura (cm) <span className="text-red-500">*</span>
                 </label>
                 <input
+                  id="onboarding-height"
                   type="number"
                   value={height}
                   onChange={e => setHeight(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-800 border-none outline-none"
+                  onBlur={() => setTouched(prev => ({ ...prev, height: true }))}
+                  aria-invalid={touched.height && !isHeightValid ? true : undefined}
+                  aria-describedby={touched.height && !isHeightValid ? 'onboarding-height-error' : undefined}
+                  className={`w-full px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-800 border outline-none transition-colors ${touched.height && !isHeightValid ? 'border-red-500 dark:border-red-400' : 'border-transparent'}`}
                   placeholder="ej. 175"
                   min={1}
                 />
+                {touched.height && !isHeightValid && (
+                  <p id="onboarding-height-error" role="alert" className="mt-1 text-xs text-red-500 dark:text-red-400">
+                    Ingresá una altura válida en centímetros.
+                  </p>
+                )}
               </div>
             </div>
 
@@ -239,19 +286,35 @@ export default function Onboarding() {
             </div>
 
             <div className="space-y-3">
-              {availableQuests.map((quest) => (
-                <div
-                  key={quest.id}
-                  onClick={() => setSelectedQuests(prev => prev.includes(quest.id) ? prev.filter(id => id !== quest.id) : [...prev, quest.id])}
-                  className={`p-4 rounded-2xl border-2 cursor-pointer transition-all ${selectedQuests.includes(quest.id) ? 'border-zinc-900 dark:border-zinc-100 bg-zinc-50 dark:bg-zinc-800/50' : 'border-transparent bg-zinc-50 dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700'}`}
-                >
-                  <div className="flex justify-between items-center">
-                    <h3 className="font-semibold">{quest.title}</h3>
-                    <span className="text-xs font-medium px-2 py-1 bg-white dark:bg-zinc-900 rounded-md">{quest.difficulty}</span>
+              {fetchQuestsStatus === 'loading' ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="p-4 rounded-2xl border-2 border-transparent bg-zinc-50 dark:bg-zinc-800 animate-pulse">
+                    <div className="flex justify-between items-center">
+                      <div className="pv2-skeleton h-5 w-3/4" />
+                      <div className="pv2-skeleton h-5 w-20" />
+                    </div>
+                    <div className="pv2-skeleton h-4 w-1/2 mt-1" />
                   </div>
-                  <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">{quest.durationDays} días de desafío</p>
-                </div>
-              ))}
+                ))
+              ) : availableQuests.length > 0 ? (
+                availableQuests.map((quest) => (
+                  <button
+                    key={quest.id}
+                    type="button"
+                    aria-pressed={selectedQuests.includes(quest.id)}
+                    onClick={() => setSelectedQuests(prev => prev.includes(quest.id) ? prev.filter(id => id !== quest.id) : [...prev, quest.id])}
+                    className={`block w-full p-4 text-left rounded-2xl border-2 cursor-pointer transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-400 ${selectedQuests.includes(quest.id) ? 'border-zinc-900 dark:border-zinc-100 bg-zinc-50 dark:bg-zinc-800/50' : 'border-transparent bg-zinc-50 dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700'}`}
+                  >
+                    <div className="flex justify-between items-center">
+                      <h3 className="font-semibold">{quest.title}</h3>
+                      <span className="text-xs font-medium px-2 py-1 bg-white dark:bg-zinc-900 rounded-md">{quest.difficulty}</span>
+                    </div>
+                    <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">{quest.durationDays} días de desafío</p>
+                  </button>
+                ))
+              ) : (
+                <p className="text-zinc-500 dark:text-zinc-400 text-center py-8">No hay actividades disponibles en este momento.</p>
+              )}
             </div>
           </div>
         )}
@@ -266,11 +329,21 @@ export default function Onboarding() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {PLANS.map((plan) => {
                 const isSelected = difficulty === plan.difficulty;
+                const tasks = plan.difficulty === 'Custom'
+                  ? customGoals
+                    .filter(goal => goal.trim())
+                    .map(label => ({
+                      icon: <Pencil className="w-3.5 h-3.5 text-emerald-500" />,
+                      label,
+                    }))
+                  : plan.tasks;
                 return (
-                  <div
+                  <button
                     key={plan.difficulty}
+                    type="button"
+                    aria-pressed={isSelected}
                     onClick={() => setDifficulty(plan.difficulty)}
-                    className={`p-5 rounded-2xl border-2 cursor-pointer transition-all flex flex-col gap-4 ${isSelected ? 'border-zinc-900 dark:border-zinc-100 bg-zinc-50 dark:bg-zinc-800/50 shadow-md' : 'border-transparent bg-zinc-50 dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700'}`}
+                    className={`w-full text-left p-5 rounded-2xl border-2 cursor-pointer transition-all flex flex-col gap-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-400 ${isSelected ? 'border-zinc-900 dark:border-zinc-100 bg-zinc-50 dark:bg-zinc-800/50 shadow-md' : 'border-transparent bg-zinc-50 dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700'}`}
                   >
                     {/* Title & Description */}
                     <div>
@@ -290,7 +363,7 @@ export default function Onboarding() {
                     <div className="space-y-2">
                       <p className="text-zinc-400 dark:text-zinc-500 text-[11px] font-bold uppercase tracking-wider">Tareas Diarias:</p>
                       <ul className="space-y-1.5">
-                        {plan.tasks.map((task, i) => (
+                        {tasks.map((task, i) => (
                           <li key={i} className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-300 font-medium">
                             {task.icon}
                             <span className="leading-snug">{task.label}</span>
@@ -298,7 +371,7 @@ export default function Onboarding() {
                         ))}
                       </ul>
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -357,13 +430,17 @@ export default function Onboarding() {
           ) : (
             <button
               onClick={handleNext}
-              disabled={!canProceed()}
-              className={`flex items-center px-8 py-3 rounded-xl font-medium transition-colors ${canProceed()
+              disabled={!canProceed() || isChallengeLoading}
+              className={`flex items-center px-8 py-3 rounded-xl font-medium transition-colors ${canProceed() && !isChallengeLoading
                 ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 cursor-pointer'
                 : 'bg-zinc-300 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-400 cursor-not-allowed opacity-60'
                 }`}
             >
-              {step === 3 ? 'Comenzar Desafío' : 'Siguiente'} <ChevronRight size={20} className="ml-2" />
+              {isChallengeLoading ? (
+                <>Creando tu desafío <span className="pv2-skeleton w-4 h-4 ml-2" /></>
+              ) : (
+                <>{step === 3 ? 'Comenzar Desafío' : 'Siguiente'} <ChevronRight size={20} className="ml-2" /></>
+              )}
             </button>
           )}
         </div>
