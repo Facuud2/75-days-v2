@@ -27,6 +27,7 @@ export default function VerticalWheelPicker({
 }: VerticalWheelPickerProps) {
   const [visualValue, setVisualValue] = useState(value);
   const [isDragging, setIsDragging] = useState(false);
+  const [isCoasting, setIsCoasting] = useState(false);
 
   const rafRef = useRef<number | null>(null);
   const visualRef = useRef(value);
@@ -36,13 +37,6 @@ export default function VerticalWheelPicker({
     startValue: number;
     history: Array<{ y: number; t: number }>;
   } | null>(null);
-
-  useEffect(() => {
-    if (!isDragging && rafRef.current === null) {
-      visualRef.current = value;
-      setVisualValue(value);
-    }
-  }, [value, isDragging]);
 
   useEffect(() => {
     return () => {
@@ -57,6 +51,7 @@ export default function VerticalWheelPicker({
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
     }
+    setIsCoasting(false);
   }, []);
 
   const commitSnapped = useCallback(
@@ -73,6 +68,7 @@ export default function VerticalWheelPicker({
   const startMomentum = useCallback(
     (initialVelocityPxPerMs: number) => {
       stopAnimation();
+      setIsCoasting(true);
       let velocityItemsPerMs = -(initialVelocityPxPerMs / itemHeight);
       let lastTime = performance.now();
 
@@ -96,6 +92,7 @@ export default function VerticalWheelPicker({
         const hitBoundary = clamped <= min || clamped >= max;
         if (hitBoundary || Math.abs(velocityItemsPerMs * itemHeight) < 0.018) {
           rafRef.current = null;
+          setIsCoasting(false);
           commitSnapped(clamped);
           return;
         }
@@ -109,13 +106,17 @@ export default function VerticalWheelPicker({
   );
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    const wasCoasting = rafRef.current !== null;
     stopAnimation();
+    const startVal = wasCoasting ? visualRef.current : value;
+    visualRef.current = startVal;
+    setVisualValue(startVal);
     e.currentTarget.setPointerCapture(e.pointerId);
     setIsDragging(true);
     dragRef.current = {
       pointerId: e.pointerId,
       startY: e.clientY,
-      startValue: visualRef.current,
+      startValue: startVal,
       history: [{ y: e.clientY, t: performance.now() }],
     };
   };
@@ -190,7 +191,8 @@ export default function VerticalWheelPicker({
     }
   };
 
-  const centerVal = Math.round(visualValue);
+  const activeVisualValue = isDragging || isCoasting ? visualValue : value;
+  const centerVal = Math.round(activeVisualValue);
   const windowRadius = 3;
   const start = Math.max(min, centerVal - windowRadius);
   const end = Math.min(max, centerVal + windowRadius);
@@ -256,7 +258,7 @@ export default function VerticalWheelPicker({
         {/* Numbers only — no lines or bars */}
         <div aria-hidden="true" className="relative h-full w-full">
           {visibleItems.map((num) => {
-            const diff = num - visualValue;
+            const diff = num - activeVisualValue;
             const absDiff = Math.abs(diff);
             const offsetY = diff * itemHeight;
             const scale = Math.max(0.66, 1 - absDiff * 0.14);

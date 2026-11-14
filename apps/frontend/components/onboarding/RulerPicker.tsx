@@ -42,6 +42,7 @@ export default function RulerPicker({
 }: RulerPickerProps) {
   const [visualValue, setVisualValue] = useState(value);
   const [isDragging, setIsDragging] = useState(false);
+  const [isCoasting, setIsCoasting] = useState(false);
 
   const trackRef = useRef<HTMLDivElement | null>(null);
   const rafRef = useRef<number | null>(null);
@@ -52,14 +53,6 @@ export default function RulerPicker({
     startValue: number;
     history: Array<{ x: number; t: number }>;
   } | null>(null);
-
-  // Sync external value changes when not actively dragging or coasting.
-  useEffect(() => {
-    if (!isDragging && rafRef.current === null) {
-      visualRef.current = value;
-      setVisualValue(value);
-    }
-  }, [value, isDragging]);
 
   useEffect(() => {
     return () => {
@@ -74,6 +67,7 @@ export default function RulerPicker({
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
     }
+    setIsCoasting(false);
   }, []);
 
   const commitSnapped = useCallback(
@@ -90,6 +84,7 @@ export default function RulerPicker({
   const startMomentum = useCallback(
     (initialVelocityPxPerMs: number) => {
       stopAnimation();
+      setIsCoasting(true);
       let velocityStepsPerMs = -(initialVelocityPxPerMs / tickSpacing) * step;
       let lastTime = performance.now();
 
@@ -114,6 +109,7 @@ export default function RulerPicker({
         const hitBoundary = clamped <= min || clamped >= max;
         if (hitBoundary || Math.abs((velocityStepsPerMs * tickSpacing) / step) < 0.018) {
           rafRef.current = null;
+          setIsCoasting(false);
           commitSnapped(clamped);
           return;
         }
@@ -128,13 +124,17 @@ export default function RulerPicker({
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (disabled) return;
+    const wasCoasting = rafRef.current !== null;
     stopAnimation();
+    const startVal = wasCoasting ? visualRef.current : value;
+    visualRef.current = startVal;
+    setVisualValue(startVal);
     e.currentTarget.setPointerCapture(e.pointerId);
     setIsDragging(true);
     dragRef.current = {
       pointerId: e.pointerId,
       startX: e.clientX,
-      startValue: visualRef.current,
+      startValue: startVal,
       history: [{ x: e.clientX, t: performance.now() }],
     };
   };
@@ -204,14 +204,16 @@ export default function RulerPicker({
     }
   };
 
-  const displayStr = formatValue
-    ? formatValue(visualValue)
-    : step < 1
-      ? visualValue.toFixed(1)
-      : Math.round(visualValue).toString();
+  const activeVisualValue = isDragging || isCoasting ? visualValue : value;
 
-  // Compute visible tick window around visualValue
-  const currentStepFloat = (visualValue - min) / step;
+  const displayStr = formatValue
+    ? formatValue(activeVisualValue)
+    : step < 1
+      ? activeVisualValue.toFixed(1)
+      : Math.round(activeVisualValue).toString();
+
+  // Compute visible tick window around activeVisualValue
+  const currentStepFloat = (activeVisualValue - min) / step;
   const centerIdx = Math.round(currentStepFloat);
   const totalSteps = Math.round((max - min) / step);
   const halfWindow = 22;

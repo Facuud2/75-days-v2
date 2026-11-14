@@ -150,6 +150,14 @@ export default function OnboardingTutorial({
   onSkip,
   onComplete,
 }: OnboardingTutorialProps) {
+  if (!isOpen) return null;
+  return <OnboardingTutorialModal onSkip={onSkip} onComplete={onComplete} />;
+}
+
+function OnboardingTutorialModal({
+  onSkip,
+  onComplete,
+}: Omit<OnboardingTutorialProps, 'isOpen'>) {
   const router = useRouter();
   const [stepIndex, setStepIndex] = useState(0);
   const [spotlightRect, setSpotlightRect] = useState<SpotlightRect | null>(null);
@@ -158,12 +166,6 @@ export default function OnboardingTutorial({
   const currentStep = TUTORIAL_STEPS[stepIndex] ?? TUTORIAL_STEPS[0];
   const isFirstStep = stepIndex === 0;
   const isLastStep = stepIndex === TUTORIAL_STEPS.length - 1;
-
-  useEffect(() => {
-    if (isOpen) {
-      setStepIndex(0);
-    }
-  }, [isOpen]);
 
   const updateSpotlight = useCallback(() => {
     const target = findVisibleTarget(currentStep.targetSelector);
@@ -190,8 +192,6 @@ export default function OnboardingTutorial({
   }, [currentStep.targetSelector]);
 
   useEffect(() => {
-    if (!isOpen) return;
-
     const target = findVisibleTarget(currentStep.targetSelector);
     let rafId = 0;
     let settleEnd = 0;
@@ -235,11 +235,9 @@ export default function OnboardingTutorial({
       window.removeEventListener('resize', updateSpotlight);
       window.removeEventListener('scroll', updateSpotlight, true);
     };
-  }, [isOpen, currentStep.id, currentStep.targetSelector, updateSpotlight]);
+  }, [currentStep.id, currentStep.targetSelector, updateSpotlight]);
 
   useEffect(() => {
-    if (!isOpen) return;
-
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         onSkip();
@@ -256,7 +254,7 @@ export default function OnboardingTutorial({
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isOpen, onSkip]);
+  }, [onSkip]);
 
   const cardPositionClass = useMemo(() => {
     if (!spotlightRect) {
@@ -269,8 +267,6 @@ export default function OnboardingTutorial({
       ? 'items-start justify-center px-4 pt-16 sm:pt-20'
       : 'items-end justify-center px-4 pb-20 sm:pb-8';
   }, [spotlightRect]);
-
-  if (!isOpen) return null;
 
   const StepIcon = currentStep.icon;
 
