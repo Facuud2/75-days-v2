@@ -21,8 +21,9 @@ interface AchievementsModalProps {
 export default function AchievementsModal({ isOpen, onClose, achievements }: AchievementsModalProps) {
     if (!isOpen) return null;
 
-    const unlockedCount = achievements.filter(a => a.unlocked).length;
-    const percentage = achievements.length > 0 ? Math.round((unlockedCount / achievements.length) * 100) : 0;
+    const list = achievements || [];
+    const unlockedCount = list.filter(a => a.unlocked).length;
+    const percentage = list.length > 0 ? Math.round((unlockedCount / list.length) * 100) : 0;
 
     return (
         <div className="mobile-sheet-root fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">

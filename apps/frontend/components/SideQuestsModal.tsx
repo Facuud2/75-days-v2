@@ -28,9 +28,9 @@ export default function SideQuestsModal({ onClose }: SideQuestsModalProps) {
     });
 
     // Filter out quests the user is already subscribed to (and not completed)
-    const activeQuestTitles = quests.filter(q => !q.completed).map(q => q.title);
+    const activeQuestTitles = (quests || []).filter(q => !q.completed).map(q => q.title);
 
-    const availableToSubscribe = availableQuests.filter(q => !activeQuestTitles.includes(q.title));
+    const availableToSubscribe = (availableQuests || []).filter(q => !activeQuestTitles.includes(q.title));
 
     const handleSubscribe = async (quest: SideQuestTemplate) => {
         setSubscribingTo(quest.title);

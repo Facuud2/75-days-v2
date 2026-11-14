@@ -307,18 +307,18 @@ export default function Profile() {
    const { activeQuests, completedQuests, activeTitles } = useMemo(() => {
      const active: typeof quests = [];
      const completed: typeof quests = [];
-     quests.forEach((q) => (q.completed ? completed : active).push(q));
+     (quests || []).forEach((q) => (q.completed ? completed : active).push(q));
      const titles = new Set(active.map((q) => q.title));
      return { activeQuests: active, completedQuests: completed, activeTitles: titles };
    }, [quests]);
 
    const availableToSubscribe = useMemo(
-     () => availableQuests.filter((q) => !activeTitles.has(q.title)),
+     () => (availableQuests || []).filter((q) => !activeTitles.has(q.title)),
      [availableQuests, activeTitles],
    );
 
   const achievements = (profileData?.achievements || []) as ProfileAchievement[];
-  const unlockedAchievements = achievements.filter((achievement) => achievement.unlocked).length;
+  const unlockedAchievements = (achievements || []).filter((achievement) => achievement.unlocked).length;
 
   const challengeData: ChallengeSummary = {
     isActive,
@@ -399,7 +399,7 @@ export default function Profile() {
   const activeHealth = IS_DEV_BUILD ? devFixture.health : healthData;
   const activeAchievements = IS_DEV_BUILD ? devFixture.achievements : achievements;
   const isDevDataset = IS_DEV_BUILD && devDataset !== 'demo';
-  const unlockedCount = activeAchievements.filter((achievement) => achievement.unlocked).length;
+  const unlockedCount = (activeAchievements || []).filter((achievement) => achievement.unlocked).length;
   const displayName = isDevDataset && devDataset === 'worst' ? DEV_PROFILE_NAME : user?.name ?? '';
 
   const handleEditMeal = (meal: MealSummary) => {

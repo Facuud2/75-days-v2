@@ -41,9 +41,10 @@ export default function ProfileAchievements({ achievements, loading = false, onO
     );
   }
 
-  const total = achievements.length;
-  const unlocked = achievements.filter((achievement) => achievement.unlocked);
-  const locked = achievements.filter((achievement) => !achievement.unlocked);
+  const list = achievements || [];
+  const total = list.length;
+  const unlocked = list.filter((achievement) => achievement.unlocked);
+  const locked = list.filter((achievement) => !achievement.unlocked);
 
   const lastUnlocked = [...unlocked]
     .sort((a, b) => {

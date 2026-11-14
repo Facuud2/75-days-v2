@@ -30,8 +30,9 @@ export default function AchievementsSheet({ open, onClose, achievements }: Achie
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   const filtered = useMemo(() => {
-    if (filter === 'todas') return achievements;
-    return achievements.filter((achievement) => getAchievementCategory(achievement.id, achievement.title) === filter);
+    const list = achievements || [];
+    if (filter === 'todas') return list;
+    return list.filter((achievement) => getAchievementCategory(achievement.id, achievement.title) === filter);
   }, [achievements, filter]);
 
   const visible = filtered.slice(0, visibleCount);
@@ -41,12 +42,15 @@ export default function AchievementsSheet({ open, onClose, achievements }: Achie
     setVisibleCount(PAGE_SIZE);
   };
 
+  const unlockedCount = (achievements || []).filter((achievement) => achievement.unlocked).length;
+  const totalCount = (achievements || []).length;
+
   return (
     <BottomSheet
       open={open}
       onClose={onClose}
       title="Logros"
-      description={`${formatInteger(achievements.filter((achievement) => achievement.unlocked).length)} de ${formatInteger(achievements.length)} desbloqueados.`}
+      description={`${formatInteger(unlockedCount)} de ${formatInteger(totalCount)} desbloqueados.`}
     >
       <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar logros por categoría">
         {FILTERS.map((item) => {

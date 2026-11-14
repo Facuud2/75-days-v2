@@ -71,10 +71,10 @@ export default function ProfileChallenges({
     );
   }
 
-  const completedToday = data.todayGoals.filter((goal) => goal.completed).length;
-  const totalGoals = data.todayGoals.length;
-  const activeQuests = data.activeQuests.slice(0, 3);
-  const hiddenQuests = Math.max(0, data.activeQuests.length - activeQuests.length);
+  const completedToday = (data.todayGoals || []).filter((goal) => goal.completed).length;
+  const totalGoals = (data.todayGoals || []).length;
+  const activeQuests = (data.activeQuests || []).slice(0, 3);
+  const hiddenQuests = Math.max(0, (data.activeQuests || []).length - activeQuests.length);
 
   return (
     <div>

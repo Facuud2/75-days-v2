@@ -82,54 +82,54 @@ export const useQuestStore = create<QuestStore>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       // U-12/F-09: migrated from axios to shared apiClient
-      const response = await apiClient<{ data: SideQuest[] }>('/quests');
-      set({ quests: response.data, isLoading: false });
+      const response = await apiClient<SideQuest[]>('/quests');
+      set({ quests: Array.isArray(response) ? response : [], isLoading: false });
     } catch (error: any) {
-      set({ error: error.response?.data?.error || 'Failed to fetch quests', isLoading: false });
+      set({ error: error.message || 'Failed to fetch quests', isLoading: false });
     }
   },
 
   fetchAvailableQuests: async () => {
     set({ isLoading: true, error: null });
     try {
-      const response = await apiClient<{ data: SideQuestTemplate[] }>('/quests/available');
-      set({ availableQuests: response.data, isLoading: false });
+      const response = await apiClient<SideQuestTemplate[]>('/quests/available');
+      set({ availableQuests: Array.isArray(response) ? response : [], isLoading: false });
     } catch (error: any) {
-      set({ error: error.response?.data?.error || 'Failed to fetch available quests', isLoading: false });
+      set({ error: error.message || 'Failed to fetch available quests', isLoading: false });
     }
   },
 
   subscribeToQuest: async (title: string, difficulty: string, durationDays: number) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await apiClient<{ data: SideQuest }>('/quests', {
+      const response = await apiClient<SideQuest>('/quests', {
         method: 'POST',
         body: JSON.stringify({ title, difficulty, durationDays }),
       });
-      set({ quests: [response.data, ...get().quests], isLoading: false });
+      set({ quests: [response, ...(get().quests || [])], isLoading: false });
     } catch (error: any) {
-      set({ error: error.response?.data?.error || 'Failed to subscribe to quest', isLoading: false });
+      set({ error: error.message || 'Failed to subscribe to quest', isLoading: false });
     }
   },
 
   createCustomQuest: async (quest) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await apiClient<{ data: SideQuest }>('/quests', {
+      const response = await apiClient<SideQuest>('/quests', {
         method: 'POST',
         body: JSON.stringify(quest),
       });
-      set({ quests: [response.data, ...get().quests], isLoading: false });
+      set({ quests: [response, ...(get().quests || [])], isLoading: false });
       return true;
     } catch (error: any) {
-      set({ error: error.response?.data?.error || 'No se pudo crear la misión', isLoading: false });
+      set({ error: error.message || 'No se pudo crear la misión', isLoading: false });
       return false;
     }
   },
 
   progressQuest: async (id: string) => {
     // Optimistic Update
-    const previousQuests = get().quests;
+    const previousQuests = get().quests || [];
 
     set({
       quests: previousQuests.map((q) => {
@@ -143,21 +143,21 @@ export const useQuestStore = create<QuestStore>((set, get) => ({
     });
 
     try {
-      const response = await apiClient<{ data: SideQuest }>(`/quests/${id}/progress`, {
+      const response = await apiClient<SideQuest>(`/quests/${id}/progress`, {
         method: 'PUT',
       });
       // Update with server data just in case
       set({
-        quests: get().quests.map((q) => (q.id === id ? response.data : q)),
+        quests: (get().quests || []).map((q) => (q.id === id ? response : q)),
       });
     } catch (error: any) {
       // Revert optimistic update
-      set({ quests: previousQuests, error: error.response?.data?.error || 'Failed to update quest progress' });
+      set({ quests: previousQuests, error: error.message || 'Failed to update quest progress' });
     }
   },
 
   toggleTask: async (questId, taskId) => {
-    const previousQuests = get().quests;
+    const previousQuests = get().quests || [];
     set({
       quests: previousQuests.map((quest) =>
         quest.id !== questId || !quest.currentRun
@@ -166,34 +166,34 @@ export const useQuestStore = create<QuestStore>((set, get) => ({
               ...quest,
               currentRun: {
                 ...quest.currentRun,
-                tasks: quest.currentRun.tasks.map((task) =>
+                tasks: (quest.currentRun.tasks || []).map((task) =>
                   task.id === taskId
                     ? { ...task, completed: !task.completed, completedAt: !task.completed ? new Date().toISOString() : null }
                     : task
                 ),
               },
-              progress: quest.currentRun.tasks.filter((task) => task.completed !== (task.id === taskId)).length,
+              progress: (quest.currentRun.tasks || []).filter((task) => task.completed !== (task.id === taskId)).length,
             }
       ),
     });
     try {
-      const response = await apiClient<{ data: SideQuest }>(`/quests/${questId}/tasks/${taskId}`, {
+      const response = await apiClient<SideQuest>(`/quests/${questId}/tasks/${taskId}`, {
         method: 'PATCH',
       });
-      set({ quests: get().quests.map((q) => (q.id === questId ? response.data : q)) });
+      set({ quests: (get().quests || []).map((q) => (q.id === questId ? response : q)) });
     } catch (error: any) {
-      set({ quests: previousQuests, error: error.response?.data?.error || 'No se pudo actualizar la tarea' });
+      set({ quests: previousQuests, error: error.message || 'No se pudo actualizar la tarea' });
     }
   },
 
   restartQuest: async (id) => {
     try {
-      const response = await apiClient<{ data: SideQuest }>(`/quests/${id}/restart`, {
+      const response = await apiClient<SideQuest>(`/quests/${id}/restart`, {
         method: 'POST',
       });
-      set({ quests: get().quests.map((q) => (q.id === id ? response.data : q)) });
+      set({ quests: (get().quests || []).map((q) => (q.id === id ? response : q)) });
     } catch (error: any) {
-      set({ error: error.response?.data?.error || 'No se pudo reiniciar la misión' });
+      set({ error: error.message || 'No se pudo reiniciar la misión' });
     }
   },
 

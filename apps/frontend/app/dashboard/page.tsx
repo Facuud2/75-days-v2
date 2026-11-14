@@ -184,6 +184,7 @@ export default function Dashboard() {
   // `devGoals` y `devQuests` son el único punto de entrada del fixture: mismas
   // formas que `todayLog.goals` y `quests`, así que todo lo que sigue no sabe
   // si está mirando datos de demo o un caso límite.
+  const rawGoals = todayLog?.goals || [];
   const devGoals: typeof todayLog.goals = isEmpty
     ? []
     : isWorst
@@ -218,14 +219,14 @@ export default function Dashboard() {
           },
         ] as typeof todayLog.goals
       : isOne
-        ? [todayLog.goals[0]]
-        : isThousand
+        ? rawGoals.slice(0, 1)
+        : isThousand && rawGoals.length > 0
           ? Array.from({ length: 1000 }, (_, index) => ({
-              ...todayLog.goals[index % todayLog.goals.length],
+              ...rawGoals[index % rawGoals.length],
               id: `dev-goal-${index + 1}`,
-              title: `${todayLog.goals[index % todayLog.goals.length].title} #${index + 1}`,
+              title: `${rawGoals[index % rawGoals.length].title} #${index + 1}`,
             }))
-          : todayLog.goals;
+          : rawGoals;
 
   const devLog =
     devDataset === 'demo'
@@ -236,12 +237,13 @@ export default function Dashboard() {
           status: (isEmpty || devGoals.some((goal) => !goal.completed) ? 'pending' : 'success') as typeof todayLog.status,
         };
 
+  const rawQuests = quests || [];
   const devQuests: typeof quests = isEmpty
     ? []
     : isWorst
       ? [
           {
-            ...quests[0],
+            ...(rawQuests[0] || { id: 'dev-quest-long', userId: '', title: '', description: null, difficulty: 'Medium', durationDays: 365, icon: null, startedAt: '', currentRun: null }),
             id: 'dev-quest-long',
             title:
               'Completar bartholomew.fitzgerald@northwind-industries-holdings.example.com antes de las 21:00 y registrar cada vaso de agua en la aplicación',
@@ -251,7 +253,7 @@ export default function Dashboard() {
             completionCount: 0,
           },
           {
-            ...quests[quests.length - 1],
+            ...(rawQuests[rawQuests.length - 1] || { id: 'dev-quest-one', userId: '', title: '', description: null, difficulty: 'Easy', durationDays: 7, icon: null, startedAt: '', currentRun: null }),
             id: 'dev-quest-one',
             title: 'Leer 20 páginas antes de dormir',
             progress: 1,
@@ -261,16 +263,16 @@ export default function Dashboard() {
           },
         ]
       : isOne
-        ? [quests[0]]
-        : isThousand
+        ? rawQuests.slice(0, 1)
+        : isThousand && rawQuests.length > 0
           ? (Array.from({ length: 1000 }, (_, index) => ({
-              ...quests[index % quests.length],
+              ...rawQuests[index % rawQuests.length],
               id: `dev-quest-${index + 1}`,
             })) as typeof quests)
-          : quests;
+          : rawQuests;
 
-  const completedTasks = devLog.goals.filter(g => g.completed).length;
-  const totalTasks = devLog.goals.length;
+  const completedTasks = (devLog?.goals || []).filter(g => g.completed).length;
+  const totalTasks = devLog?.goals?.length || 0;
   const remainingTasks = totalTasks - completedTasks;
   const progress = totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
 
@@ -311,8 +313,8 @@ export default function Dashboard() {
     Object.values(DEFAULT_GOALS).flatMap(goals => goals.map(g => g.title.toLowerCase()))
   );
 
-  const baseGoals = devLog.goals.filter(g => allDefaultTitles.has(g.title.toLowerCase()));
-  const customGoals = devLog.goals.filter(g => !allDefaultTitles.has(g.title.toLowerCase()));
+  const baseGoals = (devLog?.goals || []).filter(g => allDefaultTitles.has(g.title.toLowerCase()));
+  const customGoals = (devLog?.goals || []).filter(g => !allDefaultTitles.has(g.title.toLowerCase()));
 
   // Determine current active plan name mapped to UI strings
   const currentPlanName = useChallengeStore.getState().difficulty || 'Activo';
@@ -521,10 +523,10 @@ export default function Dashboard() {
                 }`}
             >
               Misiones
-              {devQuests.filter(q => !q.completed).length > 0 && (
+              {(devQuests || []).filter(q => !q.completed).length > 0 && (
                 <span className={`w-5 h-5 flex items-center justify-center rounded-full text-[10px] ${activeTab === 'missions' ? 'bg-white text-rose-500' : 'bg-rose-500/20 text-rose-500'
                   }`}>
-                  {devQuests.filter(q => !q.completed).length}
+                  {(devQuests || []).filter(q => !q.completed).length}
                 </span>
               )}
             </button>

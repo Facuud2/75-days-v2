@@ -19,7 +19,7 @@ const HEIGHT = 64;
 const PAD = 4;
 
 export default function Sparkline({ points, goal, initial, label = 'Tendencia de peso' }: SparklineProps) {
-  const validPoints = points.filter((point) => Number.isFinite(point.weight));
+  const validPoints = (points || []).filter((point) => Number.isFinite(point.weight));
   const values = validPoints.map((point) => point.weight);
 
   if (values.length < 2) {
