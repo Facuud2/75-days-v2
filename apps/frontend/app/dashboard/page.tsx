@@ -4,21 +4,22 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useChallengeStore } from '@/store/useChallengeStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useQuestStore } from '@/store/useQuestStore';
+import { useUIStore } from '@/store/useUIStore';
 import dynamic from 'next/dynamic';
-import { format, addDays, differenceInDays, startOfMonth, endOfMonth, getDay, isSameDay, subMonths, addMonths } from 'date-fns';
+import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Check, Utensils, Dumbbell, Sun, Droplet, Book, Camera, Target, ChevronLeft, ChevronRight, PlusCircle, Trophy } from 'lucide-react';
+import { Check, Utensils, Dumbbell, Sun, Droplet, Book, Camera, Target, PlusCircle, Trophy } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { DEFAULT_GOALS } from '@/lib/constants/plans';
+import { isTutorialPending, markTutorialSeen } from '@/lib/tutorial';
 import type { DevDataset } from '@/components/dev/DevDatasetPicker';
 import { DEV_DATASETS } from '@/components/dev/DevDatasetPicker';
 import DashboardLoading from './loading';
 
 // Lazy-loaded modals for dashboard (vercel-react-best-practices: bundle-dynamic-imports)
-const DayDetailsModal = dynamic(() => import('@/components/DayDetailsModal'), { ssr: false });
 const SideQuestsModal = dynamic(() => import('@/components/SideQuestsModal'), { ssr: false });
 const SideQuestDetailModal = dynamic(() => import('@/components/SideQuestDetailModal'), { ssr: false });
+const OnboardingTutorial = dynamic(() => import('@/components/OnboardingTutorial'), { ssr: false });
 
 type TabView = 'plan' | 'missions';
 
@@ -57,13 +58,12 @@ export default function Dashboard() {
     isLoading: isChallengeLoading
   } = useChallengeStore();
   const { quests, fetchQuests, fetchAvailableQuests, isLoading: isQuestsLoading } = useQuestStore();
+  const { openPlansModal, isTutorialOpen, openTutorial, closeTutorial } = useUIStore();
 
   const router = useRouter();
 
   const todayStr = format(new Date(), 'yyyy-MM-dd');
   const todayLog = logs[todayStr];
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [currentMonthDate, setCurrentMonthDate] = useState(new Date());
   const [updatingGoalId, setUpdatingGoalId] = useState<string | null>(null);
   const [isSideQuestsModalOpen, setIsSideQuestsModalOpen] = useState(false);
   const [selectedSideQuest, setSelectedSideQuest] = useState<any>(null);
@@ -98,6 +98,17 @@ export default function Dashboard() {
       }
     })();
   }, [user, router, checkDailyReset, fetchCurrentChallenge, fetchQuests, fetchAvailableQuests]);
+
+  useEffect(() => {
+    if (!isChallengeLoading && isActive && todayLog && user?.id && isTutorialPending(user.id)) {
+      openTutorial();
+    }
+  }, [isChallengeLoading, isActive, todayLog, user?.id, openTutorial]);
+
+  const handleDismissTutorial = useCallback(() => {
+    markTutorialSeen(user?.id);
+    closeTutorial();
+  }, [user?.id, closeTutorial]);
 
   const renderGoalItem = useCallback((goal: any) => {
     const IconComponent = iconMap[goal.icon || 'target'] || Target;
@@ -170,7 +181,26 @@ export default function Dashboard() {
     return <DashboardLoading />;
   }
 
-  if (!isActive) return null;
+  if (!isActive) {
+    return (
+      <div className="mx-auto max-w-xl py-12 text-center">
+        <div className="rounded-3xl border border-rose-950/40 bg-rose-950/20 p-8 shadow-lg">
+          <Target className="mx-auto mb-4 h-10 w-10 text-rose-400" strokeWidth={1.5} aria-hidden="true" />
+          <h1 className="text-2xl font-bold text-white">No tienes un desafío activo</h1>
+          <p className="mt-2 text-sm text-white/60">
+            Elige un plan para comenzar tu reto de 75 días y seguir tus tareas diarias.
+          </p>
+          <button
+            type="button"
+            onClick={openPlansModal}
+            className="mt-6 inline-flex min-h-11 items-center justify-center rounded-xl bg-rose-400 px-6 py-2.5 text-sm font-bold text-zinc-950 transition-colors hover:bg-rose-300"
+          >
+            Elegir un plan
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // ── Fixture de dev ────────────────────────────────────────────────────────
   // Cada dataset cambia sólo los datos que la página ya renderiza; con 'demo'
@@ -276,37 +306,7 @@ export default function Dashboard() {
   const remainingTasks = totalTasks - completedTasks;
   const progress = totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
 
-  // Calendar logic
   const now = new Date();
-  const monthStart = startOfMonth(currentMonthDate);
-  const monthEnd = endOfMonth(currentMonthDate);
-  const startDateObj = startDate ? new Date(startDate) : now;
-
-  const daysInMonth = differenceInDays(monthEnd, monthStart) + 1;
-  const startDayOfWeek = getDay(monthStart); // 0 = Sunday
-
-  const calendarDays = Array.from({ length: daysInMonth }).map((_, i) => {
-    const date = addDays(monthStart, i);
-    const dateStr = format(date, 'yyyy-MM-dd');
-    const log = logs[dateStr];
-
-    let status = 'future';
-    if (log) {
-      status = log.status;
-    } else if (differenceInDays(now, date) > 0 && differenceInDays(date, startDateObj) >= 0) {
-      status = 'fail';
-    } else if (differenceInDays(date, startDateObj) < 0) {
-      status = 'inactive';
-    }
-
-    return {
-      date,
-      dateStr,
-      status,
-      dayNum: i + 1,
-      isToday: isSameDay(date, now)
-    };
-  });
 
   // Separate base plan goals from custom goals
   const allDefaultTitles = new Set(
@@ -326,7 +326,7 @@ export default function Dashboard() {
       <div className="min-w-0 space-y-4 sm:space-y-6 lg:col-span-4">
 
         {/* RESUMEN DEL DÍA: une avance del desafío y estado de las tareas */}
-        <section className="bg-rose-950/20 border border-rose-950/40 rounded-3xl p-4 sm:p-6 shadow-lg" aria-labelledby="today-summary-title">
+        <section data-tour="daily-summary" className="bg-rose-950/20 border border-rose-950/40 rounded-3xl p-4 sm:p-6 shadow-lg" aria-labelledby="today-summary-title">
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-rose-500 text-[10px] font-bold tracking-[0.2em] uppercase">Resumen de hoy</p>
@@ -395,103 +395,6 @@ export default function Dashboard() {
           </div>
         </section>
 
-        <Link
-          href="/calendar"
-          className="dashboard-history-link lg:hidden flex min-h-12 items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm font-semibold text-white/70 active:bg-white/[0.08]"
-        >
-          Ver historial de días
-          <ChevronRight size={18} aria-hidden="true" />
-        </Link>
-
-        {/* MINI CALENDAR */}
-        <div className="dashboard-calendar-card bg-rose-950/20 border border-rose-950/40 rounded-3xl p-6 shadow-lg">
-          <div className="flex justify-between items-center mb-6">
-              <button
-                aria-label="Mes anterior"
-                onClick={() => setCurrentMonthDate(subMonths(currentMonthDate, 1))}
-              className="p-1 text-white/50 hover:text-white transition-colors rounded-full hover:bg-white/5"
-            >
-              <ChevronLeft size={20} />
-            </button>
-            <h3 className="text-white font-bold text-lg capitalize">
-              {format(currentMonthDate, 'MMMM yyyy', { locale: es })}
-            </h3>
-              <button
-                aria-label="Mes siguiente"
-                onClick={() => setCurrentMonthDate(addMonths(currentMonthDate, 1))}
-              className="p-1 text-white/50 hover:text-white transition-colors rounded-full hover:bg-white/5"
-            >
-              <ChevronRight size={20} />
-            </button>
-          </div>
-
-          <div className="grid grid-cols-7 gap-2 mb-4">
-            {['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'].map(d => (
-              <div key={d} className="text-center text-[10px] font-bold text-rose-500 tracking-wider">
-                {d}
-              </div>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-7 gap-2">
-            {Array.from({ length: startDayOfWeek }).map((_, i) => (
-              <div key={`empty-${i}`} className="aspect-square" />
-            ))}
-
-            {calendarDays.map((day) => {
-              let bg = 'bg-transparent';
-              let text = 'text-white/50';
-              let border = 'border border-transparent';
-              let dotColor = 'bg-rose-500';
-
-              if (day.status === 'success') {
-                bg = 'bg-emerald-500/10 dark:bg-emerald-500/20';
-                border = 'border-emerald-600/30 dark:border-emerald-500/50';
-                text = 'text-emerald-700 dark:text-emerald-500 font-bold';
-                dotColor = 'bg-emerald-600 dark:bg-emerald-500';
-              } else if (day.status === 'fail') {
-                bg = 'bg-red-500/10';
-                border = 'border-red-500/30';
-                text = 'text-red-500 font-bold';
-              } else if (day.status === 'pending') {
-                text = 'text-white/80';
-                border = 'border-white/5 hover:border-white/20';
-              } else if (day.status === 'future') {
-                text = 'text-white/50';
-              }
-
-              if (day.isToday && day.status !== 'success') {
-                bg = 'bg-rose-500/20';
-                border = 'border-rose-500/50';
-                text = 'text-rose-300 font-bold';
-              }
-
-              return (
-                <div
-                  key={day.dateStr}
-                  onClick={() => setSelectedDate(day.dateStr)}
-                  className={`relative aspect-square rounded-xl flex items-center justify-center text-xs transition-colors cursor-pointer ${bg} ${text} ${border}`}
-                >
-                  {day.dayNum}
-                  {day.isToday && <div className={`absolute w-1 h-1 rounded-full bottom-1 ${dotColor}`} />}
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="flex items-center justify-between mt-6 pt-4 border-t border-zinc-200 dark:border-white/5 text-[10px] text-zinc-500 dark:text-white/50 font-medium">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-emerald-600 dark:bg-emerald-500" /> Completado
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-red-500" /> Fallido
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-white/20" /> Pendiente
-            </div>
-          </div>
-        </div>
-
       </div>
 
       {/* Right Column */}
@@ -516,6 +419,7 @@ export default function Dashboard() {
               Plan Activo
             </button>
             <button
+              data-tour="missions-tab"
               onClick={() => setActiveTab('missions')}
               className={`flex-1 sm:flex-none min-h-11 px-4 sm:px-6 py-2 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${activeTab === 'missions'
                 ? 'bg-rose-400 text-zinc-950 shadow-lg shadow-rose-500/20'
@@ -533,7 +437,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="space-y-6 sm:space-y-8 min-h-[280px] sm:min-h-[400px]">
+        <div data-tour="daily-tasks" className="space-y-6 sm:space-y-8 min-h-[280px] sm:min-h-[400px]">
           {activeTab === 'plan' ? (
             /* TAB: PLAN ACTIVO */
             <>
@@ -695,13 +599,6 @@ export default function Dashboard() {
         />
       )}
 
-      {selectedDate && (
-        <DayDetailsModal
-          date={selectedDate}
-          onClose={() => setSelectedDate(null)}
-        />
-      )}
-
       {isSideQuestsModalOpen && (
         <SideQuestsModal
           onClose={() => setIsSideQuestsModalOpen(false)}
@@ -709,6 +606,13 @@ export default function Dashboard() {
       )}
       {selectedSideQuest && (
         <SideQuestDetailModal quest={selectedSideQuest} onClose={() => setSelectedSideQuest(null)} />
+      )}
+      {isTutorialOpen && (
+        <OnboardingTutorial
+          isOpen={isTutorialOpen}
+          onSkip={handleDismissTutorial}
+          onComplete={handleDismissTutorial}
+        />
       )}
     </div>
   );

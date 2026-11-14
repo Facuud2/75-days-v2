@@ -189,10 +189,10 @@ export const getOnboardingStatus = async (req: AuthRequest, res: Response) => {
 };
 
 const completeOnboardingSchema = z.object({
-    age: z.number().optional(),
-    weight: z.number().optional(),
-    targetWeight: z.number().optional(),
-    height: z.number().optional(),
+    age: z.number().int().min(13).max(120).optional(),
+    weight: z.number().min(20).max(500).optional(),
+    targetWeight: z.number().min(20).max(500).optional(),
+    height: z.number().min(80).max(260).optional(),
 });
 
 export const completeOnboarding = async (req: AuthRequest, res: Response) => {

@@ -2,16 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import {
   AlertCircle,
-  ChevronRight,
   LogOut,
-  Pencil,
-  Settings,
 } from 'lucide-react';
 
 import { useAuthStore } from '@/store/useAuthStore';
@@ -36,6 +32,7 @@ import ProfileChallenges from '@/components/profile/ProfileChallenges';
 import ProfileHealth from '@/components/profile/ProfileHealth';
 import ProfileAchievements from '@/components/profile/ProfileAchievements';
 import ProfileEditMenu from '@/components/profile/ProfileEditMenu';
+import ProfileSkeleton from '@/components/profile/ProfileSkeleton';
 import { readDevDataset } from '@/components/dev/DevDatasetPicker';
 import type { DevDataset } from '@/components/dev/DevDatasetPicker';
 import { buildDevProfileData, DEV_PROFILE_NAME } from '@/components/dev/profileFixtures';
@@ -255,7 +252,7 @@ export default function Profile() {
      setIsLogoutConfirmOpen(false);
      logout();
      toast.success('Sesión cerrada correctamente.');
-     router.push('/login');
+     router.replace('/login');
    };
 
   const level = Math.floor((safeNumber(points) ?? 0) / 100) + 1;
@@ -422,9 +419,10 @@ export default function Profile() {
     .join(' · ');
   const logrosSummary = `${formatNumber(unlockedCount)}/${formatNumber(activeAchievements.length)}`;
 
-  if (!user) return <ProfileSkeleton />;
-
   const headerLoading = !hasLoadedProfile && !profileData;
+  const isInitialLoading = !user || headerLoading || !challengeReady;
+
+  if (isInitialLoading) return <ProfileSkeleton />;
 
   return (
     <div className="pv2-page mx-auto w-full max-w-6xl pb-6">
@@ -524,31 +522,6 @@ export default function Profile() {
 
           <footer className="pt-2">
             <div className="pv2-card overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setIsEditMenuOpen(true)}
-                className="pv2-row pv2-row--interactive border-b"
-                style={{ borderColor: 'var(--divider)' }}
-              >
-                <Pencil size={18} strokeWidth={1.5} className="shrink-0" style={{ color: 'var(--text-muted)' }} aria-hidden="true" />
-                <span className="min-w-0 flex-1 text-sm" style={{ color: 'var(--text-primary)' }}>
-                  Editar perfil
-                </span>
-                <ChevronRight size={16} strokeWidth={1.5} className="shrink-0" style={{ color: 'var(--text-muted)' }} aria-hidden="true" />
-              </button>
-
-              <Link
-                href="/settings"
-                className="pv2-row pv2-row--interactive border-b"
-                style={{ borderColor: 'var(--divider)' }}
-              >
-                <Settings size={18} strokeWidth={1.5} className="shrink-0" style={{ color: 'var(--text-muted)' }} aria-hidden="true" />
-                <span className="min-w-0 flex-1 text-sm" style={{ color: 'var(--text-primary)' }}>
-                  Ajustes
-                </span>
-                <ChevronRight size={16} strokeWidth={1.5} className="shrink-0" style={{ color: 'var(--text-muted)' }} aria-hidden="true" />
-              </Link>
-
               <button
                 type="button"
                 onClick={() => setIsLogoutConfirmOpen(true)}
@@ -692,37 +665,6 @@ export default function Profile() {
       {selectedSideQuest ? (
         <SideQuestDetailModal quest={selectedSideQuest} onClose={() => setSelectedSideQuest(null)} />
       ) : null}
-    </div>
-  );
-}
-
-function ProfileSkeleton() {
-  return (
-    <div className="pv2-page mx-auto w-full max-w-6xl pb-6" aria-busy="true" aria-label="Cargando perfil">
-      <span className="pv2-sr-only">Cargando perfil…</span>
-      <div className="lg:grid lg:grid-cols-[300px_minmax(0,1fr)] lg:items-start lg:gap-10">
-        <aside>
-          <ProfileHeader
-            name=""
-            level={1}
-            memberSince={null}
-            onEdit={() => {}}
-            onAvatar={() => {}}
-            loading
-          />
-        </aside>
-        <div className="mt-3 space-y-3 lg:mt-0">
-          {['01', '02', '03'].map((index) => (
-            <div key={index} className="pv2-section p-4">
-              <div className="flex items-center gap-3">
-                <div className="pv2-skeleton h-3 w-6" />
-                <div className="pv2-skeleton h-5 w-24" />
-              </div>
-              <div className="pv2-skeleton mt-4 h-16 w-full" />
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }

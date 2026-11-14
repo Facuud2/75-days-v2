@@ -34,6 +34,8 @@ interface AuthState {
   checkOnboardingStatus: () => Promise<boolean>;
 }
 
+let authEpoch = 0;
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
@@ -44,23 +46,31 @@ export const useAuthStore = create<AuthState>()(
       error: null,
 
       login: async (credentials) => {
+        const epoch = ++authEpoch;
         set({ isLoading: true, error: null });
         try {
           const { user, token } = await authService.login(credentials);
+          if (epoch !== authEpoch) return;
           set({ user, token, isAuthenticated: true, isLoading: false });
         } catch (error: any) {
-          set({ error: error.message || 'Login failed', isLoading: false });
+          if (epoch === authEpoch) {
+            set({ error: error.message || 'Login failed', isLoading: false });
+          }
           throw error;
         }
       },
 
       register: async (data) => {
+        const epoch = ++authEpoch;
         set({ isLoading: true, error: null });
         try {
           const { user, token } = await authService.register(data);
+          if (epoch !== authEpoch) return;
           set({ user, token, isAuthenticated: true, isLoading: false });
         } catch (error: any) {
-          set({ error: error.message || 'Registration failed', isLoading: false });
+          if (epoch === authEpoch) {
+            set({ error: error.message || 'Registration failed', isLoading: false });
+          }
           throw error;
         }
       },
@@ -68,27 +78,45 @@ export const useAuthStore = create<AuthState>()(
       clearError: () => set({ error: null }),
 
       logout: () => {
-        set({ user: null, token: null, isAuthenticated: false });
+        authEpoch += 1;
+        set({ user: null, token: null, isAuthenticated: false, isLoading: false, error: null });
+        if (typeof window !== 'undefined') {
+          useAuthStore.persist?.clearStorage?.();
+          localStorage.removeItem('auth-storage');
+        }
         useThemeStore.getState().resetTheme();
         // F-37: limpiar el reto y las misiones del usuario anterior. Se usan
         // imports dinámicos para no crear ciclos con useQuestStore.
         import('./useChallengeStore').then(({ useChallengeStore }) => {
           useChallengeStore.getState().reset();
-          useChallengeStore.persist.clearStorage();
-        });
+          useChallengeStore.persist?.clearStorage?.();
+        }).catch(() => {});
         import('./useQuestStore').then(({ useQuestStore }) => {
           useQuestStore.getState().reset();
-        });
+        }).catch(() => {});
       },
 
       checkAuth: async () => {
+        const epoch = authEpoch;
+        if (!get().token) {
+          set({ user: null, token: null, isAuthenticated: false, isLoading: false });
+          return;
+        }
         set({ isLoading: true, error: null });
         try {
           const { user } = await authService.getMe();
+          if (epoch !== authEpoch || !get().token) return;
           set({ user, isAuthenticated: true, isLoading: false });
         } catch (error: any) {
-          // If token is invalid/expired
-          set({ user: null, token: null, isAuthenticated: false, isLoading: false });
+          if (epoch !== authEpoch) return;
+          const status = error?.status;
+          if (status === 401 || status === 403 || !get().isAuthenticated) {
+            // Token is invalid/expired or unverified session failed
+            set({ user: null, token: null, isAuthenticated: false, isLoading: false });
+          } else {
+            // Transient network/timeout error on an already-authenticated session
+            set({ isLoading: false });
+          }
         }
       },
 
@@ -119,15 +147,19 @@ export const useAuthStore = create<AuthState>()(
       },
 
       checkOnboardingStatus: async () => {
+        const epoch = authEpoch;
         try {
           const { onboardingCompleted } = await authService.getOnboardingStatus();
+          if (epoch !== authEpoch || !get().isAuthenticated) {
+            return false;
+          }
           set((s) => ({
             user: s.user ? { ...s.user, onboardingCompleted } : s.user,
           }));
           return onboardingCompleted;
         } catch (error: any) {
           console.error('Failed to check onboarding status:', error);
-          return false;
+          return get().user?.onboardingCompleted ?? false;
         }
       },
     }),

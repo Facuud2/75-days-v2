@@ -11,6 +11,7 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { formatAuthError } from '@/lib/utils/authError';
 import AuthShell from '@/components/auth/AuthShell';
 import AuthField from '@/components/auth/AuthField';
+import { navigateAuthWithTransition } from '@/lib/authTransition';
 
 const registerSchema = z
   .object({
@@ -84,7 +85,23 @@ export default function RegisterForm() {
       footer={
         <>
           <span>¿Ya tienes una cuenta? </span>
-          <Link href="/login" className="auth-footer-link">
+          <Link
+            href="/login"
+            className="auth-footer-link"
+            onClick={(event) => {
+              if (
+                event.metaKey ||
+                event.ctrlKey ||
+                event.shiftKey ||
+                event.altKey ||
+                event.button !== 0
+              ) {
+                return;
+              }
+              event.preventDefault();
+              navigateAuthWithTransition(router, '/login', 'backward');
+            }}
+          >
             Inicia sesión
           </Link>
         </>

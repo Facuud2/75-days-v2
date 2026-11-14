@@ -8,19 +8,19 @@ import { AuthRequest } from '../middlewares/auth';
 const MealEntrySchema = z.object({
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
     mealType: z.enum(['breakfast', 'lunch', 'dinner', 'snack']),
-    name: z.string().min(1).max(200),
-    calories: z.number().positive(),
-    proteinG: z.number().min(0).default(0),
-    carbG: z.number().min(0).default(0),
-    fatG: z.number().min(0).default(0),
+    name: z.string().trim().min(1).max(200),
+    calories: z.number().positive().max(25000),
+    proteinG: z.number().min(0).max(2000).default(0),
+    carbG: z.number().min(0).max(2000).default(0),
+    fatG: z.number().min(0).max(2000).default(0),
 });
 
 const GoalsSchema = z.object({
-    dailyCalorieGoal: z.number().int().positive().optional(),
-    proteinGoalG: z.number().positive().optional(),
-    carbGoalG: z.number().positive().optional(),
-    fatGoalG: z.number().positive().optional(),
-    weightKg: z.number().positive().optional(),
+    dailyCalorieGoal: z.number().int().positive().max(25000).optional(),
+    proteinGoalG: z.number().positive().max(2000).optional(),
+    carbGoalG: z.number().positive().max(2000).optional(),
+    fatGoalG: z.number().positive().max(2000).optional(),
+    weightKg: z.number().min(20).max(500).optional(),
 });
 
 // ── Controllers ───────────────────────────────────────────────────────────────

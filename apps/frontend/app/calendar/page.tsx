@@ -178,11 +178,6 @@ export default function CalendarView() {
           : `Vista activa: ${view === 'map' ? 'Mapa del reto' : 'Agenda del reto'}`}
       </div>
 
-      <section className="calendar-today-card" aria-labelledby="today-card-title">
-        <div><p className="calendar-context-label">Hoy · Día {Math.min(currentDay || 1, 75)}</p><h2 id="today-card-title">{format(new Date(), "EEEE, d 'de' MMMM", { locale: es })}</h2><p>{days.find((day) => day.isToday)?.totalGoals ? `${days.find((day) => day.isToday)?.completedGoals} de ${days.find((day) => day.isToday)?.totalGoals} metas completadas` : 'Abre el día para añadir tu registro'}</p></div>
-        <button type="button" onClick={() => setSelectedDayNumber(days.find((day) => day.isToday)?.dayNumber ?? currentDay ?? 1)} aria-label="Abrir el registro de hoy"><ChevronRight size={20} aria-hidden="true" /></button>
-      </section>
-
       {view === 'map' ? <JourneyMap days={days} onSelect={setSelectedDayNumber} /> : <AgendaView days={days} currentDay={currentDay} onSelect={setSelectedDayNumber} />}
 
       <div className="calendar-legend" aria-label="Estados del calendario">{statusLegend.map(({ key, label, Icon }) => <span key={key} className={`calendar-legend__item calendar-legend__item--${key}`}><Icon size={13} aria-hidden="true" /> {label}</span>)}</div>

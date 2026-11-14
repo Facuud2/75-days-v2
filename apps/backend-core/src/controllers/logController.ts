@@ -33,6 +33,7 @@ const goalUpdateSchema = z.object({
 });
 
 class NotFoundError extends Error {}
+class LockedDayError extends Error {}
 
 export const updateGoalStatus = async (req: AuthRequest, res: Response) => {
     try {
@@ -56,6 +57,10 @@ export const updateGoalStatus = async (req: AuthRequest, res: Response) => {
 
         if (!goal) {
             return res.status(404).json({ error: 'Goal not found' });
+        }
+
+        if (goal.dailyLog.status === 'fail') {
+            return res.status(400).json({ error: 'Cannot modify goals for a failed day' });
         }
 
         const result = await prisma.$transaction(async (tx) => {
@@ -86,6 +91,9 @@ export const updateGoalStatus = async (req: AuthRequest, res: Response) => {
             const log = await tx.dailyLog.findUnique({ where: { id: currentGoal.dailyLogId } });
             if (!log) {
                 throw new NotFoundError('Log not found');
+            }
+            if (log.status === 'fail') {
+                throw new LockedDayError('Cannot modify goals for a failed day');
             }
 
             const challenge = await tx.challenge.findUnique({ where: { id: log.challengeId } });
@@ -140,6 +148,9 @@ export const updateGoalStatus = async (req: AuthRequest, res: Response) => {
         }
         if (error instanceof NotFoundError) {
             return res.status(404).json({ error: error.message });
+        }
+        if (error instanceof LockedDayError) {
+            return res.status(400).json({ error: error.message });
         }
         console.error('Error in updateGoalStatus:', error);
         res.status(500).json({ error: 'Internal server error' });

@@ -5,16 +5,27 @@ import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
 export default function Home() {
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, token } = useAuthStore();
   const router = useRouter();
 
   useEffect(() => {
-    if (isAuthenticated) {
-      router.push('/dashboard');
-    } else {
-      router.push('/login');
+    const redirect = () => {
+      const state = useAuthStore.getState();
+      if (state.isAuthenticated) {
+        router.replace('/dashboard');
+      } else if (!state.token) {
+        router.replace('/login');
+      }
+    };
+
+    if (useAuthStore.persist?.hasHydrated?.()) {
+      redirect();
+      return;
     }
-  }, [isAuthenticated, router]);
+
+    const unsub = useAuthStore.persist?.onFinishHydration?.(redirect);
+    return () => unsub?.();
+  }, [isAuthenticated, token, router]);
 
   return (
     <div className="flex items-center justify-center min-h-screen">

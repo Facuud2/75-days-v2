@@ -8,6 +8,7 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { formatAuthError } from '@/lib/utils/authError';
 import AuthShell from '@/components/auth/AuthShell';
 import AuthField from '@/components/auth/AuthField';
+import { navigateAuthWithTransition } from '@/lib/authTransition';
 
 type FieldErrors = {
   email?: string;
@@ -63,7 +64,23 @@ export default function LoginForm() {
       footer={
         <>
           <span>¿No tienes una cuenta? </span>
-          <Link href="/register" className="auth-footer-link">
+          <Link
+            href="/register"
+            className="auth-footer-link"
+            onClick={(event) => {
+              if (
+                event.metaKey ||
+                event.ctrlKey ||
+                event.shiftKey ||
+                event.altKey ||
+                event.button !== 0
+              ) {
+                return;
+              }
+              event.preventDefault();
+              navigateAuthWithTransition(router, '/register', 'forward');
+            }}
+          >
             Regístrate
           </Link>
         </>

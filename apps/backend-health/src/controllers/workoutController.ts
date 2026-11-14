@@ -9,12 +9,12 @@ import { estimateCaloriesBurned } from '../utils/calorieCalculator';
 const WorkoutSchema = z.object({
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
     sport: z.enum(['strength', 'running', 'cycling', 'walking', 'yoga', 'swimming', 'other']),
-    durationMin: z.number().int().positive(),
+    durationMin: z.number().int().positive().max(1440),
     intensity: z.enum(['low', 'medium', 'high']),
     // If the user provides caloriesBurned, it's treated as a manual override
-    caloriesBurned: z.number().positive().optional(),
-    distanceKm: z.number().positive().optional(),
-    loadVolumeKg: z.number().positive().optional(),
+    caloriesBurned: z.number().positive().max(15000).optional(),
+    distanceKm: z.number().positive().max(500).optional(),
+    loadVolumeKg: z.number().positive().max(500000).optional(),
     notes: z.string().max(500).optional(),
 });
 

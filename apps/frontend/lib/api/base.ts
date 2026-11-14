@@ -29,10 +29,14 @@ export function getAuthToken(): string | null {
 export interface RequestOptions extends RequestInit {
   /** Override the base URL (defaults to API_BASE_URL) */
   baseUrl?: string;
+  /** Request timeout in milliseconds (defaults to 15000ms) */
+  timeoutMs?: number;
 }
 
+const DEFAULT_TIMEOUT_MS = 15_000;
+
 /**
- * Core fetch wrapper with shared auth, error handling, and 401 redirect.
+ * Core fetch wrapper with shared auth, timeout, error handling, and 401 redirect.
  * Used by both apiClient and healthClient.
  */
 export async function baseRequest<T>(
@@ -40,6 +44,7 @@ export async function baseRequest<T>(
   options: RequestOptions = {}
 ): Promise<T> {
   const baseUrl = options.baseUrl ?? API_BASE_URL;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const token = getAuthToken();
 
   const headers: Record<string, string> = {
@@ -51,14 +56,37 @@ export async function baseRequest<T>(
     headers['Authorization'] = `Bearer ${token}`;
   }
 
+  const controller = new AbortController();
+  const externalSignal = options.signal;
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      controller.abort(externalSignal.reason);
+    } else {
+      externalSignal.addEventListener('abort', () => controller.abort(externalSignal.reason), { once: true });
+    }
+  }
+  const timeoutId = setTimeout(() => controller.abort(new Error('Request timeout')), timeoutMs);
+
   const config: RequestInit = {
     ...options,
     headers,
+    signal: controller.signal,
   };
-  // Remove baseUrl so it's not forwarded to fetch
+  // Remove custom fields so they are not forwarded to fetch
   delete (config as any).baseUrl;
+  delete (config as any).timeoutMs;
 
-  const response = await fetch(`${baseUrl}${endpoint}`, config);
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl}${endpoint}`, config);
+  } catch (err: any) {
+    if (err?.name === 'AbortError' || controller.signal.aborted) {
+      throw new Error('La solicitud tardó demasiado. Intenta de nuevo.');
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
     if (response.status === 401) {
@@ -66,13 +94,13 @@ export async function baseRequest<T>(
         endpoint.includes('/auth/login') ||
         endpoint.includes('/auth/register') ||
         endpoint.includes('/auth/me');
-      if (!isAuthEndpoint) {
+      if (!isAuthEndpoint && token) {
         if (typeof window !== 'undefined') {
           localStorage.removeItem('auth-storage');
           localStorage.removeItem('challenge-storage');
           const currentPath = window.location.pathname;
           if (currentPath !== '/login' && currentPath !== '/register' && currentPath !== '/') {
-            window.location.href = '/login';
+            window.location.replace('/login');
             return new Promise(() => {}) as Promise<T>;
           }
         }

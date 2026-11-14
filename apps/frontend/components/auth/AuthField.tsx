@@ -1,6 +1,6 @@
 'use client';
 
-import { forwardRef, useState } from 'react';
+import { forwardRef, useRef, useState } from 'react';
 import { AlertCircle, Eye, EyeOff } from 'lucide-react';
 
 type AuthFieldProps = Omit<
@@ -21,22 +21,42 @@ const AuthField = forwardRef<HTMLInputElement, AuthFieldProps>(
     ref
   ) {
     const [revealed, setRevealed] = useState(false);
+    const localRef = useRef<HTMLInputElement | null>(null);
     const isPassword = type === 'password';
     const inputType = isPassword && revealed ? 'text' : type;
+
+    const setInputRef = (node: HTMLInputElement | null) => {
+      localRef.current = node;
+      if (typeof ref === 'function') {
+        ref(node);
+      } else if (ref) {
+        ref.current = node;
+      }
+    };
+
+    const handleCardClick = (event: React.MouseEvent<HTMLDivElement>) => {
+      const target = event.target as HTMLElement;
+      if (target.closest('button, a, input, label')) return;
+      localRef.current?.focus();
+    };
 
     return (
       <div
         className="auth-rise"
         style={{ '--auth-i': index } as React.CSSProperties}
       >
-        <div className="auth-field" data-invalid={error ? 'true' : undefined}>
+        <div
+          className="auth-field"
+          data-invalid={error ? 'true' : undefined}
+          onClick={handleCardClick}
+        >
           <label htmlFor={id} className="auth-label">
             {label}
           </label>
           <div className="auth-control">
             <input
               {...inputProps}
-              ref={ref}
+              ref={setInputRef}
               id={id}
               type={inputType}
               className={

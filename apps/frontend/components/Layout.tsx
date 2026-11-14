@@ -8,7 +8,7 @@ import dynamic from 'next/dynamic';
 import { Home, Calendar, User, Settings, LogOut, Moon, Sun, Flame, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { startCircularReveal } from '@/lib/themeTransition';
 import { getLocalDateString } from '@/lib/utils/date';
 import HeaderCountdownTimer from '@/components/HeaderCountdownTimer';
@@ -18,6 +18,7 @@ const PlansModal = dynamic(() => import('@/components/PlansModal'), { ssr: false
 const LogMealModal = dynamic(() => import('@/components/LogMealModal'), { ssr: false });
 const LogWorkoutModal = dynamic(() => import('@/components/LogWorkoutModal'), { ssr: false });
 const QuickActionsSheet = dynamic(() => import('@/components/QuickActionsSheet'), { ssr: false });
+const LogoutConfirmSheet = dynamic(() => import('@/components/profile/LogoutConfirmSheet'), { ssr: false });
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, logout, user } = useAuthStore();
@@ -36,6 +37,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { difficulty, isActive } = useChallengeStore();
   const pathname = usePathname();
   const router = useRouter();
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
 
   // ── Applies dark/light class + data-appearance synchronously on <html> ──────
   // This must run synchronously inside startViewTransition's callback so the API
@@ -127,10 +129,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {/* Timer - Only visible if logged in */}
           {isAuthenticated && <HeaderCountdownTimer />}
 
-          {/* Nav - Only visible if logged in */}
+          {/* Nav - Desktop links (mobile uses bottom nav) + utility controls */}
           <nav className="app-nav flex items-center gap-1 md:gap-2">
             {isAuthenticated && user?.onboardingCompleted && (
-              <>
+              <div data-tour="site-nav" className="hidden lg:flex items-center gap-1 md:gap-2">
                 <Link href="/dashboard" className={`app-header-nav flex flex-col items-center p-2 transition-colors ${pathname === '/dashboard' ? 'is-active' : ''}`}>
                   <Home size={20} />
                   <span className="text-[10px] mt-1 hidden sm:block">Inicio</span>
@@ -139,7 +141,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   <Calendar size={20} />
                   <span className="text-[10px] mt-1 hidden sm:block">Calendario</span>
                 </Link>
-                <button aria-label="Abrir acciones rápidas" aria-expanded={isQuickActionsOpen} onClick={openQuickActions} className="app-header-nav flex flex-col items-center rounded-xl p-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400">
+                <button data-tour="quick-actions" aria-label="Abrir acciones rápidas" aria-expanded={isQuickActionsOpen} onClick={openQuickActions} className="app-header-nav flex flex-col items-center rounded-xl p-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400">
                   <Plus size={20} />
 
                 </button>
@@ -151,7 +153,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   <Settings size={20} />
                   <span className="text-[10px] mt-1 hidden sm:block">Ajustes</span>
                 </Link>
-              </>
+              </div>
             )}
 
             {/* Always visible theme toggle */}
@@ -164,9 +166,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </span>
             </button>
 
-            {/* Logout button */}
-            {isAuthenticated && (
-              <button aria-label="Cerrar sesión" onClick={() => { logout(); router.push('/login'); }} className="app-header-control p-2 transition-colors rounded-full border ml-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400">
+            {/* Logout button: shown next to theme toggle only on Settings */}
+            {isAuthenticated && pathname === '/settings' && (
+              <button aria-label="Cerrar sesión" onClick={() => setIsLogoutConfirmOpen(true)} className="inline-flex app-header-control p-2 transition-colors rounded-full border ml-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400">
                 <LogOut size={18} />
               </button>
             )}
@@ -175,7 +177,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </header>
 
       {/* Main Content */}
-      <main id="main-content" className={`app-main flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 pb-24 md:pb-6 ${!isAuthenticated ? 'flex items-center justify-center' : ''}`}>
+      <main id="main-content" className={`app-main flex-1 max-w-7xl w-full mx-auto px-4 pt-3 md:p-6 ${isAuthenticated && user?.onboardingCompleted ? 'pb-24 md:pb-6' : 'app-main--no-nav pb-3 md:pb-6'} ${!isAuthenticated ? 'flex items-center justify-center' : ''}`}>
         {children}
       </main>
 
@@ -192,10 +194,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           onPlans={openPlansModal}
         />
       )}
+      {isAuthenticated && isLogoutConfirmOpen && (
+        <LogoutConfirmSheet
+          open={isLogoutConfirmOpen}
+          onClose={() => setIsLogoutConfirmOpen(false)}
+          onConfirm={() => {
+            setIsLogoutConfirmOpen(false);
+            logout();
+            router.replace('/login');
+          }}
+        />
+      )}
 
       {/* Mobile Bottom Nav - Only visible if logged in */}
       {isAuthenticated && user?.onboardingCompleted && (
-        <nav aria-label="Navegación principal" className="mobile-bottom-nav lg:hidden fixed bottom-0 left-0 right-0 z-50 flex items-end justify-around gap-1 border-t border-white/10 px-1 pt-1">
+        <nav data-tour="site-nav" aria-label="Navegación principal" className="mobile-bottom-nav lg:hidden fixed bottom-0 left-0 right-0 z-50 flex items-end justify-around gap-1 border-t border-white/10 px-1 pt-1">
           <Link href="/dashboard" aria-current={pathname === '/dashboard' ? 'page' : undefined} className={`flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl px-1 py-1.5 text-[11px] font-semibold ${pathname === '/dashboard' ? '' : 'text-white/55'}`}>
             <Home size={22} strokeWidth={pathname === '/dashboard' ? 2.4 : 1.8} />
             <span>Inicio</span>
@@ -204,7 +217,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <Calendar size={22} strokeWidth={pathname === '/calendar' ? 2.4 : 1.8} />
             <span>Calendario</span>
           </Link>
-          <button aria-label="Abrir acciones rápidas" aria-expanded={isQuickActionsOpen} onClick={openQuickActions} className="mobile-action-button -mt-6 flex min-w-0 flex-1 flex-col items-center gap-1 pb-1 text-[11px] font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300">
+          <button data-tour="quick-actions" aria-label="Abrir acciones rápidas" aria-expanded={isQuickActionsOpen} onClick={openQuickActions} className="mobile-action-button -mt-6 flex min-w-0 flex-1 flex-col items-center gap-1 pb-1 text-[11px] font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300">
             <span className="flex h-14 w-14 items-center justify-center rounded-full border-4 border-zinc-950 bg-rose-500 shadow-[0_8px_24px_rgba(244,63,94,0.4)] transition-transform active:scale-95">
               <Plus size={28} strokeWidth={2.5} />
             </span>

@@ -1,9 +1,17 @@
-import type { ReactNode } from 'react';
+'use client';
+
+import { useLayoutEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import LogoMark from './LogoMark';
 import PatternBackdrop from './PatternBackdrop';
 import AuthThemeToggle from './AuthThemeToggle';
+import {
+  consumeAuthEnterMode,
+  navigateAuthWithTransition,
+  notifyAuthRouteCommitted,
+} from '@/lib/authTransition';
 
 type AuthShellProps = {
   variant: 'login' | 'register';
@@ -27,10 +35,33 @@ export default function AuthShell({
   footer,
   children,
 }: AuthShellProps) {
+  const router = useRouter();
+  const [enterMode] = useState(() => consumeAuthEnterMode());
+
+  useLayoutEffect(() => {
+    notifyAuthRouteCommitted();
+  }, [variant]);
+
+  const handleBackClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    if (
+      !backHref ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey ||
+      event.button !== 0
+    ) {
+      return;
+    }
+    event.preventDefault();
+    navigateAuthWithTransition(router, backHref, 'backward');
+  };
+
   return (
     <main className="auth-viewport">
       <section
         className={`auth-card auth-card--${variant}`}
+        data-auth-enter={enterMode ?? undefined}
         aria-labelledby="auth-title"
       >
         <header className="auth-hero">
@@ -49,6 +80,7 @@ export default function AuthShell({
                     href={backHref}
                     className="auth-back"
                     aria-label="Volver a iniciar sesión"
+                    onClick={handleBackClick}
                   >
                     <ArrowLeft size={21} strokeWidth={1.75} aria-hidden="true" />
                   </Link>

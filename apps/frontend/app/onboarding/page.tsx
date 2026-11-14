@@ -3,447 +3,896 @@
 import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useChallengeStore, Difficulty } from '@/store/useChallengeStore';
-import { useQuestStore } from '@/store/useQuestStore';
+import { useQuestStore, type SideQuestTemplate } from '@/store/useQuestStore';
+import { useUIStore } from '@/store/useUIStore';
+import { setPendingTutorial } from '@/lib/tutorial';
 import { useRouter } from 'next/navigation';
-import { ChevronRight, ChevronLeft, SkipForward, Calendar, X, Pencil } from 'lucide-react';
+import {
+  ChevronRight,
+  ChevronLeft,
+  SkipForward,
+  Calendar,
+  Pencil,
+  Check,
+} from 'lucide-react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { PLANS } from '@/components/PlansModal';
+import RulerPicker from '@/components/onboarding/RulerPicker';
+import VerticalWheelPicker from '@/components/onboarding/VerticalWheelPicker';
+import QuestPreviewSheet from '@/components/onboarding/QuestPreviewSheet';
+import CustomTaskEditorSheet, {
+  createEmptyCustomTask,
+  getCustomTaskIcon,
+  type CustomTask,
+} from '@/components/onboarding/CustomTaskEditorSheet';
+import { calculateAgeBasedBmi, type BmiCategoryId } from '@/lib/utils/bmi';
+
+const TOTAL_STEPS = 6;
+
+const BMI_SEGMENTS: Array<{ id: BmiCategoryId; label: string; colorVar: string }> = [
+  { id: 'underweight', label: 'Bajo', colorVar: 'var(--status-info)' },
+  { id: 'normal', label: 'Normal', colorVar: 'var(--status-success)' },
+  { id: 'overweight', label: 'Sobrepeso', colorVar: 'var(--status-warning)' },
+  { id: 'obesity', label: 'Obesidad', colorVar: 'var(--status-danger)' },
+];
+
+const STEP_META = [
+  {
+    eyebrow: 'Paso 1 · Sobre vos',
+    title: '¿Cuántos años tenés?',
+    subtitle: 'Deslizá los números hacia arriba o abajo.',
+  },
+  {
+    eyebrow: 'Paso 1 · Sobre vos',
+    title: '¿Cuánto medís?',
+    subtitle: 'Ajustá tu altura en centímetros.',
+  },
+  {
+    eyebrow: 'Paso 1 · Sobre vos',
+    title: '¿Cuál es tu peso actual?',
+    subtitle: 'Arrastrá la regla para ajustar kilos y gramos.',
+  },
+  {
+    eyebrow: 'Paso 1 · Opcional',
+    title: '¿Cuál es tu peso ideal?',
+    subtitle: 'Definí una meta o saltá este paso si preferís.',
+  },
+  {
+    eyebrow: 'Paso 2 · Opcional',
+    title: 'Actividades dinámicas',
+    subtitle: 'Sumá misiones paralelas a tu desafío.',
+  },
+  {
+    eyebrow: 'Paso 3 · Plan principal',
+    title: 'Elegí tu desafío',
+    subtitle: 'Definí la intensidad de tus próximos 75 días.',
+  },
+];
+
+const EASE_OUT = [0.23, 1, 0.32, 1] as const;
 
 export default function Onboarding() {
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(0);
+  const [direction, setDirection] = useState<1 | -1>(1);
   const [isChallengeLoading, setIsChallengeLoading] = useState(false);
   const { updateProfile, completeOnboarding } = useAuthStore();
   const { startChallenge } = useChallengeStore();
   const { availableQuests, fetchAvailableQuests, subscribeToQuest } = useQuestStore();
   const router = useRouter();
+  const reduceMotion = useReducedMotion();
 
-  // Carga de quests con estado de loading
-  const [fetchQuestsStatus, setFetchQuestsStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('loading');
+  const [fetchQuestsStatus, setFetchQuestsStatus] = useState<
+    'idle' | 'loading' | 'success' | 'error'
+  >('loading');
 
   useEffect(() => {
     fetchAvailableQuests().finally(() => setFetchQuestsStatus('success'));
   }, [fetchAvailableQuests]);
 
-  // Step 1: Biometrics
-  const [age, setAge] = useState('');
-  const [weight, setWeight] = useState('');
-  const [targetWeight, setTargetWeight] = useState('');
-  const [height, setHeight] = useState('');
-  const [touched, setTouched] = useState<{ age?: boolean; weight?: boolean; height?: boolean }>({});
+  // Biometrics (substeps 0..3)
+  const [age, setAge] = useState(25);
+  const [weight, setWeight] = useState(70.0);
+  const [targetWeight, setTargetWeight] = useState<number | null>(null);
+  const [height, setHeight] = useState(170);
 
-  const isAgeValid = age !== '' && !isNaN(parseFloat(age)) && parseFloat(age) > 0;
-  const isWeightValid = weight !== '' && !isNaN(parseFloat(weight)) && parseFloat(weight) > 0;
-  const isHeightValid = height !== '' && !isNaN(parseFloat(height)) && parseFloat(height) > 0;
-
-  // Step 2: Side Quests
+  // Side Quests (step 4)
   const [selectedQuests, setSelectedQuests] = useState<string[]>([]);
+  const [previewQuest, setPreviewQuest] = useState<SideQuestTemplate | null>(null);
 
-  // Step 3: Challenge Selection
-  const [difficulty, setDifficulty] = useState<Difficulty>('Medium');
-  const [customGoals, setCustomGoals] = useState<string[]>(['Drink 1 Gallon water', 'Read 10 pages', 'Workout 45m']);
-
-  // --- Validation ---
-  const isStep1Valid = () => {
-    const ageNum = parseFloat(age);
-    const weightNum = parseFloat(weight);
-    const heightNum = parseFloat(height);
-    return (
-      age !== '' && !isNaN(ageNum) && ageNum > 0 &&
-      weight !== '' && !isNaN(weightNum) && weightNum > 0 &&
-      height !== '' && !isNaN(heightNum) && heightNum > 0
+  const toggleQuestSelection = (questId: string) => {
+    setSelectedQuests((prev) =>
+      prev.includes(questId)
+        ? prev.filter((id) => id !== questId)
+        : [...prev, questId]
     );
   };
 
-  const isStep3Valid = () => {
+  // Challenge Selection (step 5)
+  const [difficulty, setDifficulty] = useState<Difficulty>('Medium');
+  const [planDirection, setPlanDirection] = useState<1 | -1>(1);
+  const [customTasks, setCustomTasks] = useState<CustomTask[]>([]);
+  const [isCustomEditorOpen, setIsCustomEditorOpen] = useState(false);
+
+  const validCustomTasks = customTasks.filter((t) => t.title.trim() !== '');
+  const hasCustomTasks = validCustomTasks.length > 0;
+
+  const isStep5Valid = () => {
     if (difficulty === 'Custom') {
-      return customGoals.some(g => g.trim() !== '');
+      return hasCustomTasks;
     }
     return true;
   };
 
+  const openCustomEditor = () => {
+    if (customTasks.length === 0) {
+      setCustomTasks([createEmptyCustomTask()]);
+    }
+    setIsCustomEditorOpen(true);
+  };
+
+  const handleSelectDifficulty = (nextDiff: Difficulty) => {
+    const prevIdx = PLANS.findIndex((p) => p.difficulty === difficulty);
+    const nextIdx = PLANS.findIndex((p) => p.difficulty === nextDiff);
+    if (nextIdx !== prevIdx) {
+      setPlanDirection(nextIdx > prevIdx ? 1 : -1);
+      setDifficulty(nextDiff);
+    }
+  };
+
   const canProceed = () => {
-    if (step === 1) return isStep1Valid();
-    if (step === 3) return isStep3Valid();
+    if (step === 5) return isStep5Valid();
     return true;
   };
 
-  // --- Handlers ---
+  const goToStep = (nextStep: number) => {
+    if (nextStep < 0 || nextStep >= TOTAL_STEPS) return;
+    setDirection(nextStep > step ? 1 : -1);
+    setStep(nextStep);
+  };
+
   const handleNext = async () => {
     if (!canProceed()) return;
 
-    if (step === 1) {
+    if (step === 3) {
+      const finalTarget =
+        targetWeight ?? Math.max(30, Number((weight - 5).toFixed(1)));
+      setTargetWeight(finalTarget);
       updateProfile({
-        age: parseInt(age),
-        weight: parseFloat(weight),
-        targetWeight: targetWeight ? parseFloat(targetWeight) : undefined,
-        height: parseFloat(height),
+        age,
+        weight,
+        targetWeight: finalTarget,
+        height,
       });
-      setStep(2);
-    } else if (step === 2) {
-      // F-42: las misiones del onboarding se guardan en useQuestStore, la misma
-      // fuente que leen el dashboard y el perfil.
+      goToStep(4);
+      return;
+    }
+
+    if (step === 4) {
       await Promise.all(
         selectedQuests.map((qId) => {
-          const q = availableQuests.find(aq => aq.id === qId);
-          return q ? subscribeToQuest(q.title, q.difficulty, q.durationDays) : Promise.resolve();
+          const q = availableQuests.find((aq) => aq.id === qId);
+          return q
+            ? subscribeToQuest(q.title, q.difficulty, q.durationDays)
+            : Promise.resolve();
         })
       );
-      setStep(3);
-    } else if (step === 3) {
+      goToStep(5);
+      return;
+    }
+
+    if (step === 5) {
       setIsChallengeLoading(true);
       try {
-        const formattedCustomGoals = customGoals.map(g => ({ title: g }));
-        await startChallenge(difficulty, difficulty === 'Custom' ? formattedCustomGoals : undefined);
+        const formattedCustomGoals = customTasks
+          .filter((t) => t.title.trim())
+          .map(({ title, description, icon }) => ({
+            title: title.trim(),
+            description: description.trim(),
+            icon,
+          }));
+        await startChallenge(
+          difficulty,
+          difficulty === 'Custom' ? formattedCustomGoals : undefined
+        );
         await completeOnboarding();
+        const completedUserId = useAuthStore.getState().user?.id;
+        setPendingTutorial(completedUserId);
+        useUIStore.getState().openTutorial();
         router.push('/dashboard');
       } catch {
         setIsChallengeLoading(false);
       }
+      return;
+    }
+
+    goToStep(step + 1);
+  };
+
+  const handleSkipOptional = () => {
+    if (step === 3) {
+      setTargetWeight(null);
+      updateProfile({
+        age,
+        weight,
+        targetWeight: undefined,
+        height,
+      });
+      goToStep(4);
+    } else if (step === 4) {
+      goToStep(5);
     }
   };
 
-  const handleSkipStep2 = () => {
-    setStep(3);
-  };
+  const activePlan = PLANS.find((p) => p.difficulty === difficulty) ?? PLANS[1];
+  const activePlanTasks =
+    activePlan.difficulty === 'Custom' && hasCustomTasks
+      ? validCustomTasks.map((task) => {
+          const Icon = getCustomTaskIcon(task.icon);
+          return {
+            icon: (
+              <Icon
+                className="w-3.5 h-3.5 shrink-0"
+                style={{ color: 'var(--accent-text)' }}
+              />
+            ),
+            label: task.title,
+          };
+        })
+      : activePlan.tasks;
 
-  // --- Missing fields label (Step 1) ---
-  const getMissingFields = () => {
-    const missing: string[] = [];
-    const ageNum = parseFloat(age);
-    const weightNum = parseFloat(weight);
-    const heightNum = parseFloat(height);
-    if (!age || isNaN(ageNum) || ageNum <= 0) missing.push('Edad');
-    if (!weight || isNaN(weightNum) || weightNum <= 0) missing.push('Peso');
-    if (!height || isNaN(heightNum) || heightNum <= 0) missing.push('Altura');
-    return missing;
-  };
+  const meta = STEP_META[step];
+  const suggestedTarget = Math.max(30, Number((weight - 5).toFixed(1)));
+  const effectiveTargetWeight = targetWeight ?? suggestedTarget;
+  const bmiInfo = calculateAgeBasedBmi(weight, height, age);
 
   return (
-    <div className="min-h-screen flex flex-col p-4 max-w-2xl mx-auto pt-12">
-      {/* Progress Bar */}
-      <div className="flex gap-2 mb-8">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className={`h-2 flex-1 rounded-full ${step >= i ? 'bg-zinc-900 dark:bg-zinc-100' : 'bg-zinc-200 dark:bg-zinc-800'}`} />
-        ))}
-      </div>
-
-      <div className="flex-1 bg-white dark:bg-zinc-900 rounded-3xl shadow-sm p-6 md:p-10 border border-zinc-100 dark:border-zinc-800">
-        {step === 1 && (
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
-            <div>
-              <h2 className="text-3xl font-bold tracking-tight mb-2">Sobre Vos</h2>
-              <p className="text-zinc-500 dark:text-zinc-400">Completá tus métricas base para comenzar. Todos los campos son obligatorios.</p>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label htmlFor="onboarding-age" className="block text-sm font-medium mb-1">
-                  Edad <span className="text-red-500">*</span>
-                </label>
-                <input
-                  id="onboarding-age"
-                  type="number"
-                  value={age}
-                  onChange={e => setAge(e.target.value)}
-                  onBlur={() => setTouched(prev => ({ ...prev, age: true }))}
-                  aria-invalid={touched.age && !isAgeValid ? true : undefined}
-                  aria-describedby={touched.age && !isAgeValid ? 'onboarding-age-error' : undefined}
-                  className={`w-full px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-800 border outline-none transition-colors ${touched.age && !isAgeValid ? 'border-red-500 dark:border-red-400' : 'border-transparent'}`}
-                  placeholder="ej. 25"
-                  min={1}
-                />
-                {touched.age && !isAgeValid && (
-                  <p id="onboarding-age-error" role="alert" className="mt-1 text-xs text-red-500 dark:text-red-400">
-                    Ingresá una edad válida mayor a 0.
-                  </p>
-                )}
-              </div>
-              <div>
-                <label htmlFor="onboarding-weight-kg" className="block text-sm font-medium mb-1">
-                  Peso actual (kg) <span className="text-red-500">*</span>
-                </label>
-                <div className="flex items-center gap-2">
-                  <select
-                    id="onboarding-weight-kg"
-                    aria-label="Kilogramos de peso actual"
-                    aria-invalid={touched.weight && !isWeightValid ? true : undefined}
-                    aria-describedby={touched.weight && !isWeightValid ? 'onboarding-weight-error' : undefined}
-                    value={weight === '' ? '' : Math.floor(Number(weight))}
-                    onBlur={() => setTouched(prev => ({ ...prev, weight: true }))}
-                    onChange={(e) => {
-                      const newInt = e.target.value;
-                      const currentDec = weight === '' ? '0' : Math.round((Number(weight) - Math.floor(Number(weight))) * 10).toString();
-                      setWeight(`${newInt}.${currentDec}`);
-                    }}
-                    className={`flex-1 px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-800 border outline-none appearance-none transition-colors ${touched.weight && !isWeightValid ? 'border-red-500 dark:border-red-400' : 'border-transparent'}`}
-                  >
-                    <option value="" disabled>Peso</option>
-                    {Array.from({ length: 271 }, (_, i) => i + 30).map((kg) => (
-                      <option key={kg} value={kg}>{kg}</option>
-                    ))}
-                  </select>
-                  <span className="text-xl font-bold text-zinc-400 dark:text-zinc-500">.</span>
-                  <select
-                    aria-label="Décimas de kilogramo de peso actual"
-                    value={weight === '' ? '' : Math.round((Number(weight) - Math.floor(Number(weight))) * 10)}
-                    onBlur={() => setTouched(prev => ({ ...prev, weight: true }))}
-                    onChange={(e) => {
-                      const newDec = e.target.value;
-                      const currentInt = weight === '' ? '75' : Math.floor(Number(weight)).toString();
-                      setWeight(`${currentInt}.${newDec}`);
-                    }}
-                    className={`w-24 px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-800 border outline-none appearance-none text-center transition-colors ${touched.weight && !isWeightValid ? 'border-red-500 dark:border-red-400' : 'border-transparent'}`}
-                  >
-                    <option value="" disabled>Gr</option>
-                    {Array.from({ length: 10 }, (_, i) => i).map((g) => (
-                      <option key={g} value={g}>{g}</option>
-                    ))}
-                  </select>
-                </div>
-                {touched.weight && !isWeightValid && (
-                  <p id="onboarding-weight-error" role="alert" className="mt-1 text-xs text-red-500 dark:text-red-400">
-                    Seleccioná tu peso actual.
-                  </p>
-                )}
-              </div>
-              <div>
-                <label htmlFor="onboarding-target-weight-kg" className="block text-sm font-medium mb-1">
-                  Meta de peso (kg) <span className="text-zinc-500 font-normal text-xs ml-1">(Opcional)</span>
-                </label>
-                <div className="flex items-center gap-2">
-                  <select
-                    id="onboarding-target-weight-kg"
-                    aria-label="Kilogramos de meta de peso"
-                    value={targetWeight === '' ? '' : Math.floor(Number(targetWeight))}
-                    onChange={(e) => {
-                      const newInt = e.target.value;
-                      const currentDec = targetWeight === '' ? '0' : Math.round((Number(targetWeight) - Math.floor(Number(targetWeight))) * 10).toString();
-                      setTargetWeight(`${newInt}.${currentDec}`);
-                    }}
-                    className="flex-1 px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-800 border-none outline-none appearance-none"
-                  >
-                    <option value="" disabled>Peso</option>
-                    {Array.from({ length: 271 }, (_, i) => i + 30).map((kg) => (
-                      <option key={kg} value={kg}>{kg}</option>
-                    ))}
-                  </select>
-                  <span className="text-xl font-bold text-zinc-400 dark:text-zinc-500">.</span>
-                  <select
-                    aria-label="Décimas de kilogramo de meta de peso"
-                    value={targetWeight === '' ? '' : Math.round((Number(targetWeight) - Math.floor(Number(targetWeight))) * 10)}
-                    onChange={(e) => {
-                      const newDec = e.target.value;
-                      const currentInt = targetWeight === '' ? '75' : Math.floor(Number(targetWeight)).toString();
-                      setTargetWeight(`${currentInt}.${newDec}`);
-                    }}
-                    className="w-24 px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-800 border-none outline-none appearance-none text-center"
-                  >
-                    <option value="" disabled>Gr</option>
-                    {Array.from({ length: 10 }, (_, i) => i).map((g) => (
-                      <option key={g} value={g}>{g}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label htmlFor="onboarding-height" className="block text-sm font-medium mb-1">
-                  Altura (cm) <span className="text-red-500">*</span>
-                </label>
-                <input
-                  id="onboarding-height"
-                  type="number"
-                  value={height}
-                  onChange={e => setHeight(e.target.value)}
-                  onBlur={() => setTouched(prev => ({ ...prev, height: true }))}
-                  aria-invalid={touched.height && !isHeightValid ? true : undefined}
-                  aria-describedby={touched.height && !isHeightValid ? 'onboarding-height-error' : undefined}
-                  className={`w-full px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-800 border outline-none transition-colors ${touched.height && !isHeightValid ? 'border-red-500 dark:border-red-400' : 'border-transparent'}`}
-                  placeholder="ej. 175"
-                  min={1}
-                />
-                {touched.height && !isHeightValid && (
-                  <p id="onboarding-height-error" role="alert" className="mt-1 text-xs text-red-500 dark:text-red-400">
-                    Ingresá una altura válida en centímetros.
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* Validation message */}
-            {!isStep1Valid() && (getMissingFields().length > 0) && (
-              <p className="text-sm text-red-500 dark:text-red-400">
-                Completá los siguientes campos: {getMissingFields().join(', ')}.
-              </p>
-            )}
-          </div>
-        )}
-
-        {step === 2 && (
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
-            <div>
-              <h2 className="text-3xl font-bold tracking-tight mb-2">Actividades Dinámicas</h2>
-              <p className="text-zinc-500 dark:text-zinc-400">Actividades opcionales para potenciar tu recorrido. Podés saltearte este paso.</p>
-            </div>
-
-            <div className="space-y-3">
-              {fetchQuestsStatus === 'loading' ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="p-4 rounded-2xl border-2 border-transparent bg-zinc-50 dark:bg-zinc-800 animate-pulse">
-                    <div className="flex justify-between items-center">
-                      <div className="pv2-skeleton h-5 w-3/4" />
-                      <div className="pv2-skeleton h-5 w-20" />
-                    </div>
-                    <div className="pv2-skeleton h-4 w-1/2 mt-1" />
-                  </div>
-                ))
-              ) : availableQuests.length > 0 ? (
-                availableQuests.map((quest) => (
-                  <button
-                    key={quest.id}
-                    type="button"
-                    aria-pressed={selectedQuests.includes(quest.id)}
-                    onClick={() => setSelectedQuests(prev => prev.includes(quest.id) ? prev.filter(id => id !== quest.id) : [...prev, quest.id])}
-                    className={`block w-full p-4 text-left rounded-2xl border-2 cursor-pointer transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-400 ${selectedQuests.includes(quest.id) ? 'border-zinc-900 dark:border-zinc-100 bg-zinc-50 dark:bg-zinc-800/50' : 'border-transparent bg-zinc-50 dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700'}`}
-                  >
-                    <div className="flex justify-between items-center">
-                      <h3 className="font-semibold">{quest.title}</h3>
-                      <span className="text-xs font-medium px-2 py-1 bg-white dark:bg-zinc-900 rounded-md">{quest.difficulty}</span>
-                    </div>
-                    <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">{quest.durationDays} días de desafío</p>
-                  </button>
-                ))
-              ) : (
-                <p className="text-zinc-500 dark:text-zinc-400 text-center py-8">No hay actividades disponibles en este momento.</p>
-              )}
-            </div>
-          </div>
-        )}
-
-        {step === 3 && (
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
-            <div>
-              <h2 className="text-3xl font-bold tracking-tight mb-2">Elegí la Dificultad</h2>
-              <p className="text-zinc-500 dark:text-zinc-400">Seleccioná tu plan principal de 75 Días.</p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {PLANS.map((plan) => {
-                const isSelected = difficulty === plan.difficulty;
-                const tasks = plan.difficulty === 'Custom'
-                  ? customGoals
-                    .filter(goal => goal.trim())
-                    .map(label => ({
-                      icon: <Pencil className="w-3.5 h-3.5 text-emerald-500" />,
-                      label,
-                    }))
-                  : plan.tasks;
-                return (
-                  <button
-                    key={plan.difficulty}
-                    type="button"
-                    aria-pressed={isSelected}
-                    onClick={() => setDifficulty(plan.difficulty)}
-                    className={`w-full text-left p-5 rounded-2xl border-2 cursor-pointer transition-all flex flex-col gap-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-400 ${isSelected ? 'border-zinc-900 dark:border-zinc-100 bg-zinc-50 dark:bg-zinc-800/50 shadow-md' : 'border-transparent bg-zinc-50 dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700'}`}
-                  >
-                    {/* Title & Description */}
-                    <div>
-                      <h3 className={`font-bold text-lg leading-tight mb-1 ${isSelected ? plan.color : 'text-zinc-900 dark:text-zinc-100'}`}>
-                        {plan.title}
-                      </h3>
-                      <p className="text-zinc-500 dark:text-zinc-400 text-xs leading-relaxed">{plan.description}</p>
-                    </div>
-
-                    {/* Duration badge */}
-                    <div className="flex items-center gap-1.5 text-xs text-zinc-400 dark:text-zinc-500">
-                      <Calendar className="w-3.5 h-3.5" />
-                      <span className="font-medium">75 días</span>
-                    </div>
-
-                    {/* Tasks */}
-                    <div className="space-y-2">
-                      <p className="text-zinc-400 dark:text-zinc-500 text-[11px] font-bold uppercase tracking-wider">Tareas Diarias:</p>
-                      <ul className="space-y-1.5">
-                        {tasks.map((task, i) => (
-                          <li key={i} className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-300 font-medium">
-                            {task.icon}
-                            <span className="leading-snug">{task.label}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-
-            {difficulty === 'Custom' && (
-              <div className="mt-6 space-y-3">
-                <h4 className="font-medium">Objetivos Personalizados</h4>
-                {customGoals.map((goal, i) => (
-                  <div key={i} className="flex gap-2">
-                    <input
-                      type="text"
-                      value={goal}
-                      onChange={(e) => {
-                        const newGoals = [...customGoals];
-                        newGoals[i] = e.target.value;
-                        setCustomGoals(newGoals);
-                      }}
-                      className="flex-1 px-4 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-800 border-none outline-none"
-                      placeholder="Ej. Tomar 1 litro de agua"
-                    />
-                    <button onClick={() => setCustomGoals(customGoals.filter((_, index) => index !== i))} className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-950 rounded-xl">
-                      Eliminar
-                    </button>
-                  </div>
-                ))}
-                <button onClick={() => setCustomGoals([...customGoals, ''])} className="text-sm font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100">
-                  + Agregar objetivo
-                </button>
-
-                {!isStep3Valid() && (
-                  <p className="text-sm text-red-500 dark:text-red-400">
-                    Agregá al menos un objetivo personalizado para continuar.
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      <div className="flex justify-between mt-8">
-        {step > 1 ? (
-          <button onClick={() => setStep(step - 1)} className="flex items-center px-6 py-3 rounded-xl font-medium hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors">
-            <ChevronLeft size={20} className="mr-2" /> Atrás
-          </button>
-        ) : <div />}
-
+    <div className="h-[calc(100dvh-5.75rem)] md:h-auto md:min-h-[620px] max-w-lg mx-auto flex flex-col justify-between gap-3 overflow-hidden select-none">
+      {/* Top Progress + Centered iOS-style Question Header */}
+      <header className="shrink-0 space-y-4 pt-1">
         <div className="flex items-center gap-3">
-          {step === 2 && selectedQuests.length === 0 ? (
-            <button
-              onClick={handleSkipStep2}
-              className="flex items-center px-8 py-3 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-xl font-medium hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors cursor-pointer"
-            >
-              Saltar <SkipForward size={20} className="ml-2" />
-            </button>
-          ) : (
-            <button
-              onClick={handleNext}
-              disabled={!canProceed() || isChallengeLoading}
-              className={`flex items-center px-8 py-3 rounded-xl font-medium transition-colors ${canProceed() && !isChallengeLoading
-                ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 cursor-pointer'
-                : 'bg-zinc-300 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-400 cursor-not-allowed opacity-60'
-                }`}
-            >
-              {isChallengeLoading ? (
-                <>Creando tu desafío <span className="pv2-skeleton w-4 h-4 ml-2" /></>
-              ) : (
-                <>{step === 3 ? 'Comenzar Desafío' : 'Siguiente'} <ChevronRight size={20} className="ml-2" /></>
-              )}
-            </button>
-          )}
+          <div
+            className="h-1.5 flex-1 rounded-full overflow-hidden"
+            style={{ backgroundColor: 'var(--progress-track)' }}
+            role="progressbar"
+            aria-valuenow={step + 1}
+            aria-valuemin={1}
+            aria-valuemax={TOTAL_STEPS}
+          >
+            <motion.div
+              className="h-full w-full rounded-full"
+              style={{
+                backgroundColor: 'var(--accent-fill)',
+                transformOrigin: 'left',
+              }}
+              initial={false}
+              animate={{ scaleX: (step + 1) / TOTAL_STEPS }}
+              transition={
+                reduceMotion
+                  ? { duration: 0.01 }
+                  : { duration: 0.26, ease: EASE_OUT }
+              }
+            />
+          </div>
+          <span
+            className="text-xs font-semibold tabular-nums shrink-0"
+            style={{ color: 'var(--text-muted)' }}
+          >
+            {step + 1} / {TOTAL_STEPS}
+          </span>
         </div>
+
+        <div className="text-center space-y-1 px-2">
+          <p
+            className="text-[11px] font-semibold uppercase tracking-wider"
+            style={{ color: 'var(--accent-text)' }}
+          >
+            {meta.eyebrow}
+          </p>
+          <h1
+            className="text-2xl sm:text-3xl font-bold tracking-tight leading-tight"
+            style={{ color: 'var(--text-primary)' }}
+          >
+            {meta.title}
+          </h1>
+          <p
+            className="text-xs sm:text-sm leading-snug"
+            style={{ color: 'var(--text-muted)' }}
+          >
+            {meta.subtitle}
+          </p>
+        </div>
+      </header>
+
+      {/* Main Full-Screen Focused Stage */}
+      <div className="relative flex-1 min-h-0 flex flex-col justify-center overflow-hidden">
+        <AnimatePresence mode="wait" custom={direction} initial={false}>
+          <motion.div
+            key={step}
+            custom={direction}
+            variants={{
+              enter: (dir: 1 | -1) =>
+                reduceMotion ? { opacity: 0 } : { opacity: 0, x: `${dir * 26}%` },
+              center: { opacity: 1, x: 0 },
+              exit: (dir: 1 | -1) =>
+                reduceMotion ? { opacity: 0 } : { opacity: 0, x: `${dir * -26}%` },
+            }}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={
+              reduceMotion
+                ? { duration: 0.16, ease: 'easeOut' }
+                : { duration: 0.25, ease: EASE_OUT }
+            }
+            className="h-full min-h-0 flex flex-col justify-center"
+          >
+            {/* Substep 1: Edad — Vertical numbers-only wheel */}
+            {step === 0 && (
+              <div className="flex flex-col items-center justify-center py-2">
+                <VerticalWheelPicker
+                  label="Edad en años"
+                  value={age}
+                  onChange={setAge}
+                  min={12}
+                  max={110}
+                  unitLabel="años"
+                />
+              </div>
+            )}
+
+            {/* Substep 2: Altura — Horizontal iOS ruler */}
+            {step === 1 && (
+              <div className="flex flex-col items-center justify-center px-1">
+                <div
+                  className="w-full rounded-3xl border px-4 py-7"
+                  style={{
+                    backgroundColor: 'var(--surface-card)',
+                    borderColor: 'var(--border-subtle)',
+                  }}
+                >
+                  <RulerPicker
+                    label="Altura en centímetros"
+                    value={height}
+                    onChange={setHeight}
+                    min={120}
+                    max={225}
+                    step={1}
+                    unit="cm"
+                    majorEvery={10}
+                    midEvery={5}
+                    tickSpacing={12}
+                    formatValue={(v) => String(Math.round(v))}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Substep 3: Peso actual + Categorías de IMC según edad */}
+            {step === 2 && (
+              <div className="flex flex-col items-center justify-center gap-3 px-1">
+                <div
+                  className="w-full rounded-3xl border px-4 py-6"
+                  style={{
+                    backgroundColor: 'var(--surface-card)',
+                    borderColor: 'var(--border-subtle)',
+                  }}
+                >
+                  <RulerPicker
+                    label="Peso actual en kilogramos"
+                    value={weight}
+                    onChange={setWeight}
+                    min={30}
+                    max={220}
+                    step={0.1}
+                    unit="kg"
+                    majorEvery={10}
+                    midEvery={5}
+                    tickSpacing={12}
+                    formatValue={(v) => v.toFixed(1)}
+                  />
+                </div>
+
+                {/* Age-based BMI card (only on current weight) */}
+                <section
+                  aria-live="polite"
+                  className="w-full rounded-2xl border px-4 py-3 space-y-2.5"
+                  style={{
+                    backgroundColor: 'var(--surface-card)',
+                    borderColor: 'var(--border-subtle)',
+                  }}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <p
+                        className="text-xs font-semibold"
+                        style={{ color: 'var(--text-primary)' }}
+                      >
+                        IMC estimado
+                      </p>
+                      <p
+                        className="text-[11px]"
+                        style={{ color: 'var(--text-muted)' }}
+                      >
+                        Referencia {bmiInfo.ageGroupLabel} · {height} cm
+                      </p>
+                    </div>
+
+                    <div
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold tabular-nums border whitespace-nowrap shrink-0"
+                      style={{
+                        backgroundColor: `color-mix(in srgb, ${bmiInfo.colorVar} 14%, transparent)`,
+                        borderColor: `color-mix(in srgb, ${bmiInfo.colorVar} 38%, transparent)`,
+                        color: bmiInfo.colorVar,
+                      }}
+                    >
+                      <span>{bmiInfo.bmi.toFixed(1)}</span>
+                      <span aria-hidden="true">·</span>
+                      <span>{bmiInfo.label}</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-4 gap-1.5" aria-hidden="true">
+                    {BMI_SEGMENTS.map((seg) => {
+                      const isActive = seg.id === bmiInfo.categoryId;
+                      return (
+                        <div key={seg.id} className="space-y-1">
+                          <div
+                            className="h-1.5 rounded-full transition-opacity duration-150"
+                            style={{
+                              backgroundColor: seg.colorVar,
+                              opacity: isActive ? 1 : 0.22,
+                            }}
+                          />
+                          <p
+                            className="text-[10px] text-center font-medium truncate"
+                            style={{
+                              color: isActive
+                                ? 'var(--text-primary)'
+                                : 'var(--text-muted)',
+                              fontWeight: isActive ? 700 : 500,
+                            }}
+                          >
+                            {seg.label}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              </div>
+            )}
+
+            {/* Substep 4: Peso ideal (Opcional) — sin IMC */}
+            {step === 3 && (
+              <div className="flex flex-col items-center justify-center gap-4 px-1">
+                <div
+                  className="w-full rounded-3xl border px-4 py-7"
+                  style={{
+                    backgroundColor: 'var(--surface-card)',
+                    borderColor: 'var(--border-subtle)',
+                  }}
+                >
+                  <RulerPicker
+                    label="Peso ideal en kilogramos"
+                    value={effectiveTargetWeight}
+                    onChange={(val) => setTargetWeight(val)}
+                    min={30}
+                    max={220}
+                    step={0.1}
+                    unit="kg"
+                    majorEvery={10}
+                    midEvery={5}
+                    tickSpacing={12}
+                    formatValue={(v) => v.toFixed(1)}
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleSkipOptional}
+                  className="min-h-[40px] px-4 rounded-full text-xs font-semibold transition-transform active:scale-95 cursor-pointer"
+                  style={{
+                    touchAction: 'manipulation',
+                    color: 'var(--text-muted)',
+                  }}
+                >
+                  Prefiero no definir una meta por ahora
+                </button>
+              </div>
+            )}
+
+            {/* Step 2: Actividades dinámicas */}
+            {step === 4 && (
+              <div className="h-full min-h-0 overflow-y-auto overscroll-contain space-y-2.5 pr-0.5 py-1">
+                {fetchQuestsStatus === 'loading' ? (
+                  Array.from({ length: 4 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="p-3.5 rounded-2xl border animate-pulse"
+                      style={{
+                        backgroundColor: 'var(--surface-card)',
+                        borderColor: 'var(--border-subtle)',
+                      }}
+                    >
+                      <div className="flex justify-between items-center">
+                        <div className="pv2-skeleton h-4 w-2/3" />
+                        <div className="pv2-skeleton h-4 w-16" />
+                      </div>
+                      <div className="pv2-skeleton h-3 w-1/3 mt-2" />
+                    </div>
+                  ))
+                ) : availableQuests.length > 0 ? (
+                  availableQuests.map((quest) => {
+                    const isSelected = selectedQuests.includes(quest.id);
+                    const taskCount = quest.tasks?.length ?? 0;
+                    return (
+                      <div
+                        key={quest.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setPreviewQuest(quest)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setPreviewQuest(quest);
+                          }
+                        }}
+                        className="w-full p-3.5 text-left rounded-2xl border transition-transform active:scale-[0.985] cursor-pointer flex items-center justify-between gap-2"
+                        style={{
+                          touchAction: 'manipulation',
+                          backgroundColor: isSelected
+                            ? 'var(--surface-raised)'
+                            : 'var(--surface-card)',
+                          borderColor: isSelected
+                            ? 'var(--accent-fill)'
+                            : 'var(--border-subtle)',
+                        }}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <h3
+                              className="font-semibold text-sm truncate"
+                              style={{ color: 'var(--text-primary)' }}
+                            >
+                              {quest.title}
+                            </h3>
+                            <span
+                              className="text-[11px] font-medium px-2 py-0.5 rounded-md shrink-0"
+                              style={{
+                                backgroundColor: 'var(--surface-inset)',
+                                color: 'var(--text-muted)',
+                              }}
+                            >
+                              {quest.difficulty}
+                            </span>
+                          </div>
+                          <p
+                            className="text-xs mt-0.5 flex items-center gap-1.5"
+                            style={{ color: 'var(--text-muted)' }}
+                          >
+                            <span>{quest.durationDays} días</span>
+                            {taskCount > 0 && (
+                              <>
+                                <span aria-hidden="true">·</span>
+                                <span>{taskCount} tareas</span>
+                              </>
+                            )}
+                            <span aria-hidden="true">·</span>
+                            <span
+                              className="font-medium"
+                              style={{ color: 'var(--accent-text)' }}
+                            >
+                              Ver detalle
+                            </span>
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          aria-label={
+                            isSelected
+                              ? `Quitar ${quest.title}`
+                              : `Seleccionar ${quest.title}`
+                          }
+                          aria-pressed={isSelected}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleQuestSelection(quest.id);
+                          }}
+                          className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 transition-transform active:scale-90 cursor-pointer"
+                          style={{ touchAction: 'manipulation' }}
+                        >
+                          <span
+                            className="w-6 h-6 rounded-full flex items-center justify-center border transition-colors"
+                            style={{
+                              backgroundColor: isSelected
+                                ? 'var(--accent-fill)'
+                                : 'transparent',
+                              borderColor: isSelected
+                                ? 'var(--accent-fill)'
+                                : 'var(--border-control)',
+                              color: 'var(--on-accent)',
+                            }}
+                          >
+                            {isSelected && <Check size={14} strokeWidth={3} />}
+                          </span>
+                        </button>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div
+                    className="rounded-2xl border p-6 text-center"
+                    style={{
+                      backgroundColor: 'var(--surface-card)',
+                      borderColor: 'var(--border-subtle)',
+                    }}
+                  >
+                    <p
+                      className="text-sm font-medium"
+                      style={{ color: 'var(--text-secondary)' }}
+                    >
+                      No hay actividades disponibles en este momento.
+                    </p>
+                    <p
+                      className="text-xs mt-1"
+                      style={{ color: 'var(--text-muted)' }}
+                    >
+                      Podés continuar al siguiente paso y elegir tu plan.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Step 3: Elegí tu desafío */}
+            {step === 5 && (
+              <div className="h-full min-h-0 flex flex-col justify-center gap-3">
+                <div
+                  className="grid grid-cols-4 gap-1 p-1 rounded-2xl border shrink-0 relative"
+                  style={{
+                    backgroundColor: 'var(--surface-card)',
+                    borderColor: 'var(--border-subtle)',
+                  }}
+                >
+                  {PLANS.map((plan) => {
+                    const isSelected = difficulty === plan.difficulty;
+                    return (
+                      <button
+                        key={plan.difficulty}
+                        type="button"
+                        aria-pressed={isSelected}
+                        onClick={() => handleSelectDifficulty(plan.difficulty)}
+                        className="relative min-h-[40px] px-1.5 rounded-xl text-xs font-semibold transition-transform active:scale-95 cursor-pointer truncate z-10"
+                        style={{
+                          touchAction: 'manipulation',
+                          color: isSelected
+                            ? 'var(--on-accent)'
+                            : 'var(--text-muted)',
+                        }}
+                      >
+                        {isSelected && (
+                          <motion.span
+                            layoutId="onboarding-plan-pill"
+                            transition={
+                              reduceMotion
+                                ? { duration: 0.01 }
+                                : { duration: 0.22, ease: EASE_OUT }
+                            }
+                            className="absolute inset-0 rounded-xl -z-10"
+                            style={{ backgroundColor: 'var(--accent-fill)' }}
+                          />
+                        )}
+                        {plan.difficulty}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="relative overflow-hidden min-h-0">
+                  <AnimatePresence mode="wait" custom={planDirection} initial={false}>
+                    <motion.section
+                      key={difficulty}
+                      custom={planDirection}
+                      variants={{
+                        enter: (dir: 1 | -1) =>
+                          reduceMotion
+                            ? { opacity: 0 }
+                            : { opacity: 0, x: dir * 20 },
+                        center: { opacity: 1, x: 0 },
+                        exit: (dir: 1 | -1) =>
+                          reduceMotion
+                            ? { opacity: 0 }
+                            : { opacity: 0, x: dir * -20 },
+                      }}
+                      initial="enter"
+                      animate="center"
+                      exit="exit"
+                      transition={
+                        reduceMotion
+                          ? { duration: 0.14 }
+                          : { duration: 0.18, ease: EASE_OUT }
+                      }
+                      className="rounded-2xl border p-4 space-y-3 max-h-full overflow-y-auto overscroll-contain"
+                      style={{
+                        backgroundColor: 'var(--surface-card)',
+                        borderColor: 'var(--border-subtle)',
+                      }}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <h2
+                            className="font-bold text-lg leading-tight"
+                            style={{ color: 'var(--text-primary)' }}
+                          >
+                            {activePlan.title}
+                          </h2>
+                          <p
+                            className="text-xs mt-1 leading-relaxed"
+                            style={{ color: 'var(--text-muted)' }}
+                          >
+                            {activePlan.description}
+                          </p>
+                        </div>
+                        <span
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full shrink-0 border"
+                          style={{
+                            backgroundColor: 'var(--surface-inset)',
+                            borderColor: 'var(--border-subtle)',
+                            color: 'var(--text-secondary)',
+                          }}
+                        >
+                          <Calendar className="w-3 h-3" />
+                          75 días
+                        </span>
+                      </div>
+
+                      <div className="space-y-2 pt-1">
+                        <div className="flex items-center justify-between">
+                          <p
+                            className="text-[11px] font-bold uppercase tracking-wider"
+                            style={{ color: 'var(--text-muted)' }}
+                          >
+                            {difficulty === 'Custom' && hasCustomTasks
+                              ? `Tus tareas (${validCustomTasks.length})`
+                              : 'Tareas Diarias'}
+                          </p>
+                          {difficulty === 'Custom' && hasCustomTasks && (
+                            <button
+                              type="button"
+                              onClick={openCustomEditor}
+                              className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg border transition-transform active:scale-95 cursor-pointer"
+                              style={{
+                                touchAction: 'manipulation',
+                                backgroundColor: 'var(--surface-inset)',
+                                borderColor: 'var(--border-subtle)',
+                                color: 'var(--accent-text)',
+                              }}
+                            >
+                              <Pencil size={12} />
+                              Editar tareas
+                            </button>
+                          )}
+                        </div>
+
+                        <ul className="space-y-2">
+                          {activePlanTasks.map((task, i) => (
+                            <li
+                              key={i}
+                              className="flex items-center gap-2.5 text-xs font-medium"
+                              style={{ color: 'var(--text-secondary)' }}
+                            >
+                              <span className="shrink-0">{task.icon}</span>
+                              <span className="leading-snug truncate">
+                                {task.label}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </motion.section>
+                  </AnimatePresence>
+                </div>
+              </div>
+            )}
+          </motion.div>
+        </AnimatePresence>
       </div>
+
+      {/* Pinned Bottom Action Bar */}
+      <footer className="shrink-0 flex items-center justify-between gap-3 pt-1 pb-[env(safe-area-inset-bottom,0px)]">
+        {step > 0 ? (
+          <button
+            type="button"
+            onClick={() => goToStep(step - 1)}
+            className="min-h-[48px] px-4 rounded-2xl font-semibold text-sm flex items-center gap-1 border transition-transform active:scale-95 cursor-pointer"
+            style={{
+              touchAction: 'manipulation',
+              backgroundColor: 'var(--surface-card)',
+              borderColor: 'var(--border-subtle)',
+              color: 'var(--text-primary)',
+            }}
+          >
+            <ChevronLeft size={18} />
+            Anterior
+          </button>
+        ) : null}
+
+        {step === 4 && selectedQuests.length === 0 ? (
+          <button
+            type="button"
+            onClick={handleSkipOptional}
+            className="flex-1 min-h-[48px] px-6 rounded-2xl font-semibold text-sm flex items-center justify-center gap-2 transition-transform active:scale-[0.98] cursor-pointer"
+            style={{
+              touchAction: 'manipulation',
+              backgroundColor: 'var(--accent-fill)',
+              color: 'var(--on-accent)',
+            }}
+          >
+            Saltar
+            <SkipForward size={18} />
+          </button>
+        ) : step === 5 && difficulty === 'Custom' && !hasCustomTasks ? (
+          <button
+            type="button"
+            onClick={openCustomEditor}
+            className="flex-1 min-h-[48px] px-6 rounded-2xl font-semibold text-sm flex items-center justify-center gap-2 transition-transform active:scale-[0.98] cursor-pointer"
+            style={{
+              touchAction: 'manipulation',
+              backgroundColor: 'var(--accent-fill)',
+              color: 'var(--on-accent)',
+            }}
+          >
+            <Pencil size={17} />
+            Editar tareas
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={handleNext}
+            disabled={!canProceed() || isChallengeLoading}
+            className={`flex-1 min-h-[48px] px-6 rounded-2xl font-semibold text-sm flex items-center justify-center gap-2 transition-transform ${
+              canProceed() && !isChallengeLoading
+                ? 'active:scale-[0.98] cursor-pointer'
+                : 'opacity-50 cursor-not-allowed'
+            }`}
+            style={{
+              touchAction: 'manipulation',
+              backgroundColor: 'var(--accent-fill)',
+              color: 'var(--on-accent)',
+            }}
+          >
+            {isChallengeLoading ? (
+              <>
+                Creando tu desafío <span className="pv2-skeleton w-4 h-4" />
+              </>
+            ) : (
+              <>
+                {step === 5 ? 'Comenzar Desafío' : 'Siguiente'}
+                <ChevronRight size={18} />
+              </>
+            )}
+          </button>
+        )}
+      </footer>
+      <QuestPreviewSheet
+        quest={previewQuest}
+        isSelected={
+          previewQuest ? selectedQuests.includes(previewQuest.id) : false
+        }
+        onToggleSelect={toggleQuestSelection}
+        onClose={() => setPreviewQuest(null)}
+      />
+
+      <CustomTaskEditorSheet
+        isOpen={isCustomEditorOpen}
+        tasks={customTasks}
+        onChange={setCustomTasks}
+        onClose={() => {
+          setCustomTasks((prev) => prev.filter((t) => t.title.trim() !== ''));
+          setIsCustomEditorOpen(false);
+        }}
+      />
     </div>
   );
 }
