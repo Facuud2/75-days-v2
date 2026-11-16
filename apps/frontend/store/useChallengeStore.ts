@@ -40,6 +40,7 @@ export interface ChallengeState {
   customGoalsTemplate: GoalTemplate[];
 
   isLoading: boolean;
+  isValidating: boolean;
   error: string | null;
 
   // Actions
@@ -55,23 +56,31 @@ export interface ChallengeState {
 }
 
 /**
+ * Contador monotónico (patrón syncRequestSequence de appManifestV2) para evitar
+ * que respuestas lentas de lecturas en segundo plano pisen mutaciones optimistas
+ * más recientes o estados posteriores a un logout/reset.
+ */
+let challengeSyncSeq = 0;
+
+/**
  * Estado inicial del reto. Se usa para arrancar el store y para limpiar todo
  * al cerrar sesión (F-37: antes el reto del usuario anterior sobrevivía).
  */
 const INITIAL_CHALLENGE_STATE = {
   isActive: false,
-  difficulty: null,
-  startDate: null,
+  difficulty: null as Difficulty | null,
+  startDate: null as string | null,
   currentDay: 0,
   streak: 0,
   logs: {} as Record<string, DailyLog>,
   points: 0,
   achievements: [] as string[],
-  bestWeight: null,
+  bestWeight: null as number | null,
   challengesCompleted: 0,
   customGoalsTemplate: [] as GoalTemplate[],
   isLoading: false,
-  error: null,
+  isValidating: false,
+  error: null as string | null,
 };
 
 /** Normaliza las fechas ISO de Prisma ("2026-03-03T00:00:00.000Z") a "YYYY-MM-DD". */
@@ -99,9 +108,16 @@ export const useChallengeStore = create<ChallengeState>()(
       ...INITIAL_CHALLENGE_STATE,
 
       fetchCurrentChallenge: async () => {
-        set({ isLoading: true, error: null });
+        const seq = ++challengeSyncSeq;
+        const hasCached = get().isActive && Object.keys(get().logs).length > 0;
+        set({
+          isLoading: !hasCached,
+          isValidating: true,
+          error: null,
+        });
         try {
           const { dailyLogs, ...restData } = (await challengeService.getCurrentChallenge()) as any;
+          if (seq !== challengeSyncSeq) return;
           if (restData && Object.keys(restData).length > 0) {
             const parsedLogs = Array.isArray(dailyLogs) ? normalizeLogs(dailyLogs) : get().logs;
             const safeCurrentDay = restData.startDate
@@ -114,119 +130,214 @@ export const useChallengeStore = create<ChallengeState>()(
               currentDay: safeCurrentDay,
               isActive: true,
               isLoading: false,
+              isValidating: false,
             });
           } else {
             set({ ...INITIAL_CHALLENGE_STATE });
           }
         } catch (error: any) {
+          if (seq !== challengeSyncSeq) return;
           // 404 = no hay reto activo. No es un error de la app: limpiamos el
           // estado persistido para que el dashboard no muestre datos viejos.
           if (error?.status === 404) {
             set({ ...INITIAL_CHALLENGE_STATE });
             return;
           }
-          set({ error: error.message || 'Failed to fetch challenge', isLoading: false });
+          set({
+            error: error.message || 'Failed to fetch challenge',
+            isLoading: false,
+            isValidating: false,
+          });
         }
       },
 
       startChallenge: async (difficulty, customGoalsTemplate) => {
+        const seq = ++challengeSyncSeq;
         set({ isLoading: true, error: null });
         try {
           const response = (await challengeService.startChallenge({ difficulty, customGoalsTemplate })) as any;
+          if (seq !== challengeSyncSeq) return;
           // El backend devuelve `unchanged` cuando se pide reiniciar con el plan
           // que ya está activo: no hay reto nuevo, así que conservamos el estado
           // en pantalla en vez de pintar un progreso en cero.
           if (response?.unchanged) {
-            set({ isLoading: false });
+            set({ isLoading: false, isValidating: false });
             return;
           }
           const { dailyLogs, ...restData } = response;
           const parsedLogs = Array.isArray(dailyLogs) ? normalizeLogs(dailyLogs) : get().logs;
-          set({ ...restData, logs: parsedLogs, isActive: true, isLoading: false });
+          set({
+            ...restData,
+            logs: parsedLogs,
+            isActive: true,
+            isLoading: false,
+            isValidating: false,
+          });
         } catch (error: any) {
-          set({ error: error.message || 'Failed to start challenge', isLoading: false });
+          if (seq === challengeSyncSeq) {
+            set({ error: error.message || 'Failed to start challenge', isLoading: false, isValidating: false });
+          }
           throw error;
         }
       },
 
       abandonChallenge: async () => {
+        ++challengeSyncSeq;
         set({ isLoading: true, error: null });
         try {
           await challengeService.abandonChallenge();
           set({ ...INITIAL_CHALLENGE_STATE });
         } catch (error: any) {
-          set({ error: error.message || 'Failed to abandon challenge', isLoading: false });
+          set({ error: error.message || 'Failed to abandon challenge', isLoading: false, isValidating: false });
           throw error;
         }
       },
 
       logDailyGoal: async (date, goalId, completed) => {
-        const previousLogs = get().logs;
-        // Optimistic update
+        // Invalida lecturas en vuelo más viejas para que no pisen el estado optimista
+        ++challengeSyncSeq;
+        const snapshot = {
+          logs: get().logs,
+          streak: get().streak,
+          points: get().points,
+        };
+
+        // Optimistic update completo en Frame 0 (0ms): metas, status del día, racha y puntos
         set((state) => {
           const log = state.logs[date];
           if (!log || !Array.isArray(log.goals)) return state;
-          const updatedGoals = log.goals.map((g: any) => g.id === goalId ? { ...g, completed } : g);
-          return { logs: { ...state.logs, [date]: { ...log, goals: updatedGoals } } };
+          const updatedGoals = log.goals.map((g: any) =>
+            g.id === goalId ? { ...g, completed } : g
+          );
+          const allCompleted =
+            updatedGoals.length > 0 && updatedGoals.every((g: any) => g.completed);
+
+          let nextStatus = log.status;
+          let nextPoints = state.points;
+          let nextStreak = state.streak;
+
+          if (allCompleted && log.status !== 'success') {
+            nextStatus = 'success';
+            nextPoints += 10;
+            nextStreak += 1;
+          } else if (!allCompleted && log.status === 'success') {
+            nextStatus = 'pending';
+            nextPoints = Math.max(0, nextPoints - 10);
+            nextStreak = Math.max(0, nextStreak - 1);
+          }
+
+          return {
+            logs: {
+              ...state.logs,
+              [date]: { ...log, goals: updatedGoals, status: nextStatus },
+            },
+            streak: nextStreak,
+            points: nextPoints,
+          };
         });
 
         try {
           const response = await logService.updateGoalStatus(date, goalId, completed);
-          // Only sync the status from backend — keep the optimistic goals in state
-          // to avoid any shape mismatch from the Prisma response wiping out goals
+          // Sincroniza status/racha/puntos autoritativos conservando las metas optimistas en memoria
           set((state) => {
             const log = state.logs[date];
             if (!log) return state;
             return {
               logs: {
                 ...state.logs,
-                [date]: { ...log, status: (response as any).status ?? log.status }
+                [date]: { ...log, status: (response as any).status ?? log.status },
               },
               streak: (response as any).challengeStreak ?? state.streak,
-              points: (response as any).challengePoints ?? state.points
+              points: (response as any).challengePoints ?? state.points,
             };
           });
         } catch (error: any) {
-          // Revert optimistic update on failure
-          set({ logs: previousLogs, error: error.message || 'Failed to update goal' });
+          // Rollback automático en caso de error
+          set({
+            logs: snapshot.logs,
+            streak: snapshot.streak,
+            points: snapshot.points,
+            error: error.message || 'Failed to update goal',
+          });
           throw error;
         }
       },
 
       logDailyMetrics: async (date, metrics) => {
-        set({ isLoading: true, error: null });
+        ++challengeSyncSeq;
+        const previousLogs = get().logs;
+        const previousBestWeight = get().bestWeight;
+
+        // Optimistic update en Frame 0 (0ms) sin activar isLoading global
+        set((state) => {
+          const existing = state.logs[date] ?? {
+            date,
+            goals: [],
+            status: 'pending' as const,
+          };
+          const nextBestWeight =
+            metrics.weight && (state.bestWeight === null || metrics.weight < state.bestWeight)
+              ? metrics.weight
+              : state.bestWeight;
+
+          return {
+            logs: {
+              ...state.logs,
+              [date]: {
+                ...existing,
+                ...(metrics.weight !== undefined && { weight: metrics.weight }),
+                ...(metrics.photoUrl !== undefined && { photoUrl: metrics.photoUrl }),
+                ...(metrics.notes !== undefined && { notes: metrics.notes }),
+              },
+            },
+            bestWeight: nextBestWeight,
+            error: null,
+          };
+        });
+
         try {
-          const updatedLog = await logService.updateMetrics(date, metrics) as any;
-          // Normalize Prisma ISO date back to YYYY-MM-DD format
-          const formattedDate = typeof updatedLog.date === 'string' ? updatedLog.date.slice(0, 10) : updatedLog.date;
+          const updatedLog = (await logService.updateMetrics(date, metrics)) as any;
+          const formattedDate =
+            typeof updatedLog.date === 'string' ? updatedLog.date.slice(0, 10) : updatedLog.date;
           updatedLog.date = formattedDate;
 
           set((state) => {
-            const bestWeight = (metrics.weight && (state.bestWeight === null || metrics.weight < state.bestWeight))
-              ? metrics.weight
-              : state.bestWeight;
+            const bestWeight =
+              metrics.weight && (state.bestWeight === null || metrics.weight < state.bestWeight)
+                ? metrics.weight
+                : state.bestWeight;
 
             return {
               logs: { ...state.logs, [date]: updatedLog },
               bestWeight,
-              isLoading: false
             };
           });
         } catch (error: any) {
-          set({ error: error.message || 'Failed to update metrics', isLoading: false });
+          set({
+            logs: previousLogs,
+            bestWeight: previousBestWeight,
+            error: error.message || 'Failed to update metrics',
+          });
           throw error;
         }
       },
 
       checkDailyReset: async () => {
-        set({ isLoading: true, error: null });
+        const seq = ++challengeSyncSeq;
+        const hasCached = get().isActive && Object.keys(get().logs).length > 0;
+        set({
+          isLoading: !hasCached,
+          isValidating: true,
+          error: null,
+        });
         try {
           const timezoneOffset = new Date().getTimezoneOffset();
           const response = await logService.checkDailyReset(timezoneOffset);
+          if (seq !== challengeSyncSeq) return;
           // El backend responde `{ message }` sin `logs` cuando no hay reto
           // activo (F-46). Antes esto reventaba en `logs.reduce`.
           if (!Array.isArray(response.logs)) {
-            set({ isActive: false, isLoading: false });
+            set({ isActive: false, isLoading: false, isValidating: false });
             return;
           }
 
@@ -235,31 +346,52 @@ export const useChallengeStore = create<ChallengeState>()(
             streak: response.streak ?? state.streak,
             logs: { ...state.logs, ...logsRecord },
             currentDay: response.currentDay ?? state.currentDay,
-            isLoading: false
+            isLoading: false,
+            isValidating: false,
           }));
         } catch (error: any) {
-          set({ error: error.message || 'Failed to check daily reset', isLoading: false });
+          if (seq !== challengeSyncSeq) return;
+          set({
+            error: error.message || 'Failed to check daily reset',
+            isLoading: false,
+            isValidating: false,
+          });
         }
       },
 
       reset: () => {
+        ++challengeSyncSeq;
         set({ ...INITIAL_CHALLENGE_STATE });
       },
     }),
     {
       name: 'challenge-storage',
-      // Persistimos el ancla del reto (startDate/difficulty) para que el
-      // calendario y el plan sobrevivan a un reload (F-36).
-      partialize: (state) => ({
-        isActive: state.isActive,
-        difficulty: state.difficulty,
-        startDate: state.startDate,
-        streak: state.streak,
-        currentDay: state.currentDay,
-        points: state.points,
-        achievements: state.achievements,
-        bestWeight: state.bestWeight
-      }),
+      // Persistimos el ancla del reto y también los logs diarios (omitiendo data-URLs
+      // gigantes >100KB en localStorage para no exceder la cuota) para que Dashboard,
+      // Calendario y Perfil rendericen en 0ms sin esqueletos bloqueantes.
+      partialize: (state) => {
+        const compactLogs: Record<string, DailyLog> = {};
+        for (const [key, log] of Object.entries(state.logs || {})) {
+          compactLogs[key] = {
+            ...log,
+            photoUrl:
+              log.photoUrl && log.photoUrl.length > 100_000 ? undefined : log.photoUrl,
+          };
+        }
+        return {
+          isActive: state.isActive,
+          difficulty: state.difficulty,
+          startDate: state.startDate,
+          streak: state.streak,
+          currentDay: state.currentDay,
+          points: state.points,
+          achievements: state.achievements,
+          bestWeight: state.bestWeight,
+          challengesCompleted: state.challengesCompleted,
+          customGoalsTemplate: state.customGoalsTemplate,
+          logs: compactLogs,
+        };
+      },
     }
   )
 );

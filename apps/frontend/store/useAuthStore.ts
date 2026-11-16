@@ -130,14 +130,19 @@ export const useAuthStore = create<AuthState>()(
           localStorage.removeItem('auth-storage');
         }
         useThemeStore.getState().resetTheme();
-        // F-37: limpiar el reto y las misiones del usuario anterior. Se usan
-        // imports dinámicos para no crear ciclos con useQuestStore.
+        // F-37: limpiar el reto, misiones y salud del usuario anterior. Se usan
+        // imports dinámicos para no crear ciclos con otros stores.
         import('./useChallengeStore').then(({ useChallengeStore }) => {
           useChallengeStore.getState().reset();
           useChallengeStore.persist?.clearStorage?.();
         }).catch(() => {});
         import('./useQuestStore').then(({ useQuestStore }) => {
           useQuestStore.getState().reset();
+          useQuestStore.persist?.clearStorage?.();
+        }).catch(() => {});
+        import('./useHealthStore').then(({ useHealthStore }) => {
+          useHealthStore.getState().reset();
+          useHealthStore.persist?.clearStorage?.();
         }).catch(() => {});
       },
 

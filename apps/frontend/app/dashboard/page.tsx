@@ -52,6 +52,7 @@ export default function Dashboard() {
     currentDay,
     logs,
     startDate,
+    customGoalsTemplate,
     logDailyGoal,
     fetchCurrentChallenge,
     checkDailyReset,
@@ -63,8 +64,18 @@ export default function Dashboard() {
   const router = useRouter();
 
   const todayStr = format(new Date(), 'yyyy-MM-dd');
-  const todayLog = logs[todayStr];
-  const [updatingGoalId, setUpdatingGoalId] = useState<string | null>(null);
+  const todayLog = logs[todayStr] ?? (isActive && customGoalsTemplate?.length > 0
+    ? {
+        date: todayStr,
+        status: 'pending' as const,
+        goals: customGoalsTemplate.map((g, idx) => ({
+          ...g,
+          id: `template-${idx}`,
+          completed: false,
+        })),
+      }
+    : undefined);
+  const inFlightGoalsRef = React.useRef<Set<string>>(new Set());
   const [isSideQuestsModalOpen, setIsSideQuestsModalOpen] = useState(false);
   const [selectedSideQuest, setSelectedSideQuest] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<TabView>('plan');
@@ -112,17 +123,16 @@ export default function Dashboard() {
 
   const renderGoalItem = useCallback((goal: any) => {
     const IconComponent = iconMap[goal.icon || 'target'] || Target;
-    const isThisUpdating = updatingGoalId === goal.id;
-    const isLocked = updatingGoalId !== null && !isThisUpdating;
 
-    const handleClick = async () => {
-      if (updatingGoalId !== null) return;
-      setUpdatingGoalId(goal.id);
-      try {
-        await logDailyGoal(todayStr, goal.id, !goal.completed);
-      } finally {
-        setUpdatingGoalId(null);
-      }
+    const handleClick = () => {
+      if (String(goal.id).startsWith('template-')) return;
+      if (inFlightGoalsRef.current.has(goal.id)) return;
+      inFlightGoalsRef.current.add(goal.id);
+      void logDailyGoal(todayStr, goal.id, !goal.completed)
+        .catch(() => {})
+        .finally(() => {
+          inFlightGoalsRef.current.delete(goal.id);
+        });
     };
 
     return (
@@ -130,27 +140,17 @@ export default function Dashboard() {
         type="button"
         key={goal.id}
         onClick={handleClick}
-        disabled={isLocked}
         aria-pressed={goal.completed}
-        className={`group w-full text-left bg-rose-950/20 border rounded-2xl px-3.5 py-3 sm:p-5 flex items-center gap-3 sm:gap-5 transition-all duration-200 min-h-14 ${isLocked
-          ? 'border-[#361726] opacity-40 cursor-not-allowed select-none'
-          : isThisUpdating
-            ? 'border-rose-500/20 cursor-wait'
-            : goal.completed
-              ? 'border-rose-500/30 bg-rose-500/5'
-              : 'border-[#361726] hover:border-rose-500/50 hover:bg-rose-950/40 active:scale-[0.99]'
+        className={`group w-full text-left bg-rose-950/20 border rounded-2xl px-3.5 py-3 sm:p-5 flex items-center gap-3 sm:gap-5 transition-all duration-200 min-h-14 ${goal.completed
+          ? 'border-rose-500/30 bg-rose-500/5'
+          : 'border-[#361726] hover:border-rose-500/50 hover:bg-rose-950/40 active:scale-[0.99]'
           }`}
       >
-        <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0 transition-colors ${isThisUpdating
-          ? 'bg-white/10 text-white/40'
-          : goal.completed
-            ? 'bg-rose-500/20 text-rose-500'
-            : 'bg-rose-950/60 text-rose-500/70 group-hover:text-rose-500'
+        <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0 transition-colors ${goal.completed
+          ? 'bg-rose-500/20 text-rose-500'
+          : 'bg-rose-950/60 text-rose-500/70 group-hover:text-rose-500'
           }`}>
-          {isThisUpdating
-            ? <div className="w-5 h-5 rounded-full border-2 border-white/20 border-t-white/60 animate-spin" />
-            : <IconComponent size={20} strokeWidth={1.5} className="sm:w-6 sm:h-6" />
-          }
+          <IconComponent size={20} strokeWidth={1.5} className="sm:w-6 sm:h-6" />
         </div>
 
         <div className="flex-1 min-w-0">
@@ -164,20 +164,18 @@ export default function Dashboard() {
           ) : null}
         </div>
 
-        <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center shrink-0 transition-all duration-200 ${isThisUpdating
-          ? 'border-white/20'
-          : goal.completed
-            ? 'bg-rose-500 border-rose-500 shadow-[0_0_15px_var(--color-rose-500)]'
-            : 'border-rose-950/40 group-hover:border-rose-500/50'
+        <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center shrink-0 transition-all duration-200 ${goal.completed
+          ? 'bg-rose-500 border-rose-500 shadow-[0_0_15px_var(--color-rose-500)]'
+          : 'border-rose-950/40 group-hover:border-rose-500/50'
           }`}>
-          {goal.completed && !isThisUpdating && <Check size={16} className="text-white" strokeWidth={3} />}
+          {goal.completed && <Check size={16} className="text-white" strokeWidth={3} />}
         </div>
       </button>
     );
-  }, [updatingGoalId, todayStr, logDailyGoal]);
+  }, [todayStr, logDailyGoal]);
 
-  // Loading state prevents returning generic null silently (U-09: full layout skeleton)
-  if (isChallengeLoading || (isActive && !todayLog)) {
+  // Stale-While-Revalidate: solo muestra el esqueleto completo en el primer arranque en frío sin datos en caché
+  if (isChallengeLoading && !todayLog) {
     return <DashboardLoading />;
   }
 

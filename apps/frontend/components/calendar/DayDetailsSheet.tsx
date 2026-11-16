@@ -101,15 +101,17 @@ export default function DayDetailsSheet({ day, onClose, onPrevious, onNext }: { 
     processImageFile(event.dataTransfer.files?.[0]);
   };
 
-  const save = async () => {
-    setIsSaving(true);
+  const save = () => {
     const metrics: { weight?: number; photoUrl?: string; notes?: string } = {};
     if (weight) metrics.weight = Number(weight);
     if (photoUrl) metrics.photoUrl = photoUrl;
     if (notes) metrics.notes = notes;
-    if (Object.keys(metrics).length) await logDailyMetrics(day.date, metrics);
+    if (Object.keys(metrics).length) {
+      void logDailyMetrics(day.date, metrics).catch(() => {
+        toast.error('No se pudo sincronizar el registro.');
+      });
+    }
     toast.success(day.status === 'success' ? 'Registro guardado. Hoy cumpliste con vos.' : 'Registro guardado');
-    setIsSaving(false);
     dismiss();
   };
 
