@@ -78,3 +78,22 @@
 - **`apps/backend-core` (`npm test` + `npx tsc --noEmit`)**: **2/2 tests pasados (100% verde)** y **0 errores TS**.
 - **`apps/backend-health` (`npm test` + `npx tsc --noEmit`)**: **3/3 tests pasados (100% verde)** y **0 errores TS**.
 - **`apps/frontend` (`npm run test:unit` + `npx tsc --noEmit`)**: **9 suites / 49 tests pasados (100% verde)** y **0 errores TS**.
+
+---
+
+## 5. Fase 4: Infraestructura Neon Postgres, Pre-Calentamiento de Pools y Resource Hints
+
+| Archivo | Cambio Realizado |
+| :--- | :--- |
+| `apps/backend-core/src/utils/dbLifecycle.ts` y `apps/backend-health/src/utils/dbLifecycle.ts` *(Nuevos)* | Pre-calentamiento de pool Prisma (`$connect` + `SELECT 1` + cachés en RAM), `resolveDirectDatabaseUrl` (pooled vs unpooled) y `configureServerLifecycle` (`keepAliveTimeout: 65s`, `headersTimeout: 66s`, graceful shutdown `SIGTERM`/`SIGINT`). |
+| `apps/backend-core/scripts/migrate-direct.js` y `apps/backend-health/scripts/migrate-direct.js` *(Nuevos)* | Ejecutan `prisma migrate deploy` usando conexión directa sin `-pooler` (`DIRECT_URL` / `DATABASE_URL_UNPOOLED` / strip automático de `-pooler.` en `.neon.tech`). |
+| `apps/backend-core/src/index.ts` y `apps/backend-health/src/index.ts` | Preflight CORS cacheado (`maxAge: 86_400`), `/health?deep=1`, warmup al arrancar y ciclo de vida HTTP limpio. |
+| `apps/backend-core/prisma.config.ts`, `package.json` y `.env.example` (ambos backends) | Scripts `start` y `db:migrate` cableados a `migrate-direct.js` y documentación de `DATABASE_URL` (`-pooler`) vs `DATABASE_URL_UNPOOLED`. |
+| `neon.ts` | Política de ramas con `ttl: "7d"` y `computeSettings` scale-to-zero (`0.25–1 CU`, `suspendTimeout: "5m"`) para nuevas ramas de desarrollo. |
+| `apps/frontend/app/layout.tsx` y `apps/frontend/next.config.ts` | `<link rel="preconnect">` y `<link rel="dns-prefetch">` para ambos backends y `optimizePackageImports: ['lucide-react', 'date-fns', 'motion']`. |
+| `apps/backend-core/src/__tests__/phase4-neon-lifecycle.test.ts` y `apps/backend-health/src/__tests__/phase4-neon-lifecycle.test.ts` *(Nuevos)* | 6 tests unitarios cubriendo resolución de URL directa Neon, warmup de pools/cachés y tuning Keep-Alive. |
+
+### Verificación Final (Fase 4 — Monorepo Completo)
+- **`apps/backend-core`**: `npm test` (**5/5 pasados**), `npx tsc --noEmit` (**0 errores**), `npm run build` (**exitoso**).
+- **`apps/backend-health`**: `npm test` (**6/6 pasados**), `npx tsc --noEmit` (**0 errores**), `npm run build` (**exitoso**).
+- **`apps/frontend`**: `npm run test:unit` (**9 suites / 51 tests pasados**), `npx tsc --noEmit` (**0 errores**), `npm run build` (**exitoso**, `16/16` rutas).

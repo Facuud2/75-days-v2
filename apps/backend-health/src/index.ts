@@ -10,6 +10,12 @@ import fatsecretRoutes from './routes/fatsecret';
 import customFoodsRoutes from './routes/customFoods';
 import stravaRoutes from './routes/strava';
 import syncRoutes from './routes/sync';
+import { fetchCachedSystemIngredients } from './controllers/customFoodController';
+import {
+    configureServerLifecycle,
+    isDbWarmed,
+    warmupDatabaseAndCaches,
+} from './utils/dbLifecycle';
 
 const app = express();
 const port = process.env.PORT || 3002;
@@ -36,13 +42,29 @@ app.use(cors({
     },
     methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
+    // Cache preflight OPTIONS responses for 24h to save a full RTT on mutations
+    maxAge: 86_400,
 }));
 app.use(express.json());
 
 // ── Health Check ──────────────────────────────────────────────────────────────
 
-app.get('/health', (_req, res) => {
-    res.json({ service: 'backend-health', status: 'ok', timestamp: new Date().toISOString() });
+app.get('/health', async (req, res) => {
+    if (req.query?.deep === '1') {
+        const ok = await warmupDatabaseAndCaches();
+        return res.status(ok ? 200 : 503).json({
+            service: 'backend-health',
+            status: ok ? 'ok' : 'degraded',
+            dbWarmed: ok,
+            timestamp: new Date().toISOString(),
+        });
+    }
+    res.json({
+        service: 'backend-health',
+        status: 'ok',
+        dbWarmed: isDbWarmed(),
+        timestamp: new Date().toISOString(),
+    });
 });
 
 // ── Public API Routes (JWT-protected internally) ──────────────────────────────
@@ -68,6 +90,9 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
     }
 });
 
-app.listen(Number(port), '0.0.0.0', () => {
+const server = app.listen(Number(port), '0.0.0.0', () => {
     console.log(`[backend-health] Service running on port ${port} (IPv4)`);
+    void warmupDatabaseAndCaches(() => fetchCachedSystemIngredients());
 });
+
+configureServerLifecycle(server, 'backend-health');

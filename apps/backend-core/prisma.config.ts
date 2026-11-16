@@ -3,12 +3,20 @@
 import "dotenv/config";
 import { defineConfig } from "prisma/config";
 
+function resolveMigrationUrl(): string {
+  const explicit =
+    process.env["DIRECT_URL"]?.trim() ||
+    process.env["DATABASE_URL_UNPOOLED"]?.trim();
+  if (explicit) return explicit;
+  return process.env["DATABASE_URL"] ?? "";
+}
+
 export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
     path: "prisma/migrations",
   },
   datasource: {
-    url: process.env["DATABASE_URL"]!,
+    url: resolveMigrationUrl(),
   },
 });

@@ -6,9 +6,9 @@
   "scripts": {
     "test": "node -r ts-node/register --test src/__tests__/*.test.ts",
     "dev": "nodemon --watch src --ext ts --exec ts-node src/index.ts",
-    "build": "tsc",
-    "start": "node dist/index.js",
-    "db:migrate": "prisma migrate deploy",
+    "build": "prisma generate && tsc",
+    "start": "node scripts/migrate-direct.js && node dist/index.js",
+    "db:migrate": "node scripts/migrate-direct.js",
     "db:generate": "prisma generate",
     "db:seed": "ts-node -r dotenv/config prisma/seed.ts",
     "db:studio": "prisma studio"
