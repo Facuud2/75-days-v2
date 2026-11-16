@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { differenceInCalendarDays } from 'date-fns';
+import { differenceInCalendarDays, format } from 'date-fns';
 import { challengeService } from '../lib/api/challenges';
 import { logService, UpdateMetricsData } from '../lib/api/logs';
 
@@ -52,6 +52,7 @@ export interface ChallengeState {
   logDailyMetrics: (date: string, metrics: UpdateMetricsData) => Promise<void>;
 
   checkDailyReset: () => Promise<void>;
+  hydrateFromSync: (challengeData: any | null) => void;
   reset: () => void;
 }
 
@@ -61,6 +62,8 @@ export interface ChallengeState {
  * más recientes o estados posteriores a un logout/reset.
  */
 let challengeSyncSeq = 0;
+let inFlightChallengePromise: Promise<void> | null = null;
+let lastReconciledDate: string | null = null;
 
 /**
  * Estado inicial del reto. Se usa para arrancar el store y para limpiar todo
@@ -108,6 +111,9 @@ export const useChallengeStore = create<ChallengeState>()(
       ...INITIAL_CHALLENGE_STATE,
 
       fetchCurrentChallenge: async () => {
+        if (inFlightChallengePromise) {
+          return inFlightChallengePromise;
+        }
         const seq = ++challengeSyncSeq;
         const hasCached = get().isActive && Object.keys(get().logs).length > 0;
         set({
@@ -115,40 +121,51 @@ export const useChallengeStore = create<ChallengeState>()(
           isValidating: true,
           error: null,
         });
-        try {
-          const { dailyLogs, ...restData } = (await challengeService.getCurrentChallenge()) as any;
-          if (seq !== challengeSyncSeq) return;
-          if (restData && Object.keys(restData).length > 0) {
-            const parsedLogs = Array.isArray(dailyLogs) ? normalizeLogs(dailyLogs) : get().logs;
-            const safeCurrentDay = restData.startDate
-              ? calculateCurrentDay(restData.startDate)
-              : restData.currentDay ?? 1;
+        const run = async () => {
+          try {
+            const { dailyLogs, ...restData } = (await challengeService.getCurrentChallenge()) as any;
+            if (seq !== challengeSyncSeq) return;
+            if (restData && Object.keys(restData).length > 0) {
+              const parsedLogs = Array.isArray(dailyLogs) ? normalizeLogs(dailyLogs) : get().logs;
+              const safeCurrentDay = restData.startDate
+                ? calculateCurrentDay(restData.startDate)
+                : restData.currentDay ?? 1;
+              const todayKey = format(new Date(), 'yyyy-MM-dd');
+              if (parsedLogs[todayKey]) {
+                lastReconciledDate = todayKey;
+              }
 
+              set({
+                ...restData,
+                logs: parsedLogs,
+                currentDay: safeCurrentDay,
+                isActive: true,
+                isLoading: false,
+                isValidating: false,
+              });
+            } else {
+              set({ ...INITIAL_CHALLENGE_STATE });
+            }
+          } catch (error: any) {
+            if (seq !== challengeSyncSeq) return;
+            // 404 = no hay reto activo. No es un error de la app: limpiamos el
+            // estado persistido para que el dashboard no muestre datos viejos.
+            if (error?.status === 404) {
+              set({ ...INITIAL_CHALLENGE_STATE });
+              return;
+            }
             set({
-              ...restData,
-              logs: parsedLogs,
-              currentDay: safeCurrentDay,
-              isActive: true,
+              error: error.message || 'Failed to fetch challenge',
               isLoading: false,
               isValidating: false,
             });
-          } else {
-            set({ ...INITIAL_CHALLENGE_STATE });
           }
-        } catch (error: any) {
-          if (seq !== challengeSyncSeq) return;
-          // 404 = no hay reto activo. No es un error de la app: limpiamos el
-          // estado persistido para que el dashboard no muestre datos viejos.
-          if (error?.status === 404) {
-            set({ ...INITIAL_CHALLENGE_STATE });
-            return;
-          }
-          set({
-            error: error.message || 'Failed to fetch challenge',
-            isLoading: false,
-            isValidating: false,
-          });
-        }
+        };
+
+        inFlightChallengePromise = run().finally(() => {
+          inFlightChallengePromise = null;
+        });
+        return inFlightChallengePromise;
       },
 
       startChallenge: async (difficulty, customGoalsTemplate) => {
@@ -323,6 +340,16 @@ export const useChallengeStore = create<ChallengeState>()(
       },
 
       checkDailyReset: async () => {
+        if (inFlightChallengePromise) {
+          await inFlightChallengePromise;
+        }
+        const todayKey = format(new Date(), 'yyyy-MM-dd');
+        // Fase 2: si GET /challenges/current (o /api/sync) ya reconcilió el día de hoy
+        // en el servidor y entregó el DailyLog de hoy, evitamos el POST redundante.
+        if (lastReconciledDate === todayKey && Boolean(get().logs[todayKey])) {
+          return;
+        }
+
         const seq = ++challengeSyncSeq;
         const hasCached = get().isActive && Object.keys(get().logs).length > 0;
         set({
@@ -342,6 +369,9 @@ export const useChallengeStore = create<ChallengeState>()(
           }
 
           const logsRecord = normalizeLogs(response.logs);
+          if (logsRecord[todayKey]) {
+            lastReconciledDate = todayKey;
+          }
           set((state) => ({
             streak: response.streak ?? state.streak,
             logs: { ...state.logs, ...logsRecord },
@@ -359,8 +389,36 @@ export const useChallengeStore = create<ChallengeState>()(
         }
       },
 
+      hydrateFromSync: (challengeData: any | null) => {
+        ++challengeSyncSeq;
+        if (!challengeData || Object.keys(challengeData).length === 0) {
+          set({ ...INITIAL_CHALLENGE_STATE });
+          return;
+        }
+        const { dailyLogs, ...restData } = challengeData;
+        const parsedLogs = Array.isArray(dailyLogs) ? normalizeLogs(dailyLogs) : get().logs;
+        const safeCurrentDay = restData.startDate
+          ? calculateCurrentDay(restData.startDate)
+          : restData.currentDay ?? 1;
+        const todayKey = format(new Date(), 'yyyy-MM-dd');
+        if (parsedLogs[todayKey]) {
+          lastReconciledDate = todayKey;
+        }
+        set({
+          ...restData,
+          logs: parsedLogs,
+          currentDay: safeCurrentDay,
+          isActive: true,
+          isLoading: false,
+          isValidating: false,
+          error: null,
+        });
+      },
+
       reset: () => {
         ++challengeSyncSeq;
+        inFlightChallengePromise = null;
+        lastReconciledDate = null;
         set({ ...INITIAL_CHALLENGE_STATE });
       },
     }),

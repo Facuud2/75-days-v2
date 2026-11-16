@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 const taskInclude = { tasks: { orderBy: { order: 'asc' as const } } };
 
-const serializeQuest = (quest: any) => {
+export const serializeQuest = (quest: any) => {
     const run = quest.runs?.[0] ?? null;
     const tasks = run?.tasks ?? [];
     return {
@@ -32,7 +32,7 @@ const serializeQuest = (quest: any) => {
     };
 };
 
-const questInclude = {
+export const questInclude = {
     runs: { orderBy: { runNumber: 'desc' as const }, take: 1, include: taskInclude },
 };
 

@@ -110,7 +110,20 @@ export interface LogMealPayload {
   fatG: number;
 }
 
+export interface HealthSyncBundle {
+  syncVersion?: number;
+  dailyStats: DailyStats;
+  stravaConnected: boolean;
+  recentWorkouts: any[];
+  customFoods?: CustomFood[];
+  systemIngredients?: Ingredient[];
+}
+
 export const healthService = {
+  getSyncBundle: (date: string, includeCatalog = true) =>
+    healthClient<HealthSyncBundle>(
+      `/sync/${date}?includeCatalog=${includeCatalog ? 'true' : 'false'}`
+    ),
   getDailyStats: (date: string) =>
     healthClient<DailyStats>(`/stats/daily/${date}`),
   updateGoals: (payload: { weightKg?: number }) =>

@@ -62,6 +62,7 @@ interface QuestStore {
   progressQuest: (id: string) => Promise<void>;
   toggleTask: (questId: string, taskId: string) => Promise<void>;
   restartQuest: (id: string) => Promise<void>;
+  hydrateFromSync: (quests: SideQuest[], availableQuests: SideQuestTemplate[]) => void;
   reset: () => void;
 }
 
@@ -371,6 +372,19 @@ export const useQuestStore = create<QuestStore>()(
         } catch (error: any) {
           set({ quests: previousQuests, error: error.message || 'No se pudo reiniciar la misión' });
         }
+      },
+
+      hydrateFromSync: (quests, availableQuests) => {
+        ++questSyncSeq;
+        set({
+          quests: Array.isArray(quests) ? quests : get().quests,
+          availableQuests: Array.isArray(availableQuests)
+            ? availableQuests
+            : get().availableQuests,
+          isLoading: false,
+          isValidating: false,
+          error: null,
+        });
       },
 
       reset: () => {

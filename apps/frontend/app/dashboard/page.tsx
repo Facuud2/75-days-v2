@@ -11,6 +11,7 @@ import { es } from 'date-fns/locale';
 import { Check, Utensils, Dumbbell, Sun, Droplet, Book, Camera, Target, PlusCircle, Trophy } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { DEFAULT_GOALS } from '@/lib/constants/plans';
+import { syncCoreStores } from '@/lib/api/sync';
 import { isTutorialPending, markTutorialSeen } from '@/lib/tutorial';
 import type { DevDataset } from '@/components/dev/DevDatasetPicker';
 import { DEV_DATASETS } from '@/components/dev/DevDatasetPicker';
@@ -95,20 +96,15 @@ export default function Dashboard() {
     if (hasCheckedReset.current || !user) return;
     hasCheckedReset.current = true;
 
-    // F-01: todos los fetches son independientes — lanzarlos en paralelo.
+    // Fase 2 (Patrón /api/sync de appManifestV2): sincroniza reto + daily reset + misiones en 1 round-trip
     (async () => {
-      await Promise.all([
-        fetchCurrentChallenge(),
-        checkDailyReset(),
-        fetchQuests(),
-        fetchAvailableQuests(),
-      ]);
+      await syncCoreStores({ includeProfile: false });
       const current = useChallengeStore.getState();
       if (!current.isActive) {
         if (user.onboardingCompleted !== true) router.push('/onboarding');
       }
     })();
-  }, [user, router, checkDailyReset, fetchCurrentChallenge, fetchQuests, fetchAvailableQuests]);
+  }, [user, router]);
 
   useEffect(() => {
     if (!isChallengeLoading && isActive && todayLog && user?.id && isTutorialPending(user.id)) {

@@ -4,6 +4,7 @@ import { AuthRequest } from '../middlewares/auth';
 import { z } from 'zod';
 import { format, differenceInCalendarDays, subDays } from 'date-fns';
 import { parseTimezoneOffset } from '../utils/challengeDate';
+import { reconcileAndGetActiveChallenge } from '../utils/dailyReset';
 
 export const getLogs = async (req: AuthRequest, res: Response) => {
     try {
@@ -208,87 +209,21 @@ export const updateMetrics = async (req: AuthRequest, res: Response) => {
 export const checkDailyReset = async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user!.id;
-        const timezoneOffset = parseTimezoneOffset((req.body || {}).timezoneOffset);
-
-        const now = new Date();
-        const targetDate = typeof timezoneOffset === 'number'
-            ? new Date(now.getTime() - timezoneOffset * 60000)
-            : now;
-
-        const today = format(targetDate, 'yyyy-MM-dd');
-        const yesterday = format(subDays(targetDate, 1), 'yyyy-MM-dd');
-
-        const challenge = await prisma.challenge.findFirst({
-            where: { userId, isActive: true },
-            include: { customGoalsTemplate: true }
-        });
+        const challenge = await reconcileAndGetActiveChallenge(
+            userId,
+            (req.body || {}).timezoneOffset
+        );
 
         if (!challenge) {
             return res.json({ message: 'No active challenge' });
         }
 
-        const logs = await prisma.dailyLog.findMany({
-            where: { challengeId: challenge.id, date: { in: [today, yesterday] } }
+        res.json({
+            message: 'Checked',
+            streak: challenge.streak,
+            currentDay: challenge.currentDay,
+            logs: challenge.dailyLogs,
         });
-
-        const yesterdayLog = logs.find((l: any) => l.date === yesterday);
-        const todayLog = logs.find((l: any) => l.date === today);
-
-        let newStreak = challenge.streak;
-        const start = new Date(challenge.startDate);
-        const localStartDate = typeof timezoneOffset === 'number'
-            ? new Date(start.getTime() - timezoneOffset * 60000)
-            : start;
-        const currentDayNumber = Math.max(1, differenceInCalendarDays(targetDate, localStartDate) + 1);
-
-        if (yesterdayLog) {
-            if (yesterdayLog.status !== 'success') {
-                newStreak = 0;
-                if (yesterdayLog.status === 'pending') {
-                    await prisma.dailyLog.update({
-                        where: { id: yesterdayLog.id },
-                        data: { status: 'fail' }
-                    });
-                }
-            }
-        } else if (differenceInCalendarDays(targetDate, localStartDate) > 0) {
-            newStreak = 0;
-        }
-
-        if (challenge.streak !== newStreak || challenge.currentDay !== currentDayNumber) {
-            await prisma.challenge.update({
-                where: { id: challenge.id },
-                data: {
-                    streak: newStreak,
-                    currentDay: currentDayNumber
-                }
-            });
-        }
-
-        if (!todayLog) {
-            await prisma.dailyLog.create({
-                data: {
-                    challengeId: challenge.id,
-                    date: today,
-                    goals: {
-                        create: challenge.customGoalsTemplate.map((g: any) => ({
-                            title: g.title,
-                            description: g.description,
-                            icon: g.icon
-                        }))
-                    }
-                }
-            });
-        }
-
-        // Return the full updated log array for the store
-        const updatedLogs = await prisma.dailyLog.findMany({
-            where: { challengeId: challenge.id },
-            include: { goals: true },
-            orderBy: { date: 'asc' }
-        });
-
-        res.json({ message: 'Checked', streak: newStreak, currentDay: currentDayNumber, logs: updatedLogs });
     } catch (error) {
         console.error('Error in checkDailyReset:', error);
         res.status(500).json({ error: 'Internal server error' });

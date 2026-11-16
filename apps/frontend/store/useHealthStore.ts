@@ -73,8 +73,9 @@ interface HealthStoreState {
   profileError: string | null;
   authBlocked: boolean;
 
-  fetchProfileBundle: (date: string) => Promise<void>;
+  fetchProfileBundle: (date: string, options?: { skipCoreProfile?: boolean }) => Promise<void>;
   fetchCatalogIfNeeded: (force?: boolean) => Promise<void>;
+  hydrateProfileFromSync: (profile: UserProfileResponse | null) => void;
 
   logMealOptimistic: (payload: LogMealPayload) => Promise<void>;
   updateMealOptimistic: (id: string, payload: LogMealPayload) => Promise<void>;
@@ -160,73 +161,117 @@ export const useHealthStore = create<HealthStoreState>()(
     (set, get) => ({
       ...INITIAL_HEALTH_STATE,
 
-      fetchProfileBundle: async (date: string) => {
+      fetchProfileBundle: async (date: string, options?: { skipCoreProfile?: boolean }) => {
         const seq = ++healthSyncSeq;
         const hasCachedProfile = get().profileData !== null;
         const hasCachedStats = Boolean(get().dailyStatsByDate[date]);
+        const includeCatalog = get().systemIngredients.length === 0 || get().customFoods.length === 0;
 
         set({
-          isLoadingProfile: !hasCachedProfile,
+          isLoadingProfile: options?.skipCoreProfile ? false : !hasCachedProfile,
           isLoadingStats: !hasCachedStats,
           profileError: null,
         });
 
-        const profilePromise = userService
-          .getProfile()
-          .then((data) => {
-            if (seq !== healthSyncSeq) return;
-            set({
-              authBlocked: false,
-              profileData: data,
-              hasLoadedProfile: true,
-              isLoadingProfile: false,
-            });
-          })
-          .catch((error) => {
-            if (seq !== healthSyncSeq) return;
-            if (error?.status === 401 || error?.status === 403) {
-              set({ authBlocked: true, hasLoadedProfile: true, isLoadingProfile: false });
+        const profilePromise = options?.skipCoreProfile
+          ? Promise.resolve()
+          : userService
+              .getProfile()
+              .then((data) => {
+                if (seq !== healthSyncSeq) return;
+                set({
+                  authBlocked: false,
+                  profileData: data,
+                  hasLoadedProfile: true,
+                  isLoadingProfile: false,
+                });
+              })
+              .catch((error) => {
+                if (seq !== healthSyncSeq) return;
+                if (error?.status === 401 || error?.status === 403) {
+                  set({ authBlocked: true, hasLoadedProfile: true, isLoadingProfile: false });
+                  return;
+                }
+                set({
+                  profileError: 'No pudimos cargar tu perfil.',
+                  hasLoadedProfile: true,
+                  isLoadingProfile: false,
+                });
+              });
+
+        const healthPromise = (async () => {
+          try {
+            const bundle = await healthService.getSyncBundle(date, includeCatalog);
+            if (bundle && bundle.syncVersion === 1 && bundle.dailyStats) {
+              if (seq !== healthSyncSeq) return;
+              set((state) => ({
+                dailyStatsByDate: { ...state.dailyStatsByDate, [date]: bundle.dailyStats },
+                isStravaConnected: Boolean(bundle.stravaConnected),
+                recentWorkouts: Array.isArray(bundle.recentWorkouts)
+                  ? bundle.recentWorkouts
+                  : state.recentWorkouts,
+                customFoods: Array.isArray(bundle.customFoods)
+                  ? bundle.customFoods
+                  : state.customFoods,
+                systemIngredients: Array.isArray(bundle.systemIngredients)
+                  ? bundle.systemIngredients
+                  : state.systemIngredients,
+                hasLoadedStats: true,
+                isLoadingStats: false,
+                isLoadingCustomFoods: false,
+              }));
               return;
             }
-            set({
-              profileError: 'No pudimos cargar tu perfil.',
-              hasLoadedProfile: true,
-              isLoadingProfile: false,
+          } catch {
+            // Fallback to individual endpoints if /api/sync/:date is unavailable or mocked
+          }
+
+          const statsFallback = healthService
+            .getDailyStats(date)
+            .then((stats) => {
+              if (seq !== healthSyncSeq) return;
+              set((state) => ({
+                dailyStatsByDate: { ...state.dailyStatsByDate, [date]: stats },
+                hasLoadedStats: true,
+                isLoadingStats: false,
+              }));
+            })
+            .catch(() => {
+              if (seq !== healthSyncSeq) return;
+              set({ hasLoadedStats: true, isLoadingStats: false });
             });
-          });
 
-        const statsPromise = healthService
-          .getDailyStats(date)
-          .then((stats) => {
-            if (seq !== healthSyncSeq) return;
-            set((state) => ({
-              dailyStatsByDate: { ...state.dailyStatsByDate, [date]: stats },
-              hasLoadedStats: true,
-              isLoadingStats: false,
-            }));
-          })
-          .catch(() => {
-            if (seq !== healthSyncSeq) return;
-            set({ hasLoadedStats: true, isLoadingStats: false });
-          });
+          const stravaFallback = healthService
+            .getStravaStatus()
+            .then(({ connected }) => {
+              if (seq !== healthSyncSeq) return;
+              set({ isStravaConnected: connected });
+            })
+            .catch(() => {});
 
-        const stravaPromise = healthService
-          .getStravaStatus()
-          .then(({ connected }) => {
-            if (seq !== healthSyncSeq) return;
-            set({ isStravaConnected: connected });
-          })
-          .catch(() => {});
+          const workoutsFallback = healthService
+            .getRecentWorkouts()
+            .then(({ workouts }) => {
+              if (seq !== healthSyncSeq) return;
+              set({ recentWorkouts: workouts || [] });
+            })
+            .catch(() => {});
 
-        const workoutsPromise = healthService
-          .getRecentWorkouts()
-          .then(({ workouts }) => {
-            if (seq !== healthSyncSeq) return;
-            set({ recentWorkouts: workouts || [] });
-          })
-          .catch(() => {});
+          await Promise.allSettled([statsFallback, stravaFallback, workoutsFallback]);
+        })();
 
-        await Promise.allSettled([profilePromise, statsPromise, stravaPromise, workoutsPromise]);
+        await Promise.allSettled([profilePromise, healthPromise]);
+      },
+
+      hydrateProfileFromSync: (profile: UserProfileResponse | null) => {
+        if (!profile) return;
+        set({
+          authBlocked: false,
+          profileData: profile,
+          hasLoadedProfile: true,
+          isLoadingProfile: false,
+          profileError: null,
+        });
       },
 
       fetchCatalogIfNeeded: async (force = false) => {

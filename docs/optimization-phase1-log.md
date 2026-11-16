@@ -29,7 +29,7 @@
 
 ---
 
-## 2. Verificación Ejecutada
+## 2. Verificación Ejecutada (Fase 1)
 
 1. **Suite de Tests Unitarios (`vitest run`)**:
    - **8 archivos de test / 45 tests pasados (100% verde)**, incluyendo `tests/phase1-optimistic-swr.test.ts` (8 tests nuevos) y `tests/auth-session.test.ts`.
@@ -37,3 +37,23 @@
    - **0 errores** de TypeScript.
 3. **Build de Producción de Next.js (`npm run build`)**:
    - Compilación exitosa (`✓ Compiled successfully`, `✓ Generating static pages (16/16)`).
+
+---
+
+## 3. Fase 2: Eliminación de Waterfalls y Reducción a 1 Round-Trip por Vista (Patrón `/api/sync`)
+
+| Archivo | Cambio Realizado |
+| :--- | :--- |
+| `apps/backend-core/src/utils/dailyReset.ts` *(Nuevo)* | Unifica la verificación de cambio de día (`checkDailyReset`) y la lectura del reto activo en un único flujo (`reconcileAndGetActiveChallenge`), ejecutando **1 sola query SQL** en lecturas del mismo día en lugar de 4–6 queries secuenciales. |
+| `apps/backend-core/src/controllers/challengeController.ts` y `logController.ts` | `GET /api/challenges/current?timezoneOffset=...` y `POST /api/logs/check-reset` delegan en `reconcileAndGetActiveChallenge`. |
+| `apps/backend-core/src/controllers/syncController.ts` y `routes/sync.ts` *(Nuevos)* | Endpoint BFF unificado `GET /api/sync` que resuelve en paralelo (`Promise.all`) reto activo + misiones del usuario + plantillas disponibles + perfil/logros en **1 round-trip**. |
+| `apps/backend-health/src/controllers/syncController.ts` y `routes/sync.ts` *(Nuevos)* | Endpoint BFF unificado `GET /api/sync/:date` que resuelve en paralelo (`Promise.all`) estadísticas del día, estado de Strava (sin query extra), últimos 10 entrenamientos, comidas personalizadas y los 51 ingredientes base en **1 round-trip**. |
+| `apps/frontend/lib/api/base.ts` | Deduplicación en memoria (`inFlightGetRequests`) de peticiones `GET` concurrentes idénticas (`client-swr-dedup`). |
+| `apps/frontend/lib/api/sync.ts` *(Nuevo)* | Cliente `syncCoreStores` para hidratar `useChallengeStore`, `useQuestStore` y `useHealthStore` en 1 round-trip con fallback transparente para mocks de tests. |
+| `apps/frontend/app/dashboard/page.tsx` y `app/profile/page.tsx` | `/dashboard` reduce su carga de **4 peticiones → 1 petición**; `/profile` reduce su carga de **7–9 peticiones → 2 peticiones en paralelo** (`:3001/api/sync` y `:3002/api/sync/:date`). |
+| `apps/frontend/components/AuthGuard.tsx` y `app/onboarding/page.tsx` | Eliminado el ciclo extra de bloqueo de `onboardingChecked` para sesiones ya onboardeadas y paralelizado `Promise.all([startChallenge, completeOnboarding])`. |
+| `apps/frontend/tests/phase2-sync-dedup.test.ts` *(Nuevo)* | 4 tests unitarios verificando deduplicación `GET`, supresión del `POST /logs/check-reset` redundante y sincronización en 1 round-trip en core y health. |
+
+### Verificación Ejecutada (Fase 2)
+- **Tests Unitarios (`npm run test:unit`)**: **9 suites / 49 tests pasados (100% verde)**.
+- **Chequeo Estático de Tipos (`npx tsc --noEmit`)**: **0 errores** en `apps/frontend`, `apps/backend-core` y `apps/backend-health`.

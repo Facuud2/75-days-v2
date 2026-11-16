@@ -18,6 +18,7 @@ import type { SideQuest } from '@/store/useQuestStore';
 import { useHealthStore } from '@/store/useHealthStore';
 import { useUIStore } from '@/store/useUIStore';
 import { healthService, Meal } from '@/lib/api/health';
+import { syncCoreStores } from '@/lib/api/sync';
 import { getLocalDateString } from '@/lib/utils/date';
 import {
   formatDecimal,
@@ -153,18 +154,15 @@ export default function Profile() {
   const fetchProfile = useCallback(() => {
     if (!user) return;
     const currentDayKey = getLocalDateString();
-    void fetchProfileBundle(currentDayKey);
-    void fetchCatalogIfNeeded();
-  }, [user, fetchProfileBundle, fetchCatalogIfNeeded]);
+    void Promise.allSettled([
+      syncCoreStores({ includeProfile: true }).finally(() => setChallengeReady(true)),
+      fetchProfileBundle(currentDayKey, { skipCoreProfile: true }),
+    ]);
+  }, [user, fetchProfileBundle]);
 
   useEffect(() => {
-    // F-04: todos estos fetches son independientes — lanzarlos en paralelo (Stale-While-Revalidate).
-    Promise.allSettled([
-      fetchProfile(),
-      fetchCurrentChallenge().finally(() => setChallengeReady(true)),
-      fetchQuests(),
-      fetchAvailableQuests(),
-    ]);
+    // Fase 2 (Patrón /api/sync): 1 petición unificada a :3001 + 1 petición unificada a :3002 en paralelo
+    fetchProfile();
 
     // Manejo de callbacks de Strava OAuth
     const urlParams = new URLSearchParams(window.location.search);
@@ -175,7 +173,7 @@ export default function Profile() {
       setStravaError('No pudimos conectar con Strava.');
       window.history.replaceState({}, document.title, window.location.pathname);
     }
-  }, [fetchProfile, fetchCurrentChallenge, fetchQuests, fetchAvailableQuests, setStravaConnected]);
+  }, [fetchProfile, setStravaConnected]);
 
   const handleConnectStrava = async () => {
     try {

@@ -36,6 +36,12 @@ export interface RequestOptions extends RequestInit {
 const DEFAULT_TIMEOUT_MS = 15_000;
 
 /**
+ * Deduplicates identical in-flight GET requests (vercel-react-best-practices: client-swr-dedup)
+ * so concurrent components requesting the same resource share a single network round-trip.
+ */
+const inFlightGetRequests = new Map<string, Promise<any>>();
+
+/**
  * Core fetch wrapper with shared auth, timeout, error handling, and 401 redirect.
  * Used by both apiClient and healthClient.
  */
@@ -46,88 +52,128 @@ export async function baseRequest<T>(
   const baseUrl = options.baseUrl ?? API_BASE_URL;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const token = getAuthToken();
+  const method = (options.method ?? 'GET').toUpperCase();
+  const canDedupe =
+    method === 'GET' && !options.signal && options.timeoutMs === undefined;
+  const dedupeKey = canDedupe ? `${token ?? 'anon'}:${baseUrl}${endpoint}` : null;
 
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(options.headers as Record<string, string> || {}),
-  };
-
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
-  const controller = new AbortController();
-  const externalSignal = options.signal;
-  if (externalSignal) {
-    if (externalSignal.aborted) {
-      controller.abort(externalSignal.reason);
-    } else {
-      externalSignal.addEventListener('abort', () => controller.abort(externalSignal.reason), { once: true });
+  if (dedupeKey) {
+    const existing = inFlightGetRequests.get(dedupeKey);
+    if (existing) {
+      return existing as Promise<T>;
     }
   }
-  const timeoutId = setTimeout(() => controller.abort(new Error('Request timeout')), timeoutMs);
 
-  const config: RequestInit = {
-    ...options,
-    headers,
-    signal: controller.signal,
-  };
-  // Remove custom fields so they are not forwarded to fetch
-  delete (config as any).baseUrl;
-  delete (config as any).timeoutMs;
+  const execute = async (): Promise<T> => {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...((options.headers as Record<string, string>) || {}),
+    };
 
-  let response: Response;
-  try {
-    response = await fetch(`${baseUrl}${endpoint}`, config);
-  } catch (err: any) {
-    if (err?.name === 'AbortError' || controller.signal.aborted) {
-      throw new Error('La solicitud tardó demasiado. Intenta de nuevo.');
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
     }
-    throw err;
-  } finally {
-    clearTimeout(timeoutId);
-  }
 
-  if (!response.ok) {
-    if (response.status === 401) {
-      const isAuthEndpoint =
-        endpoint.includes('/auth/login') ||
-        endpoint.includes('/auth/register') ||
-        endpoint.includes('/auth/me');
-      if (!isAuthEndpoint) {
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('auth-storage');
-          localStorage.removeItem('challenge-storage');
-          window.dispatchEvent(new CustomEvent('auth:unauthorized'));
-          const currentPath = window.location.pathname;
-          if (currentPath !== '/login' && currentPath !== '/register' && currentPath !== '/') {
-            window.location.replace('/login');
-            return new Promise(() => {}) as Promise<T>;
+    const controller = new AbortController();
+    const externalSignal = options.signal;
+    if (externalSignal) {
+      if (externalSignal.aborted) {
+        controller.abort(externalSignal.reason);
+      } else {
+        externalSignal.addEventListener(
+          'abort',
+          () => controller.abort(externalSignal.reason),
+          { once: true }
+        );
+      }
+    }
+    const timeoutId = setTimeout(
+      () => controller.abort(new Error('Request timeout')),
+      timeoutMs
+    );
+
+    const config: RequestInit = {
+      ...options,
+      headers,
+      signal: controller.signal,
+    };
+    // Remove custom fields so they are not forwarded to fetch
+    delete (config as any).baseUrl;
+    delete (config as any).timeoutMs;
+
+    let response: Response;
+    try {
+      response = await fetch(`${baseUrl}${endpoint}`, config);
+    } catch (err: any) {
+      if (err?.name === 'AbortError' || controller.signal.aborted) {
+        throw new Error('La solicitud tardó demasiado. Intenta de nuevo.');
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        const isAuthEndpoint =
+          endpoint.includes('/auth/login') ||
+          endpoint.includes('/auth/register') ||
+          endpoint.includes('/auth/me');
+        if (!isAuthEndpoint) {
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('auth-storage');
+            localStorage.removeItem('challenge-storage');
+            localStorage.removeItem('quest-storage');
+            localStorage.removeItem('health-storage');
+            window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+            const currentPath = window.location.pathname;
+            if (
+              currentPath !== '/login' &&
+              currentPath !== '/register' &&
+              currentPath !== '/'
+            ) {
+              window.location.replace('/login');
+              return new Promise(() => {}) as Promise<T>;
+            }
           }
         }
       }
+
+      const errorBody = await response.json().catch(() => ({}));
+      let errorMessage =
+        errorBody.message ||
+        errorBody.error ||
+        `API request failed with status ${response.status}`;
+
+      if (errorBody.details && Array.isArray(errorBody.details)) {
+        errorMessage +=
+          ': ' +
+          errorBody.details
+            .map((d: any) => `${d.path?.join('.') || 'Field'}: ${d.message}`)
+            .join(', ');
+      }
+
+      const error = new Error(errorMessage) as Error & { status?: number };
+      error.status = response.status;
+      throw error;
     }
 
-    const errorBody = await response.json().catch(() => ({}));
-    let errorMessage =
-      errorBody.message || errorBody.error || `API request failed with status ${response.status}`;
-
-    if (errorBody.details && Array.isArray(errorBody.details)) {
-      errorMessage +=
-        ': ' +
-        errorBody.details
-          .map((d: any) => `${d.path?.join('.') || 'Field'}: ${d.message}`)
-          .join(', ');
+    if (response.status === 204) {
+      return {} as T;
     }
 
-    const error = new Error(errorMessage) as Error & { status?: number };
-    error.status = response.status;
-    throw error;
+    return response.json();
+  };
+
+  const requestPromise = execute().finally(() => {
+    if (dedupeKey) {
+      inFlightGetRequests.delete(dedupeKey);
+    }
+  });
+
+  if (dedupeKey) {
+    inFlightGetRequests.set(dedupeKey, requestPromise);
   }
 
-  if (response.status === 204) {
-    return {} as T;
-  }
-
-  return response.json();
+  return requestPromise;
 }

@@ -256,7 +256,7 @@ export default function Onboarding() {
     }
 
     if (currentStepId === 'quests') {
-      await Promise.all(
+      void Promise.all(
         selectedQuests.map((qId) => {
           const q = availableQuests.find((aq) => aq.id === qId);
           return q
@@ -278,11 +278,13 @@ export default function Onboarding() {
             description: description.trim(),
             icon,
           }));
-        await startChallenge(
-          difficulty,
-          difficulty === 'Custom' ? formattedCustomGoals : undefined
-        );
-        await completeOnboarding();
+        await Promise.all([
+          startChallenge(
+            difficulty,
+            difficulty === 'Custom' ? formattedCustomGoals : undefined
+          ),
+          completeOnboarding(),
+        ]);
         const completedUserId = useAuthStore.getState().user?.id;
         setPendingTutorial(completedUserId);
         useUIStore.getState().openTutorial();
