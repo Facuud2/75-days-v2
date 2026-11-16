@@ -12,6 +12,7 @@ import { useRouter } from 'next/navigation';
 import {
   ChevronRight,
   ChevronLeft,
+  ArrowRight,
   SkipForward,
   Calendar,
   Pencil,
@@ -34,6 +35,10 @@ import CustomTaskEditorSheet, {
 } from '@/components/onboarding/CustomTaskEditorSheet';
 import ImageCropperModal from '@/components/profile/ImageCropperModal';
 import { calculateAgeBasedBmi, type BmiCategoryId } from '@/lib/utils/bmi';
+import {
+  assessWeightGoal,
+  WEIGHT_GOAL_SEGMENTS,
+} from '@/lib/utils/weightGoal';
 
 type StepId =
   | 'profile'
@@ -386,6 +391,7 @@ export default function Onboarding() {
   const suggestedTarget = Math.max(30, Number((weight - 5).toFixed(1)));
   const effectiveTargetWeight = targetWeight ?? suggestedTarget;
   const bmiInfo = calculateAgeBasedBmi(weight, height, age);
+  const weightGoalInfo = assessWeightGoal(weight, effectiveTargetWeight);
   const showAvatarImage =
     Boolean(profileAvatarUrl.trim()) &&
     profileAvatarUrl.trim() !== failedAvatarPreview;
@@ -907,11 +913,11 @@ export default function Onboarding() {
               </div>
             )}
 
-            {/* Substep Peso ideal (Opcional) — sin IMC */}
+            {/* Substep Peso ideal (Opcional) — comparativa estilo Bitepal */}
             {currentStepId === 'targetWeight' && (
-              <div className="flex flex-col items-center justify-center gap-4 px-1">
+              <div className="h-full min-h-0 overflow-y-auto overscroll-contain flex flex-col items-center justify-center gap-3 px-1 py-1">
                 <div
-                  className="w-full rounded-3xl border px-4 py-7"
+                  className="w-full rounded-3xl border px-4 py-5"
                   style={{
                     backgroundColor: 'var(--surface-card)',
                     borderColor: 'var(--border-subtle)',
@@ -932,10 +938,113 @@ export default function Onboarding() {
                   />
                 </div>
 
+                {/* Comparativa peso actual vs peso buscado + nivel de meta */}
+                <section
+                  aria-live="polite"
+                  className="w-full rounded-2xl border px-4 py-3 space-y-2.5"
+                  style={{
+                    backgroundColor: 'var(--surface-card)',
+                    borderColor: 'var(--border-subtle)',
+                  }}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 text-xs font-semibold tabular-nums">
+                        <span style={{ color: 'var(--text-muted)' }}>
+                          {weightGoalInfo.currentWeight.toFixed(1)} kg
+                        </span>
+                        <ArrowRight
+                          className="w-3.5 h-3.5 shrink-0"
+                          style={{ color: 'var(--text-muted)' }}
+                          aria-hidden="true"
+                        />
+                        <span style={{ color: 'var(--text-primary)' }}>
+                          {weightGoalInfo.targetWeight.toFixed(1)} kg
+                        </span>
+                      </div>
+                      <p
+                        className="text-sm font-bold tracking-tight tabular-nums mt-0.5"
+                        style={{ color: 'var(--text-primary)' }}
+                      >
+                        {weightGoalInfo.headline}
+                        {weightGoalInfo.direction !== 'maintain' && (
+                          <span
+                            className="ml-1.5 text-xs font-medium"
+                            style={{ color: 'var(--text-muted)' }}
+                          >
+                            ({weightGoalInfo.percentChange.toFixed(1)}%)
+                          </span>
+                        )}
+                      </p>
+                    </div>
+
+                    <div
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold tabular-nums border whitespace-nowrap shrink-0"
+                      style={{
+                        backgroundColor: `color-mix(in srgb, ${weightGoalInfo.colorVar} 14%, transparent)`,
+                        borderColor: `color-mix(in srgb, ${weightGoalInfo.colorVar} 38%, transparent)`,
+                        color: weightGoalInfo.colorVar,
+                      }}
+                    >
+                      {weightGoalInfo.direction !== 'maintain' && (
+                        <>
+                          <span>
+                            {weightGoalInfo.deltaKg > 0 ? '+' : ''}
+                            {weightGoalInfo.deltaKg.toFixed(1)} kg
+                          </span>
+                          <span aria-hidden="true">·</span>
+                        </>
+                      )}
+                      <span>{weightGoalInfo.label}</span>
+                    </div>
+                  </div>
+
+                  <p
+                    className="text-[11px] leading-snug"
+                    style={{ color: 'var(--text-muted)' }}
+                  >
+                    {weightGoalInfo.message}
+                  </p>
+
+                  <div className="grid grid-cols-4 gap-1.5" aria-hidden="true">
+                    {WEIGHT_GOAL_SEGMENTS.map((seg, idx) => {
+                      const segLevel = idx + 1;
+                      const isReached =
+                        weightGoalInfo.levelIndex > 0 &&
+                        segLevel <= weightGoalInfo.levelIndex;
+                      const isCurrent = seg.id === weightGoalInfo.levelId;
+                      return (
+                        <div key={seg.id} className="space-y-1">
+                          <div
+                            className="h-1.5 rounded-full transition-opacity duration-150"
+                            style={{
+                              backgroundColor: isReached
+                                ? weightGoalInfo.colorVar
+                                : seg.colorVar,
+                              opacity: isReached ? 1 : 0.2,
+                            }}
+                          />
+                          <p
+                            className="text-[10px] text-center truncate"
+                            style={{
+                              color: isCurrent
+                                ? 'var(--text-primary)'
+                                : 'var(--text-muted)',
+                              fontWeight: isCurrent ? 700 : 500,
+                            }}
+                          >
+                            {seg.label}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+
                 <button
                   type="button"
                   onClick={handleSkipOptional}
-                  className="min-h-[40px] px-4 rounded-full text-xs font-semibold transition-transform active:scale-95 cursor-pointer"
+                  className="min-h-[36px] px-4 rounded-full text-xs font-semibold transition-transform active:scale-95 cursor-pointer shrink-0"
                   style={{
                     touchAction: 'manipulation',
                     color: 'var(--text-muted)',
