@@ -7,6 +7,13 @@ import challengeRoutes from './routes/challenges';
 import logRoutes from './routes/logs';
 import questRoutes from './routes/quests';
 import usersRoutes from './routes/users';
+import syncRoutes from './routes/sync';
+import { fetchCachedAvailableQuestTemplates } from './controllers/questController';
+import {
+    configureServerLifecycle,
+    isDbWarmed,
+    warmupDatabaseAndCaches,
+} from './utils/dbLifecycle';
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -31,12 +38,22 @@ app.use(cors({
     },
     methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
+    // Cache preflight OPTIONS responses for 24h to save a full RTT on mutations
+    maxAge: 86_400,
 }));
 // Profile images are sent as optimized data URLs by the profile editor.
 app.use(express.json({ limit: '5mb' }));
 
-app.get('/health', (req, res) => {
-    res.json({ status: 'ok' });
+app.get('/health', async (req, res) => {
+    if (req.query?.deep === '1') {
+        const ok = await warmupDatabaseAndCaches();
+        return res.status(ok ? 200 : 503).json({
+            service: 'backend-core',
+            status: ok ? 'ok' : 'degraded',
+            dbWarmed: ok,
+        });
+    }
+    res.json({ status: 'ok', dbWarmed: isDbWarmed() });
 });
 
 // API Routes
@@ -45,7 +62,17 @@ app.use('/api/challenges', challengeRoutes);
 app.use('/api/logs', logRoutes);
 app.use('/api/quests', questRoutes);
 app.use('/api/users', usersRoutes);
+app.use('/api/sync', syncRoutes);
 
-app.listen(port, () => {
+if (process.env.NODE_ENV !== 'production') {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const devRoutes = require('./routes/dev').default;
+    app.use('/api/dev', devRoutes);
+}
+
+const server = app.listen(port, () => {
     console.log(`Server is running on port ${port}`);
+    void warmupDatabaseAndCaches(() => fetchCachedAvailableQuestTemplates());
 });
+
+configureServerLifecycle(server, 'backend-core');

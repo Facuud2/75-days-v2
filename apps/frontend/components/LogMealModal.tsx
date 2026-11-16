@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { X, Search, Utensils, Loader2, CheckCircle2, ChevronRight, ArrowLeft, Plus, Bookmark, Flame } from 'lucide-react';
 import { healthService, FatSecretFoodItem, FatSecretFoodDetails, FatSecretFoodServing, CustomFood, Ingredient } from '@/lib/api/health';
+import { useHealthStore } from '@/store/useHealthStore';
+import toast from 'react-hot-toast';
 
 interface LogMealModalProps {
     isOpen: boolean;
@@ -33,10 +35,15 @@ export default function LogMealModal({ isOpen, onClose, onSaved, date }: LogMeal
     const [searchResults, setSearchResults] = useState<FatSecretFoodItem[]>([]);
     const [hasSearched, setHasSearched] = useState(false);
 
-    // Custom Foods / Recipe Builder state
-    const [customFoods, setCustomFoods] = useState<CustomFood[]>([]);
-    const [systemIngredients, setSystemIngredients] = useState<Ingredient[]>([]);
-    const [isLoadingCustom, setIsLoadingCustom] = useState(false);
+    // Custom Foods / Recipe Builder state (Cached via useHealthStore for 0ms open)
+    const {
+        customFoods,
+        systemIngredients,
+        isLoadingCustomFoods: isLoadingCustom,
+        fetchCatalogIfNeeded,
+        logMealOptimistic,
+        createCustomFoodOptimistic,
+    } = useHealthStore();
 
     // New Recipe Builder State
     const [newCustomFood, setNewCustomFood] = useState({
@@ -76,10 +83,9 @@ export default function LogMealModal({ isOpen, onClose, onSaved, date }: LogMeal
             setIsSelectingIngredient(false);
             setIngredientSearch('');
             setIngredientSearchResults([]);
-            fetchCustomFoods();
-            fetchSystemIngredients();
+            void fetchCatalogIfNeeded();
         }
-    }, [isOpen]);
+    }, [isOpen, fetchCatalogIfNeeded]);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -89,27 +95,6 @@ export default function LogMealModal({ isOpen, onClose, onSaved, date }: LogMeal
         document.addEventListener('keydown', handleKeyDown);
         return () => document.removeEventListener('keydown', handleKeyDown);
     }, [isOpen, onClose]);
-
-    const fetchSystemIngredients = async () => {
-        try {
-            const ingredients = await healthService.getSystemIngredients();
-            setSystemIngredients(ingredients);
-        } catch (error) {
-            console.error('Failed to load system ingredients:', error);
-        }
-    };
-
-    const fetchCustomFoods = async () => {
-        setIsLoadingCustom(true);
-        try {
-            const foods = await healthService.getCustomFoods();
-            setCustomFoods(foods);
-        } catch (error) {
-            console.error('Failed to load custom foods:', error);
-        } finally {
-            setIsLoadingCustom(false);
-        }
-    };
 
     if (!isOpen) return null;
 
@@ -212,74 +197,69 @@ export default function LogMealModal({ isOpen, onClose, onSaved, date }: LogMeal
         };
     }, { cals: 0, p: 0, c: 0, f: 0 });
 
-    const handleCreateCustomFood = async (e: React.FormEvent) => {
+    const handleCreateCustomFood = (e: React.FormEvent) => {
         e.preventDefault();
         if (!newCustomFood.name || recipeIngredients.length === 0) return;
 
-        setIsSaving(true);
-        try {
-            await healthService.createCustomFood({
-                name: newCustomFood.name,
-                description: newCustomFood.description || null,
-                servingSize: newCustomFood.servingSize || null,
-                ingredients: recipeIngredients.map(i => ({ ingredientId: i.ingredientId, weightGrams: i.weightGrams }))
-            });
-            await fetchCustomFoods();
-            setStep('MAIN');
-            setNewCustomFood({ name: '', description: '', servingSize: '' });
-            setRecipeIngredients([]);
-        } catch (error) {
-            console.error('Failed to create custom food:', error);
-        } finally {
-            setIsSaving(false);
-        }
+        const payload = {
+            name: newCustomFood.name,
+            description: newCustomFood.description || null,
+            servingSize: newCustomFood.servingSize || null,
+            ingredients: recipeIngredients.map(i => ({ ingredientId: i.ingredientId, weightGrams: i.weightGrams }))
+        };
+        const computed = {
+            calories: currentRecipeMacros.cals,
+            proteinG: currentRecipeMacros.p,
+            carbG: currentRecipeMacros.c,
+            fatG: currentRecipeMacros.f,
+        };
+
+        // 0ms Optimistic UI: vuelve a MAIN inmediatamente y sincroniza en segundo plano
+        setStep('MAIN');
+        setNewCustomFood({ name: '', description: '', servingSize: '' });
+        setRecipeIngredients([]);
+        void createCustomFoodOptimistic(payload, computed).catch(() => {
+            toast.error('No se pudo guardar el platillo personalizado.');
+        });
     };
 
-    const handleLogCustomFood = async (food: CustomFood) => {
-        setIsSaving(true);
-        try {
-            const payload = {
-                date,
-                mealType,
-                name: food.name,
-                calories: food.calories,
-                proteinG: food.proteinG,
-                carbG: food.carbG,
-                fatG: food.fatG
-            };
-            await healthService.logMeal(payload);
-            onSaved();
-            onClose();
-        } catch (error) {
-            console.error('Failed to log custom food:', error);
-        } finally {
-            setIsSaving(false);
-        }
+    const handleLogCustomFood = (food: CustomFood) => {
+        const payload = {
+            date,
+            mealType,
+            name: food.name,
+            calories: food.calories,
+            proteinG: food.proteinG,
+            carbG: food.carbG,
+            fatG: food.fatG
+        };
+        // 0ms Optimistic UI: actualiza el store y cierra el modal al instante
+        onSaved();
+        onClose();
+        void logMealOptimistic(payload).catch(() => {
+            toast.error('No se pudo registrar la comida.');
+        });
     };
 
-    const handleSaveMeal = async () => {
+    const handleSaveMeal = () => {
         if (!foodDetails || !selectedServing) return;
 
-        setIsSaving(true);
-        try {
-            const payload = {
-                date,
-                mealType,
-                name: foodDetails.name,
-                calories: selectedServing.calories * quantity,
-                proteinG: selectedServing.protein * quantity,
-                carbG: selectedServing.carbohydrates * quantity,
-                fatG: selectedServing.fat * quantity
-            };
+        const payload = {
+            date,
+            mealType,
+            name: foodDetails.name,
+            calories: selectedServing.calories * quantity,
+            proteinG: selectedServing.protein * quantity,
+            carbG: selectedServing.carbohydrates * quantity,
+            fatG: selectedServing.fat * quantity
+        };
 
-            await healthService.logMeal(payload);
-            onSaved();
-            onClose();
-        } catch (error) {
-            console.error('Failed to save meal:', error);
-        } finally {
-            setIsSaving(false);
-        }
+        // 0ms Optimistic UI: actualiza el store y cierra el modal al instante
+        onSaved();
+        onClose();
+        void logMealOptimistic(payload).catch(() => {
+            toast.error('No se pudo registrar la comida.');
+        });
     };
 
     return (
@@ -707,22 +687,34 @@ export default function LogMealModal({ isOpen, onClose, onSaved, date }: LogMeal
                                             <div className="max-h-40 overflow-y-auto space-y-1 scrollbar-thin scrollbar-thumb-zinc-700">
                                                 {isImporting ? (
                                                     <div className="py-4 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-orange-500" /></div>
-                                                ) : ingredientSearchResults.length > 0 ? (
-                                                    ingredientSearchResults.map(item => (
-                                                        <button
-                                                            key={item.id}
-                                                            type="button"
-                                                            onClick={() => handleSelectIngredientFromSearch(item)}
-                                                            className="w-full text-left p-2 hover:bg-zinc-800 rounded-lg flex flex-col group overflow-hidden"
-                                                        >
-                                                            <span className="text-sm font-semibold text-zinc-300 group-hover:text-white truncate w-full">{item.name} {item.brand && <span className="text-xs text-zinc-500 font-normal">({item.brand})</span>}</span>
-                                                            <span className="text-xs text-zinc-500 truncate w-full">{item.description}</span>
-                                                        </button>
-                                                    ))
-                                                ) : ingredientSearch ? (
-                                                    <div className="text-xs text-center text-zinc-500 py-2">Busca para ver resultados de FatSecret</div>
                                                 ) : (
-                                                    <div className="text-xs text-center text-zinc-600 py-2">Ingresa el nombre del alimento y busca</div>
+                                                    <>
+                                                        {systemIngredients
+                                                            .filter(ing => !ingredientSearch.trim() || ing.name.toLowerCase().includes(ingredientSearch.trim().toLowerCase()))
+                                                            .slice(0, 15)
+                                                            .map(ing => (
+                                                                <button
+                                                                    key={ing.id}
+                                                                    type="button"
+                                                                    onClick={() => addIngredientToRecipe(ing)}
+                                                                    className="w-full text-left p-2 hover:bg-zinc-800 rounded-lg flex flex-col group overflow-hidden"
+                                                                >
+                                                                    <span className="text-sm font-semibold text-zinc-200 group-hover:text-orange-400 truncate w-full">{ing.name}</span>
+                                                                    <span className="text-xs text-zinc-500 truncate w-full">{ing.caloriesPer100g} kcal / 100g · P: {ing.proteinPer100g}g · C: {ing.carbPer100g}g · G: {ing.fatPer100g}g</span>
+                                                                </button>
+                                                            ))}
+                                                        {ingredientSearchResults.map(item => (
+                                                            <button
+                                                                key={item.id}
+                                                                type="button"
+                                                                onClick={() => handleSelectIngredientFromSearch(item)}
+                                                                className="w-full text-left p-2 hover:bg-zinc-800 rounded-lg flex flex-col group overflow-hidden"
+                                                            >
+                                                                <span className="text-sm font-semibold text-zinc-300 group-hover:text-white truncate w-full">{item.name} {item.brand && <span className="text-xs text-zinc-500 font-normal">({item.brand})</span>}</span>
+                                                                <span className="text-xs text-zinc-500 truncate w-full">{item.description}</span>
+                                                            </button>
+                                                        ))}
+                                                    </>
                                                 )}
                                             </div>
                                         </div>

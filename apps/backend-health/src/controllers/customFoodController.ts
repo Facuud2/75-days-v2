@@ -13,10 +13,31 @@ const CustomFoodSchema = z.object({
     })).min(1, "Debe tener al menos un ingrediente")
 });
 
-export const getSystemIngredients = async (req: AuthRequest, res: Response) => {
+const INGREDIENTS_CACHE_TTL_MS = 5 * 60 * 1000;
+let cachedIngredients: { data: any[]; expiresAt: number } | null = null;
+
+export function invalidateSystemIngredientsCache() {
+    cachedIngredients = null;
+}
+
+export async function fetchCachedSystemIngredients() {
+    const now = Date.now();
+    if (cachedIngredients && cachedIngredients.expiresAt > now) {
+        return cachedIngredients.data;
+    }
     const ingredients = await prisma.ingredient.findMany({
-        orderBy: { name: 'asc' }
+        orderBy: { name: 'asc' },
     });
+    cachedIngredients = {
+        data: ingredients,
+        expiresAt: now + INGREDIENTS_CACHE_TTL_MS,
+    };
+    return ingredients;
+}
+
+export const getSystemIngredients = async (_req: AuthRequest, res: Response) => {
+    const ingredients = await fetchCachedSystemIngredients();
+    res.setHeader('Cache-Control', 'private, max-age=300, stale-while-revalidate=3600');
     return res.json(ingredients);
 };
 

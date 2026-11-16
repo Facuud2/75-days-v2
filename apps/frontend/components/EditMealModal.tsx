@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { X, Loader2, CheckCircle2, Edit3, Trash2 } from 'lucide-react';
-import { healthService, Meal, LogMealPayload } from '@/lib/api/health';
+import { Meal, LogMealPayload } from '@/lib/api/health';
+import { useHealthStore } from '@/store/useHealthStore';
+import toast from 'react-hot-toast';
 
 interface EditMealModalProps {
     isOpen: boolean;
@@ -12,71 +14,65 @@ interface EditMealModalProps {
     date: string;
 }
 
-export default function EditMealModal({ isOpen, onClose, onSaved, meal, date }: EditMealModalProps) {
-    const [isSaving, setIsSaving] = useState(false);
-    const [isDeleting, setIsDeleting] = useState(false);
-    const [formData, setFormData] = useState({
-        name: '',
-        calories: '',
-        proteinG: '',
-        carbG: '',
-        fatG: ''
-    });
+function buildInitialFormData(meal: Meal | null) {
+    return {
+        name: meal?.name ?? '',
+        calories: meal ? meal.calories.toString() : '',
+        proteinG: meal ? meal.proteinG.toString() : '',
+        carbG: meal ? meal.carbG.toString() : '',
+        fatG: meal ? meal.fatG.toString() : '',
+    };
+}
 
-    useEffect(() => {
+export default function EditMealModal({ isOpen, onClose, onSaved, meal, date }: EditMealModalProps) {
+    const { updateMealOptimistic, deleteMealOptimistic } = useHealthStore();
+    const isSaving = false;
+    const isDeleting = false;
+    const currentMealKey = isOpen && meal ? meal.id : null;
+    const [prevMealKey, setPrevMealKey] = useState<string | null>(currentMealKey);
+    const [formData, setFormData] = useState(() => buildInitialFormData(meal));
+
+    if (currentMealKey !== prevMealKey) {
+        setPrevMealKey(currentMealKey);
         if (isOpen && meal) {
-            setFormData({
-                name: meal.name,
-                calories: meal.calories.toString(),
-                proteinG: meal.proteinG.toString(),
-                carbG: meal.carbG.toString(),
-                fatG: meal.fatG.toString()
-            });
+            setFormData(buildInitialFormData(meal));
         }
-    }, [isOpen, meal]);
+    }
 
     if (!isOpen || !meal) return null;
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!formData.name || !formData.calories) return;
 
-        setIsSaving(true);
-        try {
-            const payload: LogMealPayload = {
-                date: date,
-                mealType: meal.mealType as any,
-                name: formData.name,
-                calories: Number(formData.calories),
-                proteinG: Number(formData.proteinG) || 0,
-                carbG: Number(formData.carbG) || 0,
-                fatG: Number(formData.fatG) || 0
-            };
+        const payload: LogMealPayload = {
+            date: date,
+            mealType: meal.mealType as any,
+            name: formData.name,
+            calories: Number(formData.calories),
+            proteinG: Number(formData.proteinG) || 0,
+            carbG: Number(formData.carbG) || 0,
+            fatG: Number(formData.fatG) || 0
+        };
 
-            await healthService.updateLoggedMeal(meal.id, payload);
-            onSaved();
-            onClose();
-        } catch (error) {
-            console.error('Failed to update meal:', error);
-        } finally {
-            setIsSaving(false);
-        }
+        // 0ms Optimistic UI: actualiza el store y cierra el modal al instante
+        onSaved();
+        onClose();
+        void updateMealOptimistic(meal.id, payload).catch(() => {
+            toast.error('No se pudieron guardar los cambios del alimento.');
+        });
     };
 
-    const handleDelete = async () => {
+    const handleDelete = () => {
         if (!meal || !window.confirm('¿Estás seguro de que deseas eliminar este alimento?')) return;
 
-        setIsDeleting(true);
-        try {
-            await healthService.deleteLoggedMeal(meal.id);
-            onSaved();
-            onClose();
-        } catch (error) {
-            console.error('Failed to delete meal:', error);
-            alert('Error al eliminar el alimento.');
-        } finally {
-            setIsDeleting(false);
-        }
+        const mealId = meal.id;
+        // 0ms Optimistic UI: elimina del store y cierra el modal al instante
+        onSaved();
+        onClose();
+        void deleteMealOptimistic(mealId, date).catch(() => {
+            toast.error('Error al eliminar el alimento.');
+        });
     };
 
     return (

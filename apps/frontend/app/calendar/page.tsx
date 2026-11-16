@@ -115,10 +115,7 @@ export default function CalendarView() {
   const [devDataset, setDevDataset] = useState<DevDataset>(() => readDevDataset());
 
   useEffect(() => {
-    void (async () => {
-      await fetchCurrentChallenge();
-      if (useChallengeStore.getState().isActive) await checkDailyReset();
-    })();
+    void Promise.all([fetchCurrentChallenge(), checkDailyReset()]);
   }, [checkDailyReset, fetchCurrentChallenge]);
 
   // El fixture entra exactamente donde entra el store; el resto de la página

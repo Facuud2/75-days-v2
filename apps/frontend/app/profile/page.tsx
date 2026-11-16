@@ -15,9 +15,10 @@ import { useChallengeStore } from '@/store/useChallengeStore';
 import type { Goal } from '@/store/useChallengeStore';
 import { useQuestStore } from '@/store/useQuestStore';
 import type { SideQuest } from '@/store/useQuestStore';
+import { useHealthStore } from '@/store/useHealthStore';
 import { useUIStore } from '@/store/useUIStore';
-import { userService, UserProfileResponse } from '@/lib/api/users';
-import { healthService, DailyStats, Meal } from '@/lib/api/health';
+import { healthService, Meal } from '@/lib/api/health';
+import { syncCoreStores } from '@/lib/api/sync';
 import { getLocalDateString } from '@/lib/utils/date';
 import {
   formatDecimal,
@@ -111,18 +112,29 @@ export default function Profile() {
     subscribeToQuest,
   } = useQuestStore();
 
-  const [profileData, setProfileData] = useState<UserProfileResponse | null>(null);
-  const [dailyStats, setDailyStats] = useState<DailyStats | null>(null);
-  const [recentWorkouts, setRecentWorkouts] = useState<any[]>([]);
-  const [isStravaConnected, setIsStravaConnected] = useState(false);
+  const {
+    profileData,
+    dailyStatsByDate,
+    recentWorkouts,
+    isStravaConnected,
+    hasLoadedProfile,
+    hasLoadedStats,
+    profileError,
+    authBlocked,
+    fetchProfileBundle,
+    fetchCatalogIfNeeded,
+    applyOptimisticProfilePatch,
+    setStravaConnected,
+  } = useHealthStore();
+
+  const today = getLocalDateString();
+  const dailyStats = dailyStatsByDate[today] ?? null;
+
   const [syncingStrava, setSyncingStrava] = useState(false);
   const [stravaError, setStravaError] = useState<string | null>(null);
-
-  const [hasLoadedProfile, setHasLoadedProfile] = useState(false);
-  const [hasLoadedStats, setHasLoadedStats] = useState(false);
-  const [challengeReady, setChallengeReady] = useState(false);
-  const [profileError, setProfileError] = useState<string | null>(null);
-  const [authBlocked, setAuthBlocked] = useState(false);
+  const [challengeReady, setChallengeReady] = useState(() =>
+    Boolean(isActive || Object.keys(logs).length > 0 || hasLoadedProfile)
+  );
 
   const [profileEditMode, setProfileEditMode] = useState<ProfileEditMode | null>(null);
   const [isEditMenuOpen, setIsEditMenuOpen] = useState(false);
@@ -141,62 +153,27 @@ export default function Profile() {
 
   const fetchProfile = useCallback(() => {
     if (!user) return;
-
-    const today = getLocalDateString();
-    setProfileError(null);
-
-    userService
-      .getProfile()
-      .then((data) => {
-        setAuthBlocked(false);
-        setProfileData(data);
-      })
-      .catch((error) => {
-        if (error?.status === 401 || error?.status === 403) {
-          setAuthBlocked(true);
-          return;
-        }
-        console.error('Error fetching profile:', error);
-        setProfileError('No pudimos cargar tu perfil.');
-      })
-      .finally(() => setHasLoadedProfile(true));
-
-    healthService
-      .getDailyStats(today)
-      .then(setDailyStats)
-      .catch(() => setDailyStats(null))
-      .finally(() => setHasLoadedStats(true));
-
-    healthService
-      .getStravaStatus()
-      .then(({ connected }) => setIsStravaConnected(connected))
-      .catch(() => setIsStravaConnected(false));
-
-    healthService
-      .getRecentWorkouts()
-      .then(({ workouts }) => setRecentWorkouts(workouts || []))
-      .catch(() => setRecentWorkouts([]));
-  }, [user]);
+    const currentDayKey = getLocalDateString();
+    void Promise.allSettled([
+      syncCoreStores({ includeProfile: true }).finally(() => setChallengeReady(true)),
+      fetchProfileBundle(currentDayKey, { skipCoreProfile: true }),
+    ]);
+  }, [user, fetchProfileBundle]);
 
   useEffect(() => {
-    // F-04: todos estos fetches son independientes — lanzarlos en paralelo.
-    Promise.allSettled([
-      fetchProfile(),
-      fetchCurrentChallenge().finally(() => setChallengeReady(true)),
-      fetchQuests(),
-      fetchAvailableQuests(),
-    ]);
+    // Fase 2 (Patrón /api/sync): 1 petición unificada a :3001 + 1 petición unificada a :3002 en paralelo
+    fetchProfile();
 
     // Manejo de callbacks de Strava OAuth
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('strava') === 'success') {
-      setIsStravaConnected(true);
+      setStravaConnected(true);
       window.history.replaceState({}, document.title, window.location.pathname);
     } else if (urlParams.get('strava') === 'error') {
       setStravaError('No pudimos conectar con Strava.');
       window.history.replaceState({}, document.title, window.location.pathname);
     }
-  }, [fetchProfile, fetchCurrentChallenge, fetchQuests, fetchAvailableQuests]);
+  }, [fetchProfile, setStravaConnected]);
 
   const handleConnectStrava = async () => {
     try {
@@ -224,20 +201,18 @@ export default function Profile() {
     }
   };
 
-  const handleSubscribe = async (quest: AvailableQuestSummary) => {
+  const handleSubscribe = (quest: AvailableQuestSummary) => {
+    if (subscribingTo !== null) return;
     setSubscribingTo(quest.title);
-    try {
-      await subscribeToQuest(quest.title, quest.difficulty, quest.durationDays);
-      const error = useQuestStore.getState().error;
-      if (error) {
-        toast.error('No pudimos suscribirte a la actividad.');
-      } else {
-        toast.success(`Te suscribiste a ${quest.title}.`);
-        await Promise.all([fetchQuests(), fetchAvailableQuests()]);
-      }
-    } finally {
-      setSubscribingTo(null);
-    }
+    toast.success(`Te suscribiste a ${quest.title}.`);
+    void subscribeToQuest(quest.title, quest.difficulty, quest.durationDays)
+      .then(() => {
+        const error = useQuestStore.getState().error;
+        if (error) toast.error('No pudimos suscribirte a la actividad.');
+      })
+      .finally(() => {
+        setSubscribingTo(null);
+      });
   };
 
   const handleOpenQuest = (quest: QuestSummary) => {
@@ -266,7 +241,6 @@ export default function Profile() {
   const level = Math.floor((safeNumber(points) ?? 0) / 100) + 1;
   const memberSince = formatMemberSince(profileData?.user.registeredAt);
 
-  const today = getLocalDateString();
   const todayGoals: Goal[] =
     logs[today]?.goals ??
     customGoalsTemplate.map((goal, index) => ({
@@ -607,7 +581,7 @@ export default function Profile() {
               ...(updated.targetWeight !== undefined && { targetWeight: updated.targetWeight }),
               ...(updated.height !== undefined && { height: updated.height }),
             });
-            fetchProfile();
+            applyOptimisticProfilePatch(updated);
           }}
           initialValues={{
             name: user.name,
@@ -624,8 +598,8 @@ export default function Profile() {
         <LogMealModal
           isOpen={isLogMealModalOpen}
           onClose={() => setIsLogMealModalOpen(false)}
-          date={format(new Date(), 'yyyy-MM-dd')}
-          onSaved={fetchProfile}
+          date={today}
+          onSaved={() => {}}
         />
       )}
 
@@ -633,10 +607,9 @@ export default function Profile() {
         <EditMealModal
           isOpen={!!editingMeal}
           meal={editingMeal}
-          date={format(new Date(), 'yyyy-MM-dd')}
+          date={today}
           onClose={() => setEditingMeal(null)}
           onSaved={() => {
-            fetchProfile();
             setEditingMeal(null);
           }}
         />
@@ -649,14 +622,12 @@ export default function Profile() {
             setIsLogWorkoutModalOpen(false);
             setEditingWorkout(null);
           }}
-          date={format(new Date(), 'yyyy-MM-dd')}
+          date={today}
           initialData={editingWorkout}
-          onDelete={(deletedId) => {
-            setRecentWorkouts((previous) => previous.filter((workout) => workout.id !== deletedId));
-            fetchProfile();
+          onDelete={() => {
+            setEditingWorkout(null);
           }}
           onSaved={() => {
-            fetchProfile();
             setEditingWorkout(null);
           }}
         />
@@ -666,8 +637,6 @@ export default function Profile() {
         <SideQuestsModal
           onClose={() => {
             setIsSideQuestsModalOpen(false);
-            fetchQuests();
-            fetchAvailableQuests();
           }}
         />
       ) : null}

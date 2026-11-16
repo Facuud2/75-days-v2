@@ -16,13 +16,17 @@ function dateRange(start: string, days: number): string[] {
     return result;
 }
 
-/** Aggregate meals and workouts for a single date into a summary object. */
-async function buildDaySummary(userId: string, date: string, profile: { dailyCalorieGoal: number; proteinGoalG: number; carbGoalG: number; fatGoalG: number } | null) {
-    const [meals, workouts] = await Promise.all([
-        prisma.mealEntry.findMany({ where: { userId, date } }),
-        prisma.workoutEntry.findMany({ where: { userId, date } }),
-    ]);
-
+function formatDaySummaryFromLists(
+    date: string,
+    meals: any[],
+    workouts: any[],
+    profile: {
+        dailyCalorieGoal: number;
+        proteinGoalG: number;
+        carbGoalG: number;
+        fatGoalG: number;
+    } | null
+) {
     const consumed = meals.reduce((s, m) => s + m.calories, 0);
     const proteinG = meals.reduce((s, m) => s + m.proteinG, 0);
     const carbG = meals.reduce((s, m) => s + m.carbG, 0);
@@ -52,23 +56,67 @@ async function buildDaySummary(userId: string, date: string, profile: { dailyCal
         },
         workoutsCount: workouts.length,
         totalWorkoutMin: workoutMin,
-        meals: meals.map(m => ({
+        meals: meals.map((m) => ({
             id: m.id,
             mealType: m.mealType,
             name: m.name,
             calories: m.calories,
             proteinG: m.proteinG,
             carbG: m.carbG,
-            fatG: m.fatG
+            fatG: m.fatG,
         })),
     };
+}
+
+/**
+ * Fase 3 (Resolución de F-09):
+ * En lugar de lanzar 2 queries por día (14 en semanal y hasta 62 en mensual),
+ * ejecuta únicamente 3 queries concurrentes en un solo Promise.all con filtro
+ * de rango `date: { gte, lte }` y agrupa por fecha en memoria en O(N).
+ */
+async function buildRangeSummaries(userId: string, dates: string[]) {
+    const startDate = dates[0];
+    const endDate = dates[dates.length - 1];
+
+    const [profile, allMeals, allWorkouts] = await Promise.all([
+        prisma.userHealthProfile.findUnique({ where: { userId } }),
+        prisma.mealEntry.findMany({
+            where: { userId, date: { gte: startDate, lte: endDate } },
+        }),
+        prisma.workoutEntry.findMany({
+            where: { userId, date: { gte: startDate, lte: endDate } },
+        }),
+    ]);
+
+    const mealsByDate = new Map<string, any[]>();
+    for (const meal of allMeals) {
+        const list = mealsByDate.get(meal.date);
+        if (list) list.push(meal);
+        else mealsByDate.set(meal.date, [meal]);
+    }
+
+    const workoutsByDate = new Map<string, any[]>();
+    for (const workout of allWorkouts) {
+        const list = workoutsByDate.get(workout.date);
+        if (list) list.push(workout);
+        else workoutsByDate.set(workout.date, [workout]);
+    }
+
+    return dates.map((d) =>
+        formatDaySummaryFromLists(
+            d,
+            mealsByDate.get(d) ?? [],
+            workoutsByDate.get(d) ?? [],
+            profile
+        )
+    );
 }
 
 // ── Controllers ───────────────────────────────────────────────────────────────
 
 /**
  * GET /api/stats/daily/:date
- * Returns the full energy balance summary for a single day.
+ * Returns the full energy balance summary for a single day in 1 parallel DB round-trip.
  */
 export const getDailyStats = async (req: AuthRequest, res: Response) => {
     const userId = req.user!.id;
@@ -78,16 +126,19 @@ export const getDailyStats = async (req: AuthRequest, res: Response) => {
         return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
     }
 
-    const profile = await prisma.userHealthProfile.findUnique({ where: { userId } });
-    const summary = await buildDaySummary(userId, date, profile);
+    const [profile, meals, workouts] = await Promise.all([
+        prisma.userHealthProfile.findUnique({ where: { userId } }),
+        prisma.mealEntry.findMany({ where: { userId, date } }),
+        prisma.workoutEntry.findMany({ where: { userId, date } }),
+    ]);
 
+    const summary = formatDaySummaryFromLists(date, meals, workouts, profile);
     return res.json(summary);
 };
 
 /**
  * GET /api/stats/weekly?startDate=YYYY-MM-DD
- * Returns 7 days of data starting from startDate.
- * Ideal for rendering weekly progress charts on the frontend.
+ * Returns 7 days of data starting from startDate in 1 parallel DB round-trip (3 queries total vs 15 previously).
  */
 export const getWeeklyStats = async (req: AuthRequest, res: Response) => {
     const userId = req.user!.id;
@@ -97,9 +148,8 @@ export const getWeeklyStats = async (req: AuthRequest, res: Response) => {
         return res.status(400).json({ error: 'Provide startDate as YYYY-MM-DD query param' });
     }
 
-    const profile = await prisma.userHealthProfile.findUnique({ where: { userId } });
     const dates = dateRange(String(startDate), 7);
-    const days = await Promise.all(dates.map(d => buildDaySummary(userId, d, profile)));
+    const days = await buildRangeSummaries(userId, dates);
 
     const totals = days.reduce(
         (acc, d) => ({
@@ -115,8 +165,7 @@ export const getWeeklyStats = async (req: AuthRequest, res: Response) => {
 
 /**
  * GET /api/stats/monthly?month=YYYY-MM
- * Returns all days in a given month.
- * Ideal for monthly overview charts.
+ * Returns all days in a given month in 1 parallel DB round-trip (3 queries total vs 63 previously).
  */
 export const getMonthlyStats = async (req: AuthRequest, res: Response) => {
     const userId = req.user!.id;
@@ -126,14 +175,12 @@ export const getMonthlyStats = async (req: AuthRequest, res: Response) => {
         return res.status(400).json({ error: 'Provide month as YYYY-MM query param' });
     }
 
-    // Determine how many days are in the requested month
     const [year, mon] = String(month).split('-').map(Number);
     const daysInMonth = new Date(year, mon, 0).getDate();
     const startDate = `${month}-01`;
 
-    const profile = await prisma.userHealthProfile.findUnique({ where: { userId } });
     const dates = dateRange(startDate, daysInMonth);
-    const days = await Promise.all(dates.map(d => buildDaySummary(userId, d, profile)));
+    const days = await buildRangeSummaries(userId, dates);
 
     const totals = days.reduce(
         (acc, d) => ({

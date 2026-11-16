@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '../middlewares/auth';
+import { asyncHandler } from '../utils/asyncHandler';
 import {
     logMeal,
     getMealsForDay,
@@ -14,11 +15,11 @@ const router = Router();
 // All nutrition routes require a valid JWT
 router.use(authenticate);
 
-router.post('/meals', logMeal);
-router.get('/meals/:date', getMealsForDay);
-router.put('/meals/:id', editMeal);
-router.delete('/meals/:id', deleteMeal);
-router.put('/goals', upsertGoals);
-router.get('/goals', getGoals);
+router.post('/meals', asyncHandler(logMeal));
+router.get('/meals/:date', asyncHandler(getMealsForDay));
+router.put('/meals/:id', asyncHandler(editMeal));
+router.delete('/meals/:id', asyncHandler(deleteMeal));
+router.put('/goals', asyncHandler(upsertGoals));
+router.get('/goals', asyncHandler(getGoals));
 
 export default router;

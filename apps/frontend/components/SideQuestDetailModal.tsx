@@ -10,20 +10,20 @@ interface Props {
 export default function SideQuestDetailModal({ quest, onClose }: Props) {
   const { toggleTask, restartQuest } = useQuestStore();
   const liveQuest = useQuestStore(state => state.quests.find(item => item.id === quest.id) ?? quest);
-  const [busy, setBusy] = useState<string | null>(null);
+  const inFlightTasksRef = useState(() => new Set<string>())[0];
   const tasks = liveQuest.currentRun?.tasks ?? [];
   const done = tasks.filter(task => task.completed).length;
 
-  const handleTask = async (taskId: string) => {
-    setBusy(taskId);
-    await toggleTask(quest.id, taskId);
-    setBusy(null);
+  const handleTask = (taskId: string) => {
+    if (inFlightTasksRef.has(taskId)) return;
+    inFlightTasksRef.add(taskId);
+    void toggleTask(liveQuest.id, taskId).finally(() => {
+      inFlightTasksRef.delete(taskId);
+    });
   };
 
-  const handleRestart = async () => {
-    setBusy('restart');
-    await restartQuest(quest.id);
-    setBusy(null);
+  const handleRestart = () => {
+    void restartQuest(liveQuest.id);
     onClose();
   };
 
@@ -48,9 +48,9 @@ export default function SideQuestDetailModal({ quest, onClose }: Props) {
           ) : (
             <div className="space-y-3">
               {tasks.map(task => (
-                <button key={task.id} onClick={() => handleTask(task.id)} disabled={busy !== null || liveQuest.completed} className={`flex w-full items-start gap-3 rounded-2xl border p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-70 ${task.completed ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-white/10 bg-white/[.03] hover:border-emerald-500/40 hover:bg-emerald-950/20'}`}>
+                <button key={task.id} onClick={() => handleTask(task.id)} disabled={liveQuest.completed} className={`flex w-full items-start gap-3 rounded-2xl border p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-70 ${task.completed ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-white/10 bg-white/[.03] hover:border-emerald-500/40 hover:bg-emerald-950/20'}`}>
                   <span className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 ${task.completed ? 'border-emerald-400 bg-emerald-400 text-zinc-950' : 'border-white/25 text-white/0'}`}>
-                    {busy === task.id ? <span className="h-3 w-3 animate-spin rounded-full border border-white/30 border-t-white" /> : <Check size={14} strokeWidth={3} />}
+                    <Check size={14} strokeWidth={3} />
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className={`block font-semibold ${task.completed ? 'text-emerald-100 line-through' : 'text-white'}`}>{task.title}</span>
@@ -69,7 +69,7 @@ export default function SideQuestDetailModal({ quest, onClose }: Props) {
 
         <footer className="flex items-center justify-between gap-3 border-t border-white/10 p-5">
           <span className="text-xs text-white/45">Completada {liveQuest.completionCount} {liveQuest.completionCount === 1 ? 'vez' : 'veces'}</span>
-          <button onClick={handleRestart} disabled={busy !== null} className="flex min-h-10 items-center gap-2 rounded-xl border border-rose-400/30 px-4 text-sm font-semibold text-rose-300 transition-colors hover:bg-rose-500/10 disabled:opacity-50"><RotateCcw size={15} /> Reiniciar misión</button>
+          <button onClick={handleRestart} className="flex min-h-10 items-center gap-2 rounded-xl border border-rose-400/30 px-4 text-sm font-semibold text-rose-300 transition-colors hover:bg-rose-500/10"><RotateCcw size={15} /> Reiniciar misión</button>
         </footer>
       </div>
     </div>
