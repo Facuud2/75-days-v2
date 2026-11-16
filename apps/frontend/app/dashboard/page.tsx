@@ -154,11 +154,11 @@ export default function Dashboard() {
         </div>
 
         <div className="flex-1 min-w-0">
-          <h3 className={`font-semibold text-base sm:text-lg sm:mb-1 transition-colors ${goal.completed ? 'text-white/70 line-through' : 'text-white'}`}>
+          <h3 className={`font-semibold text-base sm:text-lg ${goal.description ? 'mb-0.5 sm:mb-1' : ''} transition-colors ${goal.completed ? 'text-white/70 line-through' : 'text-white'}`}>
             {goal.title}
           </h3>
           {goal.description ? (
-            <p className={`hidden sm:block text-sm transition-colors ${goal.completed ? 'text-white/50' : 'text-white/60'}`}>
+            <p className={`text-sm transition-colors ${goal.completed ? 'text-white/50' : 'text-white/60'}`}>
               {goal.description}
             </p>
           ) : null}

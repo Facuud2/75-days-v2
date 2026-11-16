@@ -145,12 +145,116 @@ export const abandonChallenge = async (req: AuthRequest, res: Response) => {
         } else {
             // Preserve history
             await prisma.challenge.update({
-                where: { id: challenge.id },
+                where: { id: challenge.id }
+                ,
                 data: { isActive: false }
             });
             res.json({ message: 'Challenge marked inactive (history preserved)' });
         }
     } catch (error) {
         res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+const updateCustomGoalsSchema = z.object({
+    timezoneOffset: z.number().optional(),
+    customGoalsTemplate: z.array(z.object({
+        title: z.string().min(1),
+        description: z.string().optional(),
+        icon: z.string().optional()
+    })).min(1)
+});
+
+/**
+ * Actualiza las metas plantilla de un reto Custom activo sin reiniciar el reto
+ * ni modificar los DailyLog históricos de días anteriores.
+ */
+export const updateCustomGoals = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user!.id;
+        const { customGoalsTemplate, timezoneOffset } = updateCustomGoalsSchema.parse(req.body);
+
+        const challenge = await prisma.challenge.findFirst({
+            where: { userId, isActive: true },
+            include: { customGoalsTemplate: true }
+        });
+
+        if (!challenge) {
+            return res.status(404).json({ error: 'No active challenge found' });
+        }
+
+        if (challenge.difficulty !== 'Custom') {
+            return res.status(400).json({ error: 'Only Custom challenges can be edited in place.' });
+        }
+
+        const today = localChallengeDate(parseTimezoneOffset(timezoneOffset));
+
+        const updatedChallenge = await prisma.$transaction(async (tx) => {
+            await tx.goalTemplate.deleteMany({
+                where: { challengeId: challenge.id }
+            });
+
+            await tx.goalTemplate.createMany({
+                data: customGoalsTemplate.map((g) => ({
+                    challengeId: challenge.id,
+                    title: g.title,
+                    description: g.description,
+                    icon: g.icon
+                }))
+            });
+
+            const todayLog = await tx.dailyLog.findUnique({
+                where: { challengeId_date: { challengeId: challenge.id, date: today } },
+                include: { goals: true }
+            });
+
+            if (todayLog) {
+                const completedByTitle = new Map<string, boolean>();
+                for (const goal of todayLog.goals) {
+                    completedByTitle.set(goal.title.trim().toLowerCase(), goal.completed);
+                }
+
+                await tx.dailyGoal.deleteMany({
+                    where: { dailyLogId: todayLog.id }
+                });
+
+                const nextGoals = customGoalsTemplate.map((g) => ({
+                    dailyLogId: todayLog.id,
+                    title: g.title,
+                    description: g.description,
+                    icon: g.icon,
+                    completed: completedByTitle.get(g.title.trim().toLowerCase()) ?? false
+                }));
+
+                await tx.dailyGoal.createMany({ data: nextGoals });
+
+                const allCompleted = nextGoals.length > 0 && nextGoals.every((g) => g.completed);
+                if (todayLog.status !== 'fail') {
+                    await tx.dailyLog.update({
+                        where: { id: todayLog.id },
+                        data: { status: allCompleted ? 'success' : 'pending' }
+                    });
+                }
+            }
+
+            return tx.challenge.findUnique({
+                where: { id: challenge.id },
+                include: {
+                    customGoalsTemplate: true,
+                    dailyLogs: {
+                        include: { goals: true },
+                        orderBy: { date: 'desc' }
+                    }
+                }
+            });
+        });
+
+        return res.json(updatedChallenge);
+    } catch (error) {
+        if (error instanceof z.ZodError) {
+            return res.status(400).json({ error: 'Validation failed', details: error.issues });
+        }
+        console.error('[challengeController] Error updating custom goals:', error);
+        return res.status(500).json({ error: 'Internal server error' });
     }
 };

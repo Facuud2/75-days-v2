@@ -27,4 +27,14 @@ export const challengeService = {
             method: 'POST',
         });
     },
+
+    updateCustomGoals: (customGoalsTemplate: GoalTemplate[]) => {
+        return apiClient<ChallengeState>('/challenges/current/custom-goals', {
+            method: 'PATCH',
+            body: JSON.stringify({
+                customGoalsTemplate,
+                timezoneOffset: new Date().getTimezoneOffset(),
+            }),
+        });
+    },
 };

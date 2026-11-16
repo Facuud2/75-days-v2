@@ -45,6 +45,7 @@ export interface ChallengeState {
   // Actions
   fetchCurrentChallenge: () => Promise<void>;
   startChallenge: (difficulty: Difficulty, customGoalsTemplate?: GoalTemplate[]) => Promise<void>;
+  updateCustomGoals: (customGoalsTemplate: GoalTemplate[]) => Promise<void>;
   abandonChallenge: () => Promise<void>;
 
   logDailyGoal: (date: string, goalId: string, completed: boolean) => Promise<void>;
@@ -156,6 +157,19 @@ export const useChallengeStore = create<ChallengeState>()(
           set({ ...INITIAL_CHALLENGE_STATE });
         } catch (error: any) {
           set({ error: error.message || 'Failed to abandon challenge', isLoading: false });
+          throw error;
+        }
+      },
+
+      updateCustomGoals: async (customGoalsTemplate) => {
+        set({ isLoading: true, error: null });
+        try {
+          const response = (await challengeService.updateCustomGoals(customGoalsTemplate)) as any;
+          const { dailyLogs, ...restData } = response;
+          const parsedLogs = Array.isArray(dailyLogs) ? normalizeLogs(dailyLogs) : get().logs;
+          set({ ...restData, logs: parsedLogs, isActive: true, isLoading: false });
+        } catch (error: any) {
+          set({ error: error.message || 'Failed to update custom goals', isLoading: false });
           throw error;
         }
       },

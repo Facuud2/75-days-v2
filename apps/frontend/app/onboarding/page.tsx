@@ -21,6 +21,7 @@ import {
   Upload,
   Crop,
   RotateCcw,
+  Sparkles,
   X,
 } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
@@ -33,6 +34,8 @@ import CustomTaskEditorSheet, {
   getCustomTaskIcon,
   type CustomTask,
 } from '@/components/onboarding/CustomTaskEditorSheet';
+import AICustomPlanSheet from '@/components/onboarding/AICustomPlanSheet';
+import CustomPlanModeSheet from '@/components/onboarding/CustomPlanModeSheet';
 import ImageCropperModal from '@/components/profile/ImageCropperModal';
 import { calculateAgeBasedBmi, type BmiCategoryId } from '@/lib/utils/bmi';
 import {
@@ -149,6 +152,71 @@ export default function Onboarding() {
   const [planDirection, setPlanDirection] = useState<1 | -1>(1);
   const [customTasks, setCustomTasks] = useState<CustomTask[]>([]);
   const [isCustomEditorOpen, setIsCustomEditorOpen] = useState(false);
+  const [isAiPlanSheetOpen, setIsAiPlanSheetOpen] = useState(false);
+  const [isCustomModeSheetOpen, setIsCustomModeSheetOpen] = useState(false);
+  const hasHydratedDraftRef = useRef(false);
+  const draftStorageKey = `onboarding-draft-${user?.id || 'anon'}`;
+
+  // Restaurar el paso y borrador del onboarding al refrescar la página
+  useEffect(() => {
+    if (hasHydratedDraftRef.current || typeof window === 'undefined') return;
+    hasHydratedDraftRef.current = true;
+    try {
+      const raw = sessionStorage.getItem(draftStorageKey);
+      if (!raw) return;
+      const draft = JSON.parse(raw);
+      if (typeof draft.step === 'number') {
+        setStep(Math.max(0, Math.min(totalSteps - 1, draft.step)));
+      }
+      if (typeof draft.age === 'number') setAge(draft.age);
+      if (typeof draft.weight === 'number') setWeight(draft.weight);
+      if (draft.targetWeight === null || typeof draft.targetWeight === 'number') {
+        setTargetWeight(draft.targetWeight);
+      }
+      if (typeof draft.height === 'number') setHeight(draft.height);
+      if (Array.isArray(draft.selectedQuests)) setSelectedQuests(draft.selectedQuests);
+      if (draft.difficulty) setDifficulty(draft.difficulty);
+      if (Array.isArray(draft.customTasks)) setCustomTasks(draft.customTasks);
+      if (typeof draft.isAiPlanSheetOpen === 'boolean') {
+        setIsAiPlanSheetOpen(draft.isAiPlanSheetOpen);
+      }
+    } catch {
+      // Ignorar borrador corrupto
+    }
+  }, [draftStorageKey, totalSteps]);
+
+  useEffect(() => {
+    if (!hasHydratedDraftRef.current || typeof window === 'undefined') return;
+    try {
+      sessionStorage.setItem(
+        draftStorageKey,
+        JSON.stringify({
+          step,
+          age,
+          weight,
+          targetWeight,
+          height,
+          selectedQuests,
+          difficulty,
+          customTasks,
+          isAiPlanSheetOpen,
+        })
+      );
+    } catch {
+      // Ignorar errores de cuota
+    }
+  }, [
+    draftStorageKey,
+    step,
+    age,
+    weight,
+    targetWeight,
+    height,
+    selectedQuests,
+    difficulty,
+    customTasks,
+    isAiPlanSheetOpen,
+  ]);
 
   const validCustomTasks = customTasks.filter((t) => t.title.trim() !== '');
   const hasCustomTasks = validCustomTasks.length > 0;
@@ -288,6 +356,9 @@ export default function Onboarding() {
           difficulty === 'Custom' ? formattedCustomGoals : undefined
         );
         await completeOnboarding();
+        if (typeof window !== 'undefined') {
+          sessionStorage.removeItem(draftStorageKey);
+        }
         const completedUserId = useAuthStore.getState().user?.id;
         setPendingTutorial(completedUserId);
         useUIStore.getState().openTutorial();
@@ -1312,20 +1383,36 @@ export default function Onboarding() {
                               : 'Tareas Diarias'}
                           </p>
                           {difficulty === 'Custom' && hasCustomTasks && (
-                            <button
-                              type="button"
-                              onClick={openCustomEditor}
-                              className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg border transition-transform active:scale-95 cursor-pointer"
-                              style={{
-                                touchAction: 'manipulation',
-                                backgroundColor: 'var(--surface-inset)',
-                                borderColor: 'var(--border-subtle)',
-                                color: 'var(--accent-text)',
-                              }}
-                            >
-                              <Pencil size={12} />
-                              Editar tareas
-                            </button>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setIsAiPlanSheetOpen(true)}
+                                className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg border transition-transform active:scale-95 cursor-pointer"
+                                style={{
+                                  touchAction: 'manipulation',
+                                  backgroundColor: 'var(--surface-inset)',
+                                  borderColor: 'var(--border-subtle)',
+                                  color: 'var(--accent-text)',
+                                }}
+                              >
+                                <Sparkles size={12} />
+                                Editar con IA
+                              </button>
+                              <button
+                                type="button"
+                                onClick={openCustomEditor}
+                                className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg border transition-transform active:scale-95 cursor-pointer"
+                                style={{
+                                  touchAction: 'manipulation',
+                                  backgroundColor: 'var(--surface-inset)',
+                                  borderColor: 'var(--border-subtle)',
+                                  color: 'var(--accent-text)',
+                                }}
+                              >
+                                <Pencil size={12} />
+                                Editar tareas
+                              </button>
+                            </div>
                           )}
                         </div>
 
@@ -1391,7 +1478,7 @@ export default function Onboarding() {
           !hasCustomTasks ? (
           <button
             type="button"
-            onClick={openCustomEditor}
+            onClick={() => setIsCustomModeSheetOpen(true)}
             className="flex-1 min-h-[48px] px-6 rounded-2xl font-semibold text-sm flex items-center justify-center gap-2 transition-transform active:scale-[0.98] cursor-pointer"
             style={{
               touchAction: 'manipulation',
@@ -1399,8 +1486,8 @@ export default function Onboarding() {
               color: 'var(--on-accent)',
             }}
           >
-            <Pencil size={17} />
-            Editar tareas
+            Siguiente
+            <ChevronRight size={18} />
           </button>
         ) : (
           <button
@@ -1440,6 +1527,19 @@ export default function Onboarding() {
         onClose={() => setPreviewQuest(null)}
       />
 
+      <CustomPlanModeSheet
+        isOpen={isCustomModeSheetOpen}
+        onSelectAi={() => {
+          setIsCustomModeSheetOpen(false);
+          setIsAiPlanSheetOpen(true);
+        }}
+        onSelectManual={() => {
+          setIsCustomModeSheetOpen(false);
+          openCustomEditor();
+        }}
+        onClose={() => setIsCustomModeSheetOpen(false)}
+      />
+
       <CustomTaskEditorSheet
         isOpen={isCustomEditorOpen}
         tasks={customTasks}
@@ -1448,6 +1548,21 @@ export default function Onboarding() {
           setCustomTasks((prev) => prev.filter((t) => t.title.trim() !== ''));
           setIsCustomEditorOpen(false);
         }}
+      />
+
+      <AICustomPlanSheet
+        isOpen={isAiPlanSheetOpen}
+        initialTasks={customTasks}
+        onApplyPlan={(tasks) => {
+          setCustomTasks(tasks);
+          setIsAiPlanSheetOpen(false);
+        }}
+        onEditManually={(tasks) => {
+          setCustomTasks(tasks);
+          setIsAiPlanSheetOpen(false);
+          setIsCustomEditorOpen(true);
+        }}
+        onClose={() => setIsAiPlanSheetOpen(false)}
       />
 
       <ImageCropperModal

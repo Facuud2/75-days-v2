@@ -12,4 +12,5 @@ export const config = {
     jwtSecret: required('JWT_SECRET'),
     internalApiKey: required('INTERNAL_API_KEY'),
     googleClientId: process.env.GOOGLE_CLIENT_ID?.trim() || '',
+    geminiApiKey: process.env.GEMINI_API_KEY?.trim() || '',
 };

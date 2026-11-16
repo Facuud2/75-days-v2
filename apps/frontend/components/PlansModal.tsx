@@ -6,9 +6,15 @@ import { useUIStore } from '@/store/useUIStore';
 import { useChallengeStore, Difficulty } from '@/store/useChallengeStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import {
-  X, Target, Calendar, Utensils, Dumbbell, Droplets, ClipboardList, Star, Pencil,
-  BookOpen, Camera, Sun, Brain, HeartPulse, GripVertical, Plus, ArrowLeft,
+  X, Target, Calendar, Utensils, Dumbbell, Droplets, ClipboardList, Star, Pencil, Sparkles,
 } from 'lucide-react';
+import CustomTaskEditorSheet, {
+  createEmptyCustomTask,
+  DEFAULT_CUSTOM_TASKS,
+  getCustomTaskIcon,
+  type CustomTask,
+} from '@/components/onboarding/CustomTaskEditorSheet';
+import AICustomPlanSheet from '@/components/onboarding/AICustomPlanSheet';
 
 export const PLANS: {
   difficulty: Difficulty;
@@ -80,104 +86,138 @@ export const PLANS: {
     },
   ];
 
-type CustomTask = {
-  id: string;
-  title: string;
-  description: string;
-  icon: string;
-};
-
-const CUSTOM_ICON_OPTIONS = [
-  { name: 'utensils', label: 'Alimentación', Icon: Utensils },
-  { name: 'dumbbell', label: 'Ejercicio', Icon: Dumbbell },
-  { name: 'droplet', label: 'Hidratación', Icon: Droplets },
-  { name: 'book', label: 'Lectura', Icon: BookOpen },
-  { name: 'camera', label: 'Fotos', Icon: Camera },
-  { name: 'sun', label: 'Exterior', Icon: Sun },
-  { name: 'brain', label: 'Mentalidad', Icon: Brain },
-  { name: 'heart', label: 'Bienestar', Icon: HeartPulse },
-];
-
-const DEFAULT_CUSTOM_TASKS: CustomTask[] = [
-  { id: 'water', title: 'Agua (3.7L)', description: 'Beber al menos 3.7 litros de agua durante el día.', icon: 'droplet' },
-  { id: 'reading', title: 'Lectura (10 págs)', description: 'Leer 10 páginas de cualquier libro.', icon: 'book' },
-  { id: 'workout', title: 'Entrenamiento 45m', description: 'Completar 45 minutos de actividad física.', icon: 'dumbbell' },
-];
-
 export default function PlansModal() {
   const router = useRouter();
   const { isPlansModalOpen, closePlansModal } = useUIStore();
-  const { startChallenge, isActive, difficulty: currentDifficulty } = useChallengeStore();
+  const {
+    startChallenge,
+    updateCustomGoals,
+    isActive,
+    difficulty: currentDifficulty,
+    customGoalsTemplate,
+  } = useChallengeStore();
   const { user } = useAuthStore();
   const [difficulty, setDifficulty] = useState<Difficulty>(currentDifficulty || 'Hard');
   const [customTasks, setCustomTasks] = useState<CustomTask[]>(DEFAULT_CUSTOM_TASKS);
   const [isCustomEditorOpen, setIsCustomEditorOpen] = useState(false);
-  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  const [isAiPlanSheetOpen, setIsAiPlanSheetOpen] = useState(false);
+  const [showCustomModePicker, setShowCustomModePicker] = useState(false);
+  const [showModifyChoiceModal, setShowModifyChoiceModal] = useState(false);
+  const [isSavingCustom, setIsSavingCustom] = useState(false);
 
   const onboardingCompleted = user?.onboardingCompleted === true;
-  // Reiniciar con el plan que ya está corriendo no cambia nada y sí borraría el
-  // historial: el botón queda bloqueado hasta que se elija otro plan.
-  const isCurrentPlan = isActive && Boolean(currentDifficulty) && difficulty === currentDifficulty;
-  const PREVIEW_COUNT = 3;
+  // Reiniciar con el plan que ya está corriendo no cambia nada para planes fijos;
+  // pero si es Custom, el usuario sí puede modificarlo.
+  const isActiveCustom = isActive && currentDifficulty === 'Custom';
+  const isCurrentPlan =
+    isActive &&
+    Boolean(currentDifficulty) &&
+    difficulty === currentDifficulty &&
+    difficulty !== 'Custom';
+
+  useEffect(() => {
+    if (!isPlansModalOpen) return;
+    setDifficulty(currentDifficulty || 'Hard');
+    setShowCustomModePicker(false);
+    setShowModifyChoiceModal(false);
+    if (currentDifficulty === 'Custom' && customGoalsTemplate.length > 0) {
+      setCustomTasks(
+        customGoalsTemplate.map((g, idx) => ({
+          id: `existing-${idx}-${g.title}`,
+          title: g.title,
+          description: g.description || '',
+          icon: g.icon || 'dumbbell',
+        }))
+      );
+    } else {
+      setCustomTasks(DEFAULT_CUSTOM_TASKS);
+    }
+  }, [isPlansModalOpen, currentDifficulty, customGoalsTemplate]);
+
   const handleClose = useCallback(() => {
     setIsCustomEditorOpen(false);
+    setIsAiPlanSheetOpen(false);
+    setShowCustomModePicker(false);
+    setShowModifyChoiceModal(false);
     closePlansModal();
   }, [closePlansModal]);
 
   useEffect(() => {
     if (!isPlansModalOpen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') handleClose();
+      if (event.key === 'Escape' && !isCustomEditorOpen && !isAiPlanSheetOpen) {
+        handleClose();
+      }
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isPlansModalOpen, handleClose]);
+  }, [isPlansModalOpen, isCustomEditorOpen, isAiPlanSheetOpen, handleClose]);
 
   if (!isPlansModalOpen) return null;
 
+  const formatCustomGoals = (tasksToFormat: CustomTask[]) =>
+    tasksToFormat
+      .filter(task => task.title.trim())
+      .map(({ title, description, icon }) => ({
+        title: title.trim(),
+        description: description.trim(),
+        icon,
+      }));
+
   const handleStart = async () => {
     if (isActive) {
-      // Solo pedimos confirmación (y solo llegamos acá) si de verdad cambia el plan.
       if (isCurrentPlan) return;
+      if (difficulty === 'Custom' && isActiveCustom) {
+        setShowModifyChoiceModal(true);
+        return;
+      }
       if (!confirm('Ya tienes un desafío activo. ¿Estás seguro de que quieres reiniciarlo con un nuevo plan? Perderás tu racha actual.')) {
         return;
       }
     }
-    const formattedCustomGoals = customTasks
-      .filter(task => task.title.trim())
-      .map(({ title, description, icon }) => ({ title: title.trim(), description: description.trim(), icon }));
+    const formattedCustomGoals = formatCustomGoals(customTasks);
     await startChallenge(difficulty, difficulty === 'Custom' ? formattedCustomGoals : undefined);
     handleClose();
     router.push('/dashboard');
   };
 
-  const updateCustomTask = (id: string, field: keyof CustomTask, value: string) => {
-    setCustomTasks(tasks => tasks.map(task => task.id === id ? { ...task, [field]: value } : task));
+  const handleContinueActiveCustom = async () => {
+    const formattedCustomGoals = formatCustomGoals(customTasks);
+    if (formattedCustomGoals.length === 0) return;
+    setIsSavingCustom(true);
+    try {
+      await updateCustomGoals(formattedCustomGoals);
+      handleClose();
+      router.push('/dashboard');
+    } finally {
+      setIsSavingCustom(false);
+    }
   };
 
-  const moveTask = (id: string, direction: -1 | 1) => {
-    setCustomTasks(tasks => {
-      const index = tasks.findIndex(task => task.id === id);
-      const nextIndex = index + direction;
-      if (index < 0 || nextIndex < 0 || nextIndex >= tasks.length) return tasks;
-      const next = [...tasks];
-      [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
-      return next;
-    });
+  const handleRestartActiveCustom = async () => {
+    const formattedCustomGoals = formatCustomGoals(customTasks);
+    if (formattedCustomGoals.length === 0) return;
+    setIsSavingCustom(true);
+    try {
+      await startChallenge('Custom', formattedCustomGoals);
+      handleClose();
+      router.push('/dashboard');
+    } finally {
+      setIsSavingCustom(false);
+    }
   };
 
-  const dropTask = (targetId: string) => {
-    if (!draggedTaskId || draggedTaskId === targetId) return;
-    setCustomTasks(tasks => {
-      const from = tasks.findIndex(task => task.id === draggedTaskId);
-      const to = tasks.findIndex(task => task.id === targetId);
-      if (from < 0 || to < 0) return tasks;
-      const next = [...tasks];
-      const [moved] = next.splice(from, 1);
-      next.splice(to, 0, moved);
-      return next;
-    });
-    setDraggedTaskId(null);
+  const openManualEditor = () => {
+    setShowCustomModePicker(false);
+    if (customTasks.length === 0) {
+      setCustomTasks([createEmptyCustomTask()]);
+    }
+    setIsCustomEditorOpen(true);
+  };
+
+  const openAiDesigner = () => {
+    setShowCustomModePicker(false);
+    setIsAiPlanSheetOpen(true);
   };
 
   const selectedPlan = PLANS.find(p => p.difficulty === difficulty);
@@ -201,7 +241,7 @@ export default function PlansModal() {
               <Target className="text-rose-500 w-4 h-4" />
             </div>
             <h2 id="plans-modal-title" className="text-lg sm:text-xl font-bold text-white tracking-tight">
-              {isCustomEditorOpen ? 'Personalizar tu desafío' : 'Seleccionar Plan de Desafío'}
+              Seleccionar Plan de Desafío
             </h2>
           </div>
           <button
@@ -215,73 +255,7 @@ export default function PlansModal() {
 
         {/* Content */}
         <div className="p-5 sm:p-8 overflow-y-auto overscroll-contain flex-1">
-          {isCustomEditorOpen ? (
-            <div className="animate-in fade-in slide-in-from-right-2 duration-200">
-              <div className="flex items-start gap-4 mb-7">
-                <button
-                  type="button"
-                  onClick={() => setIsCustomEditorOpen(false)}
-                  aria-label="Volver a seleccionar el plan"
-                  className="mt-0.5 p-2 -ml-2 rounded-lg text-white/50 hover:text-white hover:bg-white/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
-                >
-                  <ArrowLeft className="w-5 h-5" />
-                </button>
-                <div>
-                  <p className="text-emerald-400 text-xs font-bold uppercase tracking-widest mb-1">Custom Challenge</p>
-                  <h3 className="text-2xl font-bold text-white tracking-tight">Ordená tus tareas</h3>
-                  <p className="text-white/50 text-sm mt-1 max-w-xl">Cada bloque representa una tarea diaria. Editá sus datos y arrastralos para definir el orden del desafío.</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {customTasks.map((task, index) => {
-                  const selectedIcon = CUSTOM_ICON_OPTIONS.find(option => option.name === task.icon) ?? CUSTOM_ICON_OPTIONS[0];
-                  const TaskIcon = selectedIcon.Icon;
-                  return (
-                    <article
-                      key={task.id}
-                      onDragOver={(event) => event.preventDefault()}
-                      onDrop={() => dropTask(task.id)}
-                      className="group relative rounded-2xl border border-white/10 bg-white/[0.035] p-4 transition-colors hover:border-emerald-500/40 hover:bg-white/[0.05]"
-                    >
-                      <div className="flex items-center justify-between mb-4">
-                        <div
-                          className="flex items-center gap-2 text-white/35"
-                          draggable
-                          onDragStart={() => setDraggedTaskId(task.id)}
-                          role="button"
-                          tabIndex={0}
-                          aria-label={`Arrastrar ${task.title || 'tarea'} para reordenar`}
-                          title="Arrastrar para reordenar"
-                        >
-                          <GripVertical className="w-4 h-4 cursor-grab active:cursor-grabbing" aria-hidden="true" />
-                          <span className="text-[11px] font-bold uppercase tracking-widest">Tarea {index + 1}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <button type="button" onClick={() => setCustomTasks(tasks => tasks.filter(item => item.id !== task.id))} aria-label={`Eliminar ${task.title || 'tarea'}`} className="p-1.5 ml-1 rounded-md text-white/35 hover:text-red-400 hover:bg-red-500/10 transition-colors"><X className="w-4 h-4" /></button>
-                        </div>
-                      </div>
-
-                      <div className="flex gap-3">
-                        <div className="relative shrink-0 group/icon">
-                          <button type="button" aria-label={`Cambiar icono de ${task.title || 'tarea'}`} className="w-14 h-14 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center hover:bg-emerald-500/20 transition-colors peer"><TaskIcon className="w-6 h-6" /></button>
-                          <div className="absolute z-10 left-0 top-[calc(100%+8px)] hidden group-focus-within/icon:grid grid-cols-4 gap-1 p-2 rounded-xl border border-white/10 bg-zinc-900 shadow-2xl w-44">
-                            {CUSTOM_ICON_OPTIONS.map(({ name, label, Icon }) => <button key={name} type="button" aria-label={label} onClick={() => updateCustomTask(task.id, 'icon', name)} className={`p-2 rounded-lg flex items-center justify-center transition-colors ${task.icon === name ? 'bg-emerald-500/20 text-emerald-400' : 'text-white/50 hover:bg-white/10 hover:text-white'}`}><Icon className="w-4 h-4" /></button>)}
-                          </div>
-                        </div>
-                        <div className="min-w-0 flex-1 space-y-2">
-                          <input value={task.title} onChange={(event) => updateCustomTask(task.id, 'title', event.target.value)} aria-label="Nombre de la tarea" placeholder="Nombre de la tarea" className="w-full bg-transparent border-b border-white/10 pb-1 text-base font-bold text-white outline-none focus:border-emerald-400 placeholder:text-white/25" />
-                          <textarea value={task.description} onChange={(event) => updateCustomTask(task.id, 'description', event.target.value)} aria-label="Explicación de la tarea" placeholder="Explicá qué hay que hacer..." rows={2} className="w-full resize-none bg-transparent text-xs leading-relaxed text-white/50 outline-none placeholder:text-white/25" />
-                        </div>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-
-              <button type="button" onClick={() => setCustomTasks(tasks => [...tasks, { id: `task-${Date.now()}`, title: '', description: '', icon: 'star' }])} className="mt-5 flex items-center gap-2 text-sm font-bold text-emerald-400 hover:text-emerald-300 transition-colors"><Plus className="w-4 h-4" /> Añadir tarea</button>
-            </div>
-          ) : !onboardingCompleted ? (
+          {!onboardingCompleted ? (
             <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
               <div className="w-16 h-16 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center relative overflow-hidden">
                 <div className="absolute inset-0 bg-rose-500/5" />
@@ -302,10 +276,13 @@ export default function PlansModal() {
                   const tasks = plan.difficulty === 'Custom'
                     ? customTasks
                       .filter(task => task.title.trim())
-                      .map(task => ({
-                        icon: <Pencil className="w-3.5 h-3.5 text-emerald-400" />,
-                        label: task.title,
-                      }))
+                      .map(task => {
+                        const TaskIcon = getCustomTaskIcon(task.icon);
+                        return {
+                          icon: <TaskIcon className="w-3.5 h-3.5 text-emerald-400" />,
+                          label: task.title,
+                        };
+                      })
                     : plan.tasks;
                   return (
                     <div
@@ -373,9 +350,28 @@ export default function PlansModal() {
             >
               Cancelar
             </button>
-            {onboardingCompleted && (
+            {onboardingCompleted && difficulty === 'Custom' ? (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCustomModePicker(true)}
+                  className="min-h-12 px-4 py-2.5 rounded-xl font-bold text-sm border border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10 transition-colors flex items-center gap-1.5"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  {isActiveCustom ? 'Modificar plan' : 'Personalizar'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleStart}
+                  disabled={formatCustomGoals(customTasks).length === 0}
+                  className="min-h-12 flex-1 sm:flex-none px-6 py-2.5 rounded-xl font-bold text-sm transition-colors bg-rose-400 text-zinc-950 hover:bg-rose-300 shadow-[0_0_15px_rgba(244,63,94,0.25)] disabled:opacity-40"
+                >
+                  {isActiveCustom ? 'Aplicar cambios' : isActive ? 'Reiniciar Desafío' : 'Comenzar Desafío'}
+                </button>
+              </div>
+            ) : onboardingCompleted && (
               <button
-                onClick={() => difficulty === 'Custom' && !isCustomEditorOpen ? setIsCustomEditorOpen(true) : handleStart()}
+                onClick={handleStart}
                 disabled={isCurrentPlan}
                 title={isCurrentPlan ? 'Ya estás en este plan. Elegí otro para reiniciar el desafío.' : undefined}
                  className={`min-h-12 flex-[1.4] sm:flex-none px-6 py-2.5 rounded-xl font-bold text-sm transition-colors ${
@@ -386,12 +382,115 @@ export default function PlansModal() {
               >
                 {isCurrentPlan
                   ? 'Plan actual'
-                  : difficulty === 'Custom' && !isCustomEditorOpen ? 'Siguiente' : (isActive ? 'Reiniciar Desafío' : 'Comenzar Desafío')}
+                  : (isActive ? 'Reiniciar Desafío' : 'Comenzar Desafío')}
               </button>
             )}
           </div>
         </div>
       </div>
+
+      {/* Elección: Armar con IA vs Armar manualmente */}
+      {showCustomModePicker && (
+        <div
+          className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+          onClick={() => setShowCustomModePicker(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-white/10 bg-zinc-950 p-6 space-y-4 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-bold text-white">¿Cómo querés armar tu plan Custom?</h3>
+            <p className="text-xs text-white/60 leading-relaxed">
+              Podés dictarle tu idea a la IA por voz o editar cada tarea manualmente.
+            </p>
+            <div className="grid grid-cols-1 gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={openAiDesigner}
+                className="w-full min-h-[48px] px-4 rounded-xl font-bold text-sm bg-emerald-500 text-zinc-950 hover:bg-emerald-400 flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Sparkles className="w-4 h-4" />
+                {isActiveCustom ? 'Modificar plan con IA' : 'Armar plan con IA'}
+              </button>
+              <button
+                type="button"
+                onClick={openManualEditor}
+                className="w-full min-h-[48px] px-4 rounded-xl font-bold text-sm border border-white/15 text-white hover:bg-white/5 flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Pencil className="w-4 h-4" />
+                {isActiveCustom ? 'Modificar manualmente' : 'Armar plan manualmente'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pregunta tras modificar un Custom activo: ¿Reiniciar o Continuar? */}
+      {showModifyChoiceModal && (
+        <div
+          className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm"
+          onClick={() => !isSavingCustom && setShowModifyChoiceModal(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-white/10 bg-zinc-950 p-6 space-y-4 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-bold text-white">¿Cómo querés aplicar los cambios?</h3>
+            <p className="text-xs text-white/60 leading-relaxed">
+              Podés continuar con tu desafío actual conservando todo tu historial y racha, o reiniciar desde el Día 1.
+            </p>
+            <div className="grid grid-cols-1 gap-2.5 pt-1">
+              <button
+                type="button"
+                disabled={isSavingCustom}
+                onClick={handleContinueActiveCustom}
+                className="w-full min-h-[48px] px-4 rounded-xl font-bold text-sm bg-emerald-500 text-zinc-950 hover:bg-emerald-400 disabled:opacity-50 cursor-pointer"
+              >
+                {isSavingCustom ? 'Guardando...' : 'Continuar con el desafío actual'}
+              </button>
+              <button
+                type="button"
+                disabled={isSavingCustom}
+                onClick={handleRestartActiveCustom}
+                className="w-full min-h-[48px] px-4 rounded-xl font-bold text-sm border border-rose-500/40 text-rose-300 hover:bg-rose-500/10 disabled:opacity-50 cursor-pointer"
+              >
+                Reiniciar desafío desde el Día 1
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <CustomTaskEditorSheet
+        isOpen={isCustomEditorOpen}
+        tasks={customTasks}
+        onChange={setCustomTasks}
+        onClose={() => {
+          setCustomTasks((prev) => prev.filter((t) => t.title.trim() !== ''));
+          setIsCustomEditorOpen(false);
+          if (isActiveCustom) {
+            setShowModifyChoiceModal(true);
+          }
+        }}
+      />
+
+      <AICustomPlanSheet
+        isOpen={isAiPlanSheetOpen}
+        initialTasks={customTasks}
+        onApplyPlan={(tasks) => {
+          setCustomTasks(tasks);
+          setIsAiPlanSheetOpen(false);
+          if (isActiveCustom) {
+            setShowModifyChoiceModal(true);
+          }
+        }}
+        onEditManually={(tasks) => {
+          setCustomTasks(tasks);
+          setIsAiPlanSheetOpen(false);
+          setIsCustomEditorOpen(true);
+        }}
+        onClose={() => setIsAiPlanSheetOpen(false)}
+      />
     </div>
   );
 }
