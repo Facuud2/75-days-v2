@@ -141,4 +141,45 @@ describe('useAuthStore session & logout race safety', () => {
       'La solicitud tardó demasiado'
     );
   });
+
+  it('loginWithGoogle handles link confirmation and cancelAuth aborts in-flight Google auth', async () => {
+    vi.spyOn(authService, 'googleAuth').mockResolvedValueOnce({
+      requiresLinkConfirmation: true,
+      email: 'existing@example.com',
+      name: 'Existing User',
+    });
+
+    const linkRes = await useAuthStore
+      .getState()
+      .loginWithGoogle({ accessToken: 'token-1' });
+    expect(linkRes.requiresLinkConfirmation).toBe(true);
+    expect(useAuthStore.getState().isAuthenticated).toBe(false);
+
+    let resolveSecond!: (value: any) => void;
+    vi.spyOn(authService, 'googleAuth').mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveSecond = resolve;
+        })
+    );
+
+    const pendingAuth = useAuthStore
+      .getState()
+      .loginWithGoogle({ accessToken: 'token-2' });
+    expect(useAuthStore.getState().isLoading).toBe(true);
+
+    // Cancel via back arrow
+    useAuthStore.getState().cancelAuth();
+    expect(useAuthStore.getState().isLoading).toBe(false);
+
+    resolveSecond({
+      token: 'jwt-google',
+      user: { ...mockUser, isGoogleUser: true },
+      isNewUser: false,
+    });
+    await pendingAuth;
+
+    expect(useAuthStore.getState().isAuthenticated).toBe(false);
+    expect(useAuthStore.getState().token).toBeNull();
+  });
 });

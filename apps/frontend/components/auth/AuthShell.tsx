@@ -17,6 +17,8 @@ type AuthShellProps = {
   variant: 'login' | 'register';
   title: string;
   backHref?: string;
+  onBack?: () => void;
+  backLabel?: string;
   footer: ReactNode;
   children: ReactNode;
 };
@@ -32,6 +34,8 @@ export default function AuthShell({
   variant,
   title,
   backHref,
+  onBack,
+  backLabel = 'Volver a iniciar sesión',
   footer,
   children,
 }: AuthShellProps) {
@@ -57,6 +61,36 @@ export default function AuthShell({
     navigateAuthWithTransition(router, backHref, 'backward');
   };
 
+  const renderBackControl = () => {
+    if (onBack) {
+      return (
+        <button
+          type="button"
+          className="auth-back"
+          aria-label={backLabel}
+          onClick={onBack}
+        >
+          <ArrowLeft size={21} strokeWidth={1.75} aria-hidden="true" />
+        </button>
+      );
+    }
+
+    if (backHref) {
+      return (
+        <Link
+          href={backHref}
+          className="auth-back"
+          aria-label={backLabel}
+          onClick={handleBackClick}
+        >
+          <ArrowLeft size={21} strokeWidth={1.75} aria-hidden="true" />
+        </Link>
+      );
+    }
+
+    return <span className="auth-back-spacer" aria-hidden="true" />;
+  };
+
   return (
     <main className="auth-viewport">
       <section
@@ -69,24 +103,13 @@ export default function AuthShell({
           <div className="auth-hero-inner">
             {variant === 'login' ? (
               <>
-                <span className="auth-back-spacer" aria-hidden="true" />
+                {renderBackControl()}
                 <LogoMark className="auth-logo" />
                 <AuthThemeToggle />
               </>
             ) : (
               <>
-                {backHref ? (
-                  <Link
-                    href={backHref}
-                    className="auth-back"
-                    aria-label="Volver a iniciar sesión"
-                    onClick={handleBackClick}
-                  >
-                    <ArrowLeft size={21} strokeWidth={1.75} aria-hidden="true" />
-                  </Link>
-                ) : (
-                  <span className="auth-back-spacer" aria-hidden="true" />
-                )}
+                {renderBackControl()}
                 <h1 id="auth-title" className="auth-hero-title">
                   {title}
                 </h1>

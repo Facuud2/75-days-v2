@@ -11,6 +11,8 @@ const KNOWN_MESSAGES: Array<[RegExp, string]> = [
   ],
   [/registration failed/i, 'No pudimos crear tu cuenta. Inténtalo de nuevo.'],
   [/login failed/i, 'No pudimos iniciar sesión. Inténtalo de nuevo.'],
+  [/invalid google token/i, 'No pudimos verificar tu cuenta de Google. Inténtalo de nuevo.'],
+  [/google email is not verified/i, 'Tu cuenta de Google debe tener un correo verificado.'],
   [
     /(failed to fetch|network error|networkerror)/i,
     'No pudimos conectar con el servidor. Revisa tu conexión.',
@@ -25,10 +27,18 @@ const KNOWN_MESSAGES: Array<[RegExp, string]> = [
   ],
 ];
 
+export function isGoogleAccountExistsError(
+  message: string | null | undefined
+): boolean {
+  if (!message) return false;
+  return /GOOGLE_ACCOUNT_EXISTS/i.test(message);
+}
+
 export function formatAuthError(
   message: string | null | undefined
 ): string | null {
   if (!message) return null;
+  if (isGoogleAccountExistsError(message)) return null;
 
   for (const [pattern, replacement] of KNOWN_MESSAGES) {
     if (pattern.test(message)) return replacement;

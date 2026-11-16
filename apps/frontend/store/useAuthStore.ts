@@ -1,6 +1,12 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { authService, LoginData, RegisterData } from '../lib/api/auth';
+import {
+  authService,
+  GoogleAuthData,
+  GoogleAuthResponse,
+  LoginData,
+  RegisterData,
+} from '../lib/api/auth';
 import { useThemeStore } from './useThemeStore';
 
 export interface User {
@@ -16,6 +22,8 @@ export interface User {
   height?: number;
   registeredAt: string;
   onboardingCompleted: boolean;
+  isGoogleUser?: boolean;
+  hasPassword?: boolean;
 }
 
 interface AuthState {
@@ -26,6 +34,8 @@ interface AuthState {
   error: string | null;
   login: (credentials: LoginData) => Promise<void>;
   register: (data: RegisterData) => Promise<void>;
+  loginWithGoogle: (data: GoogleAuthData) => Promise<GoogleAuthResponse>;
+  cancelAuth: () => void;
   logout: () => void;
   checkAuth: () => Promise<void>;
   clearError: () => void;
@@ -73,6 +83,41 @@ export const useAuthStore = create<AuthState>()(
           }
           throw error;
         }
+      },
+
+      loginWithGoogle: async (data) => {
+        const epoch = ++authEpoch;
+        set({ isLoading: true, error: null });
+        try {
+          const response = await authService.googleAuth(data);
+          if (epoch !== authEpoch) return response;
+
+          if (response.requiresLinkConfirmation) {
+            set({ isLoading: false, error: null });
+            return response;
+          }
+
+          set({
+            user: response.user,
+            token: response.token,
+            isAuthenticated: true,
+            isLoading: false,
+          });
+          return response;
+        } catch (error: any) {
+          if (epoch === authEpoch) {
+            set({
+              error: error.message || 'Google authentication failed',
+              isLoading: false,
+            });
+          }
+          throw error;
+        }
+      },
+
+      cancelAuth: () => {
+        authEpoch += 1;
+        set({ isLoading: false, error: null });
       },
 
       clearError: () => set({ error: null }),
@@ -129,12 +174,16 @@ export const useAuthStore = create<AuthState>()(
         try {
           const state = get();
 
-          // Send the cached onboarding payload (age, weight, targetWeight, height) up to sync
+          // Send the cached onboarding payload (including Google profile edits) up to sync
           const { user } = await authService.completeOnboarding({
             age: state.user?.age,
             weight: state.user?.weight,
             targetWeight: state.user?.targetWeight,
             height: state.user?.height,
+            name: state.user?.name,
+            avatarUrl: state.user?.avatarUrl,
+            bannerUrl: state.user?.bannerUrl,
+            profileQuote: state.user?.profileQuote,
           });
 
           set((s) => ({

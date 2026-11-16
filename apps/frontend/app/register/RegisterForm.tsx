@@ -8,7 +8,10 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { AlertCircle, Check, Loader2 } from 'lucide-react';
 import { useAuthStore } from '@/store/useAuthStore';
-import { formatAuthError } from '@/lib/utils/authError';
+import {
+  formatAuthError,
+  isGoogleAccountExistsError,
+} from '@/lib/utils/authError';
 import AuthShell from '@/components/auth/AuthShell';
 import AuthField from '@/components/auth/AuthField';
 import { navigateAuthWithTransition } from '@/lib/authTransition';
@@ -41,6 +44,7 @@ export default function RegisterForm() {
   const { register: registerUser, isLoading, error, clearError } = useAuthStore();
   const router = useRouter();
   const displayError = formatAuthError(error);
+  const isGoogleExistingAccountError = isGoogleAccountExistsError(error);
 
   // A failed login should not follow the person to the register screen.
   useEffect(() => {
@@ -107,6 +111,36 @@ export default function RegisterForm() {
         </>
       }
     >
+      {isGoogleExistingAccountError && (
+        <p
+          className="auth-google-notice auth-rise"
+          style={{ '--auth-i': 0 } as React.CSSProperties}
+        >
+          Esta cuenta ya fue creada con Google y no es posible registrarla por
+          email. Por favor,{' '}
+          <a
+            href="/login?google=1"
+            className="auth-terms-link"
+            onClick={(event) => {
+              if (
+                event.metaKey ||
+                event.ctrlKey ||
+                event.shiftKey ||
+                event.altKey ||
+                event.button !== 0
+              ) {
+                return;
+              }
+              event.preventDefault();
+              navigateAuthWithTransition(router, '/login?google=1', 'backward');
+            }}
+          >
+            iniciá sesión con Google
+          </a>
+          .
+        </p>
+      )}
+
       {displayError && (
         <div
           className="auth-alert auth-rise"

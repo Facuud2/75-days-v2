@@ -75,6 +75,7 @@ export function ProfileForm({
   onSuccess,
 }: ProfileFormProps) {
   const { user, updateProfile: updateAuthUser } = useAuthStore();
+  const isGoogleUser = Boolean(user?.isGoogleUser);
   const [serverAlert, setServerAlert] = useState<{
     type: 'success' | 'error';
     message: string;
@@ -125,7 +126,7 @@ export function ProfileForm({
     try {
       const payload: UpdateProfilePayload = {};
       if (values.name.trim()) payload.name = values.name.trim();
-      if (values.email.trim()) payload.email = values.email.trim();
+      if (!isGoogleUser && values.email.trim()) payload.email = values.email.trim();
       if (values.age.trim() !== '') payload.age = Number(values.age);
       if (values.weight.trim() !== '') payload.weight = Number(values.weight);
       if (values.targetWeight.trim() !== '')
@@ -208,28 +209,30 @@ export function ProfileForm({
             )}
           </div>
 
-          <div className="space-y-1.5">
-            <label
-              htmlFor="settings-email"
-              className="block text-xs font-semibold text-[var(--text-secondary)]"
-            >
-              Email
-            </label>
-            <input
-              id="settings-email"
-              type="email"
-              autoComplete="email"
-              placeholder="tu@email.com"
-              aria-invalid={Boolean(errors.email)}
-              className={inputBaseClass}
-              {...register('email', { onChange: handleFieldInput })}
-            />
-            {errors.email && (
-              <p role="alert" className="text-xs text-[var(--status-danger)]">
-                {errors.email.message}
-              </p>
-            )}
-          </div>
+          {!isGoogleUser && (
+            <div className="space-y-1.5">
+              <label
+                htmlFor="settings-email"
+                className="block text-xs font-semibold text-[var(--text-secondary)]"
+              >
+                Email
+              </label>
+              <input
+                id="settings-email"
+                type="email"
+                autoComplete="email"
+                placeholder="tu@email.com"
+                aria-invalid={Boolean(errors.email)}
+                className={inputBaseClass}
+                {...register('email', { onChange: handleFieldInput })}
+              />
+              {errors.email && (
+                <p role="alert" className="text-xs text-[var(--status-danger)]">
+                  {errors.email.message}
+                </p>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

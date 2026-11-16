@@ -4,6 +4,7 @@ test.describe('mobile platform baseline', () => {
   test('phone and tablet have no horizontal overflow', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto('/login');
+    await page.getByRole('button', { name: /Continuar con email/i }).click();
     await page.locator('input[type="email"]').fill('p@a.com');
     await page.locator('input[type="password"]').fill('123456');
     await page.getByRole('button', { name: /iniciar sesión/i }).click();

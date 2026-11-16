@@ -1,11 +1,13 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, ChangeEvent } from 'react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useChallengeStore, Difficulty } from '@/store/useChallengeStore';
 import { useQuestStore, type SideQuestTemplate } from '@/store/useQuestStore';
 import { useUIStore } from '@/store/useUIStore';
+import { userService } from '@/lib/api/users';
 import { setPendingTutorial } from '@/lib/tutorial';
+import { getInitial, getNameHandle } from '@/lib/utils/display';
 import { useRouter } from 'next/navigation';
 import {
   ChevronRight,
@@ -14,6 +16,8 @@ import {
   Calendar,
   Pencil,
   Check,
+  Camera,
+  Upload,
 } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { PLANS } from '@/components/PlansModal';
@@ -25,9 +29,17 @@ import CustomTaskEditorSheet, {
   getCustomTaskIcon,
   type CustomTask,
 } from '@/components/onboarding/CustomTaskEditorSheet';
+import ImageCropperModal from '@/components/profile/ImageCropperModal';
 import { calculateAgeBasedBmi, type BmiCategoryId } from '@/lib/utils/bmi';
 
-const TOTAL_STEPS = 6;
+type StepId =
+  | 'profile'
+  | 'age'
+  | 'height'
+  | 'weight'
+  | 'targetWeight'
+  | 'quests'
+  | 'plan';
 
 const BMI_SEGMENTS: Array<{ id: BmiCategoryId; label: string; colorVar: string }> = [
   { id: 'underweight', label: 'Bajo', colorVar: 'var(--status-info)' },
@@ -36,46 +48,22 @@ const BMI_SEGMENTS: Array<{ id: BmiCategoryId; label: string; colorVar: string }
   { id: 'obesity', label: 'Obesidad', colorVar: 'var(--status-danger)' },
 ];
 
-const STEP_META = [
-  {
-    eyebrow: 'Paso 1 · Sobre vos',
-    title: '¿Cuántos años tenés?',
-    subtitle: 'Deslizá los números hacia arriba o abajo.',
-  },
-  {
-    eyebrow: 'Paso 1 · Sobre vos',
-    title: '¿Cuánto medís?',
-    subtitle: 'Ajustá tu altura en centímetros.',
-  },
-  {
-    eyebrow: 'Paso 1 · Sobre vos',
-    title: '¿Cuál es tu peso actual?',
-    subtitle: 'Arrastrá la regla para ajustar kilos y gramos.',
-  },
-  {
-    eyebrow: 'Paso 1 · Opcional',
-    title: '¿Cuál es tu peso ideal?',
-    subtitle: 'Definí una meta o saltá este paso si preferís.',
-  },
-  {
-    eyebrow: 'Paso 2 · Opcional',
-    title: 'Actividades dinámicas',
-    subtitle: 'Sumá misiones paralelas a tu desafío.',
-  },
-  {
-    eyebrow: 'Paso 3 · Plan principal',
-    title: 'Elegí tu desafío',
-    subtitle: 'Definí la intensidad de tus próximos 75 días.',
-  },
-];
-
 const EASE_OUT = [0.23, 1, 0.32, 1] as const;
 
 export default function Onboarding() {
+  const { user, updateProfile, completeOnboarding } = useAuthStore();
+  const isGoogleUser = Boolean(user?.isGoogleUser);
+
+  const steps: StepId[] = isGoogleUser
+    ? ['profile', 'age', 'height', 'weight', 'targetWeight', 'quests', 'plan']
+    : ['age', 'height', 'weight', 'targetWeight', 'quests', 'plan'];
+
+  const totalSteps = steps.length;
   const [step, setStep] = useState(0);
+  const currentStepId: StepId = steps[step] ?? 'age';
+
   const [direction, setDirection] = useState<1 | -1>(1);
   const [isChallengeLoading, setIsChallengeLoading] = useState(false);
-  const { updateProfile, completeOnboarding } = useAuthStore();
   const { startChallenge } = useChallengeStore();
   const { availableQuests, fetchAvailableQuests, subscribeToQuest } = useQuestStore();
   const router = useRouter();
@@ -89,13 +77,40 @@ export default function Onboarding() {
     fetchAvailableQuests().finally(() => setFetchQuestsStatus('success'));
   }, [fetchAvailableQuests]);
 
-  // Biometrics (substeps 0..3)
-  const [age, setAge] = useState(25);
-  const [weight, setWeight] = useState(70.0);
-  const [targetWeight, setTargetWeight] = useState<number | null>(null);
-  const [height, setHeight] = useState(170);
+  // Google Profile step state (Twitter-style preview & edit)
+  const [profileName, setProfileName] = useState(user?.name || '');
+  const [profileAvatarUrl, setProfileAvatarUrl] = useState(
+    user?.avatarUrl || ''
+  );
+  const [failedAvatarPreview, setFailedAvatarPreview] = useState<string | null>(
+    null
+  );
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Side Quests (step 4)
+  // Sync initial user values once hydrated
+  const googleDefaultAge = user?.age ?? 25;
+  const [age, setAge] = useState(googleDefaultAge);
+  const [weight, setWeight] = useState(user?.weight ?? 70.0);
+  const [targetWeight, setTargetWeight] = useState<number | null>(
+    user?.targetWeight ?? null
+  );
+  const [height, setHeight] = useState(user?.height ?? 170);
+
+  useEffect(() => {
+    if (user?.name && !profileName) {
+      setProfileName(user.name);
+    }
+    if (user?.avatarUrl && !profileAvatarUrl) {
+      setProfileAvatarUrl(user.avatarUrl);
+    }
+    if (typeof user?.age === 'number') {
+      setAge(user.age);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  // Side Quests
   const [selectedQuests, setSelectedQuests] = useState<string[]>([]);
   const [previewQuest, setPreviewQuest] = useState<SideQuestTemplate | null>(null);
 
@@ -107,7 +122,7 @@ export default function Onboarding() {
     );
   };
 
-  // Challenge Selection (step 5)
+  // Challenge Selection
   const [difficulty, setDifficulty] = useState<Difficulty>('Medium');
   const [planDirection, setPlanDirection] = useState<1 | -1>(1);
   const [customTasks, setCustomTasks] = useState<CustomTask[]>([]);
@@ -116,7 +131,7 @@ export default function Onboarding() {
   const validCustomTasks = customTasks.filter((t) => t.title.trim() !== '');
   const hasCustomTasks = validCustomTasks.length > 0;
 
-  const isStep5Valid = () => {
+  const isPlanStepValid = () => {
     if (difficulty === 'Custom') {
       return hasCustomTasks;
     }
@@ -140,20 +155,51 @@ export default function Onboarding() {
   };
 
   const canProceed = () => {
-    if (step === 5) return isStep5Valid();
+    if (currentStepId === 'profile') {
+      return profileName.trim().length >= 2;
+    }
+    if (currentStepId === 'plan') {
+      return isPlanStepValid();
+    }
     return true;
   };
 
   const goToStep = (nextStep: number) => {
-    if (nextStep < 0 || nextStep >= TOTAL_STEPS) return;
+    if (nextStep < 0 || nextStep >= totalSteps) return;
     setDirection(nextStep > step ? 1 : -1);
     setStep(nextStep);
+  };
+
+  const handleAvatarFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || !file.type.startsWith('image/')) return;
+    const objectUrl = URL.createObjectURL(file);
+    setCropSrc(objectUrl);
   };
 
   const handleNext = async () => {
     if (!canProceed()) return;
 
-    if (step === 3) {
+    if (currentStepId === 'profile') {
+      const cleanedName = profileName.trim();
+      const cleanedAvatar = profileAvatarUrl.trim() || null;
+      updateProfile({
+        name: cleanedName,
+        avatarUrl: cleanedAvatar,
+      });
+      // Persist immediately so app data always takes precedence over Google
+      userService
+        .updateProfile({
+          name: cleanedName,
+          avatarUrl: cleanedAvatar,
+        })
+        .catch(() => {});
+      goToStep(step + 1);
+      return;
+    }
+
+    if (currentStepId === 'targetWeight') {
       const finalTarget =
         targetWeight ?? Math.max(30, Number((weight - 5).toFixed(1)));
       setTargetWeight(finalTarget);
@@ -163,11 +209,11 @@ export default function Onboarding() {
         targetWeight: finalTarget,
         height,
       });
-      goToStep(4);
+      goToStep(step + 1);
       return;
     }
 
-    if (step === 4) {
+    if (currentStepId === 'quests') {
       await Promise.all(
         selectedQuests.map((qId) => {
           const q = availableQuests.find((aq) => aq.id === qId);
@@ -176,11 +222,11 @@ export default function Onboarding() {
             : Promise.resolve();
         })
       );
-      goToStep(5);
+      goToStep(step + 1);
       return;
     }
 
-    if (step === 5) {
+    if (currentStepId === 'plan') {
       setIsChallengeLoading(true);
       try {
         const formattedCustomGoals = customTasks
@@ -209,7 +255,7 @@ export default function Onboarding() {
   };
 
   const handleSkipOptional = () => {
-    if (step === 3) {
+    if (currentStepId === 'targetWeight') {
       setTargetWeight(null);
       updateProfile({
         age,
@@ -217,9 +263,9 @@ export default function Onboarding() {
         targetWeight: undefined,
         height,
       });
-      goToStep(4);
-    } else if (step === 4) {
-      goToStep(5);
+      goToStep(step + 1);
+    } else if (currentStepId === 'quests') {
+      goToStep(step + 1);
     }
   };
 
@@ -240,10 +286,68 @@ export default function Onboarding() {
         })
       : activePlan.tasks;
 
-  const meta = STEP_META[step];
+  const getStepMeta = (id: StepId) => {
+    switch (id) {
+      case 'profile':
+        return {
+          eyebrow: 'Tu perfil · Google',
+          title: 'Así se verá tu perfil',
+          subtitle:
+            'Revisá cómo queda tu tarjeta estilo Twitter y personalizá tu nombre o foto si querés.',
+        };
+      case 'age':
+        return isGoogleUser
+          ? {
+              eyebrow: 'Paso 1 · Sobre vos',
+              title: `¿Tenés ${googleDefaultAge} años?`,
+              subtitle: `Confirmá si tu edad coincide con tu fecha de nacimiento en Google (${googleDefaultAge} años) o deslizá para cambiarla.`,
+            }
+          : {
+              eyebrow: 'Paso 1 · Sobre vos',
+              title: '¿Cuántos años tenés?',
+              subtitle: 'Deslizá los números hacia arriba o abajo.',
+            };
+      case 'height':
+        return {
+          eyebrow: 'Paso 1 · Sobre vos',
+          title: '¿Cuánto medís?',
+          subtitle: 'Ajustá tu altura en centímetros.',
+        };
+      case 'weight':
+        return {
+          eyebrow: 'Paso 1 · Sobre vos',
+          title: '¿Cuál es tu peso actual?',
+          subtitle: 'Arrastrá la regla para ajustar kilos y gramos.',
+        };
+      case 'targetWeight':
+        return {
+          eyebrow: 'Paso 1 · Opcional',
+          title: '¿Cuál es tu peso ideal?',
+          subtitle: 'Definí una meta o saltá este paso si preferís.',
+        };
+      case 'quests':
+        return {
+          eyebrow: 'Paso 2 · Opcional',
+          title: 'Actividades dinámicas',
+          subtitle: 'Sumá misiones paralelas a tu desafío.',
+        };
+      case 'plan':
+        return {
+          eyebrow: 'Paso 3 · Plan principal',
+          title: 'Elegí tu desafío',
+          subtitle: 'Definí la intensidad de tus próximos 75 días.',
+        };
+    }
+  };
+
+  const meta = getStepMeta(currentStepId);
   const suggestedTarget = Math.max(30, Number((weight - 5).toFixed(1)));
   const effectiveTargetWeight = targetWeight ?? suggestedTarget;
   const bmiInfo = calculateAgeBasedBmi(weight, height, age);
+  const showAvatarImage =
+    Boolean(profileAvatarUrl.trim()) &&
+    profileAvatarUrl.trim() !== failedAvatarPreview;
+  const handle = getNameHandle(profileName || 'usuario');
 
   return (
     <div className="h-[calc(100dvh-5.75rem)] md:h-auto md:min-h-[620px] max-w-lg mx-auto flex flex-col justify-between gap-3 overflow-hidden select-none">
@@ -256,7 +360,7 @@ export default function Onboarding() {
             role="progressbar"
             aria-valuenow={step + 1}
             aria-valuemin={1}
-            aria-valuemax={TOTAL_STEPS}
+            aria-valuemax={totalSteps}
           >
             <motion.div
               className="h-full w-full rounded-full"
@@ -265,7 +369,7 @@ export default function Onboarding() {
                 transformOrigin: 'left',
               }}
               initial={false}
-              animate={{ scaleX: (step + 1) / TOTAL_STEPS }}
+              animate={{ scaleX: (step + 1) / totalSteps }}
               transition={
                 reduceMotion
                   ? { duration: 0.01 }
@@ -277,7 +381,7 @@ export default function Onboarding() {
             className="text-xs font-semibold tabular-nums shrink-0"
             style={{ color: 'var(--text-muted)' }}
           >
-            {step + 1} / {TOTAL_STEPS}
+            {step + 1} / {totalSteps}
           </span>
         </div>
 
@@ -307,7 +411,7 @@ export default function Onboarding() {
       <div className="relative flex-1 min-h-0 flex flex-col justify-center overflow-hidden">
         <AnimatePresence mode="wait" custom={direction} initial={false}>
           <motion.div
-            key={step}
+            key={currentStepId}
             custom={direction}
             variants={{
               enter: (dir: 1 | -1) =>
@@ -326,8 +430,188 @@ export default function Onboarding() {
             }
             className="h-full min-h-0 flex flex-col justify-center"
           >
-            {/* Substep 1: Edad — Vertical numbers-only wheel */}
-            {step === 0 && (
+            {/* Substep Google Profile: Vista previa estilo Twitter + Edición de name y avatarUrl */}
+            {currentStepId === 'profile' && (
+              <div className="h-full min-h-0 overflow-y-auto overscroll-contain space-y-3.5 px-1 py-1">
+                {/* Tarjeta de vista previa estilo Twitter */}
+                <section
+                  aria-label="Vista previa de tu perfil"
+                  className="rounded-3xl border overflow-hidden shadow-sm"
+                  style={{
+                    backgroundColor: 'var(--surface-card)',
+                    borderColor: 'var(--border-subtle)',
+                  }}
+                >
+                  <div
+                    className="relative h-24 w-full overflow-hidden"
+                    style={{
+                      background:
+                        'linear-gradient(135deg, color-mix(in srgb, var(--accent-fill) 38%, var(--surface-inset)), var(--surface-inset))',
+                    }}
+                  >
+                    <span
+                      className="absolute top-2.5 right-3 rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
+                      style={{
+                        backgroundColor: 'rgb(0 0 0 / 0.45)',
+                        color: '#ffffff',
+                      }}
+                    >
+                      Vista previa
+                    </span>
+                  </div>
+
+                  <div className="px-4 pb-4">
+                    <div className="flex items-end justify-between gap-3">
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="relative -mt-10 h-20 w-20 rounded-full border-4 flex items-center justify-center overflow-hidden text-xl font-bold uppercase cursor-pointer group shrink-0"
+                        style={{
+                          borderColor: 'var(--surface-card)',
+                          backgroundColor: 'var(--surface-inset)',
+                          color: 'var(--accent-text)',
+                        }}
+                        aria-label="Cambiar foto de perfil"
+                      >
+                        {showAvatarImage ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={profileAvatarUrl.trim()}
+                            alt={profileName || 'Avatar'}
+                            className="h-full w-full object-cover"
+                            onError={() =>
+                              setFailedAvatarPreview(profileAvatarUrl.trim())
+                            }
+                          />
+                        ) : (
+                          getInitial(profileName || 'U')
+                        )}
+                        <span
+                          className="absolute inset-0 flex items-center justify-center bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity"
+                          aria-hidden="true"
+                        >
+                          <Camera className="h-5 w-5 text-white" />
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-transform active:scale-95 cursor-pointer"
+                        style={{
+                          backgroundColor: 'var(--surface-inset)',
+                          borderColor: 'var(--border-subtle)',
+                          color: 'var(--text-primary)',
+                        }}
+                      >
+                        <Upload className="h-3.5 w-3.5" />
+                        Subir foto
+                      </button>
+                    </div>
+
+                    <div className="mt-2.5 min-w-0">
+                      <p
+                        className="text-lg font-bold leading-tight truncate"
+                        style={{ color: 'var(--text-primary)' }}
+                      >
+                        {profileName.trim() || 'Tu nombre'}
+                      </p>
+                      <p
+                        className="text-xs truncate mt-0.5"
+                        style={{ color: 'var(--text-muted)' }}
+                      >
+                        @{handle || 'usuario'}
+                      </p>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <span
+                        className="pv2-chip"
+                        style={{ color: 'var(--accent-text)' }}
+                      >
+                        Nivel 1
+                      </span>
+                      <span
+                        className="text-xs"
+                        style={{ color: 'var(--text-muted)' }}
+                      >
+                        75 Days Challenge
+                      </span>
+                    </div>
+                  </div>
+                </section>
+
+                {/* Controles editables: Name y AvatarUrl */}
+                <div
+                  className="rounded-2xl border p-3.5 space-y-3"
+                  style={{
+                    backgroundColor: 'var(--surface-card)',
+                    borderColor: 'var(--border-subtle)',
+                  }}
+                >
+                  <div className="space-y-1">
+                    <label
+                      htmlFor="onboarding-profile-name"
+                      className="block text-xs font-semibold"
+                      style={{ color: 'var(--text-secondary)' }}
+                    >
+                      Nombre visible
+                    </label>
+                    <input
+                      id="onboarding-profile-name"
+                      type="text"
+                      value={profileName}
+                      onChange={(e) => setProfileName(e.target.value)}
+                      placeholder="Tu nombre"
+                      maxLength={80}
+                      className="w-full min-h-[42px] rounded-xl border px-3 py-2 text-sm outline-none"
+                      style={{
+                        backgroundColor: 'var(--surface-inset)',
+                        borderColor: 'var(--border-subtle)',
+                        color: 'var(--text-primary)',
+                      }}
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label
+                      htmlFor="onboarding-avatar-url"
+                      className="block text-xs font-semibold"
+                      style={{ color: 'var(--text-secondary)' }}
+                    >
+                      Foto de perfil (URL o imagen subida)
+                    </label>
+                    <input
+                      id="onboarding-avatar-url"
+                      type="url"
+                      value={profileAvatarUrl}
+                      onChange={(e) => {
+                        setFailedAvatarPreview(null);
+                        setProfileAvatarUrl(e.target.value);
+                      }}
+                      placeholder="https://..."
+                      className="w-full min-h-[42px] rounded-xl border px-3 py-2 text-sm outline-none"
+                      style={{
+                        backgroundColor: 'var(--surface-inset)',
+                        borderColor: 'var(--border-subtle)',
+                        color: 'var(--text-primary)',
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleAvatarFileChange}
+                  className="sr-only"
+                />
+              </div>
+            )}
+
+            {/* Substep Edad — Vertical numbers-only wheel */}
+            {currentStepId === 'age' && (
               <div className="flex flex-col items-center justify-center py-2">
                 <VerticalWheelPicker
                   label="Edad en años"
@@ -340,8 +624,8 @@ export default function Onboarding() {
               </div>
             )}
 
-            {/* Substep 2: Altura — Horizontal iOS ruler */}
-            {step === 1 && (
+            {/* Substep Altura — Horizontal iOS ruler */}
+            {currentStepId === 'height' && (
               <div className="flex flex-col items-center justify-center px-1">
                 <div
                   className="w-full rounded-3xl border px-4 py-7"
@@ -367,8 +651,8 @@ export default function Onboarding() {
               </div>
             )}
 
-            {/* Substep 3: Peso actual + Categorías de IMC según edad */}
-            {step === 2 && (
+            {/* Substep Peso actual + Categorías de IMC según edad */}
+            {currentStepId === 'weight' && (
               <div className="flex flex-col items-center justify-center gap-3 px-1">
                 <div
                   className="w-full rounded-3xl border px-4 py-6"
@@ -462,8 +746,8 @@ export default function Onboarding() {
               </div>
             )}
 
-            {/* Substep 4: Peso ideal (Opcional) — sin IMC */}
-            {step === 3 && (
+            {/* Substep Peso ideal (Opcional) — sin IMC */}
+            {currentStepId === 'targetWeight' && (
               <div className="flex flex-col items-center justify-center gap-4 px-1">
                 <div
                   className="w-full rounded-3xl border px-4 py-7"
@@ -501,8 +785,8 @@ export default function Onboarding() {
               </div>
             )}
 
-            {/* Step 2: Actividades dinámicas */}
-            {step === 4 && (
+            {/* Step Actividades dinámicas */}
+            {currentStepId === 'quests' && (
               <div className="h-full min-h-0 overflow-y-auto overscroll-contain space-y-2.5 pr-0.5 py-1">
                 {fetchQuestsStatus === 'loading' ? (
                   Array.from({ length: 4 }).map((_, i) => (
@@ -645,8 +929,8 @@ export default function Onboarding() {
               </div>
             )}
 
-            {/* Step 3: Elegí tu desafío */}
-            {step === 5 && (
+            {/* Step Elegí tu desafío */}
+            {currentStepId === 'plan' && (
               <div className="h-full min-h-0 flex flex-col justify-center gap-3">
                 <div
                   className="grid grid-cols-4 gap-1 p-1 rounded-2xl border shrink-0 relative"
@@ -818,7 +1102,7 @@ export default function Onboarding() {
           </button>
         ) : null}
 
-        {step === 4 && selectedQuests.length === 0 ? (
+        {currentStepId === 'quests' && selectedQuests.length === 0 ? (
           <button
             type="button"
             onClick={handleSkipOptional}
@@ -832,7 +1116,9 @@ export default function Onboarding() {
             Saltar
             <SkipForward size={18} />
           </button>
-        ) : step === 5 && difficulty === 'Custom' && !hasCustomTasks ? (
+        ) : currentStepId === 'plan' &&
+          difficulty === 'Custom' &&
+          !hasCustomTasks ? (
           <button
             type="button"
             onClick={openCustomEditor}
@@ -868,7 +1154,7 @@ export default function Onboarding() {
               </>
             ) : (
               <>
-                {step === 5 ? 'Comenzar Desafío' : 'Siguiente'}
+                {currentStepId === 'plan' ? 'Comenzar Desafío' : 'Siguiente'}
                 <ChevronRight size={18} />
               </>
             )}
@@ -891,6 +1177,22 @@ export default function Onboarding() {
         onClose={() => {
           setCustomTasks((prev) => prev.filter((t) => t.title.trim() !== ''));
           setIsCustomEditorOpen(false);
+        }}
+      />
+
+      <ImageCropperModal
+        open={Boolean(cropSrc)}
+        src={cropSrc}
+        mode="avatar"
+        onCancel={() => {
+          if (cropSrc?.startsWith('blob:')) URL.revokeObjectURL(cropSrc);
+          setCropSrc(null);
+        }}
+        onApply={(croppedDataUrl) => {
+          if (cropSrc?.startsWith('blob:')) URL.revokeObjectURL(cropSrc);
+          setFailedAvatarPreview(null);
+          setProfileAvatarUrl(croppedDataUrl);
+          setCropSrc(null);
         }}
       />
     </div>

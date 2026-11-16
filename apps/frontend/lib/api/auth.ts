@@ -20,6 +20,25 @@ export interface RegisterData {
     customGoalsTemplate?: Array<{ title: string; description?: string; icon?: string }>;
 }
 
+export interface GoogleAuthData {
+    accessToken?: string;
+    idToken?: string;
+    confirmLink?: boolean;
+}
+
+export type GoogleAuthResponse =
+    | {
+          requiresLinkConfirmation: true;
+          email: string;
+          name: string;
+      }
+    | {
+          requiresLinkConfirmation?: false;
+          token: string;
+          user: User;
+          isNewUser: boolean;
+      };
+
 // Authentication Service
 export const authService = {
     register: (data: RegisterData) => {
@@ -35,6 +54,13 @@ export const authService = {
         return apiClient<{ token: string; user: User }>('/auth/login', {
             method: 'POST',
             body: JSON.stringify(data),
+        });
+    },
+
+    googleAuth: (data: GoogleAuthData) => {
+        return apiClient<GoogleAuthResponse>('/auth/google', {
+            method: 'POST',
+            body: JSON.stringify({ ...data, timezoneOffset: new Date().getTimezoneOffset() }),
         });
     },
 

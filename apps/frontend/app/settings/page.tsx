@@ -99,6 +99,7 @@ const DESKTOP_CATEGORIES: {
 export default function SettingsPage() {
   const router = useRouter();
   const { user } = useAuthStore();
+  const isGoogleUser = Boolean(user?.isGoogleUser);
   const { isActive } = useChallengeStore();
   const { selectedPlan } = useSettingsStore();
   const { openTutorial } = useUIStore();
@@ -161,6 +162,7 @@ export default function SettingsPage() {
             avatarUrl={user?.avatarUrl}
             selectedPlan={selectedPlan}
             isActiveChallenge={isActive}
+            hideEmail={isGoogleUser}
           />
 
           <SettingsGroup title="Seguridad">
@@ -168,7 +170,7 @@ export default function SettingsPage() {
               icon={Lock}
               iconBgClass="bg-indigo-500/15"
               iconColorClass="text-indigo-400"
-              title="Cambiar contraseña"
+              title={isGoogleUser ? 'Eliminar cuenta' : 'Cambiar contraseña'}
               onClick={() => setMobileSheet('password')}
             />
           </SettingsGroup>
@@ -204,6 +206,7 @@ export default function SettingsPage() {
               avatarUrl={user?.avatarUrl}
               selectedPlan={selectedPlan}
               isActiveChallenge={isActive}
+              hideEmail={isGoogleUser}
               compact
             />
 
@@ -253,7 +256,9 @@ export default function SettingsPage() {
                 {currentDesktopMeta.label}
               </h2>
               <p className="mt-0.5 text-sm text-[var(--text-muted)]">
-                {currentDesktopMeta.subtitle}
+                {activeCategory === 'security' && isGoogleUser
+                  ? 'Desvinculá y eliminá tu cuenta de Google'
+                  : currentDesktopMeta.subtitle}
               </p>
             </div>
 
@@ -301,8 +306,12 @@ export default function SettingsPage() {
       <SettingsSheet
         isOpen={mobileSheet === 'password'}
         onClose={() => setMobileSheet(null)}
-        title="Cambiar contraseña"
-        subtitle="Ingresá tu contraseña actual y elegí una nueva"
+        title={isGoogleUser ? 'Eliminar cuenta' : 'Cambiar contraseña'}
+        subtitle={
+          isGoogleUser
+            ? 'Desvinculá tu cuenta de Google y eliminá tus datos'
+            : 'Ingresá tu contraseña actual y elegí una nueva'
+        }
       >
         <PasswordForm onSuccess={() => setMobileSheet(null)} />
       </SettingsSheet>

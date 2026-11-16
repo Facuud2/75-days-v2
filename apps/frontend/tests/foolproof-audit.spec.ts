@@ -9,6 +9,7 @@ function uniqueEmail(prefix: string) {
 
 async function loginViaUI(page: Page, email: string, password: string) {
   await page.goto('/login');
+  await page.getByRole('button', { name: /Continuar con email/i }).click();
   await page.getByLabel(/Email|Correo/i).fill(email);
   await page.getByRole('textbox', { name: 'Contraseña' }).fill(password);
   await page.getByRole('button', { name: /Iniciar sesión/i }).click();
@@ -222,7 +223,7 @@ test.describe('Foolproof Exploratory & Security Audit', () => {
 
     // Logout from Settings and verify Back button cannot reopen Settings
     await page.getByRole('button', { name: /Cerrar sesión/i }).click();
-    await page.getByRole('button', { name: /Sí, cerrar sesión|Cerrar sesión/i }).last().click();
+    await page.getByRole('dialog').getByRole('button', { name: /Cerrar sesión/i }).click();
     await expect(page).toHaveURL(/\/login/, { timeout: 10_000 });
 
     await page.goBack();

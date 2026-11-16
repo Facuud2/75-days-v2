@@ -13,6 +13,7 @@ interface ProfileHeroCardProps {
   isActiveChallenge: boolean;
   onClick?: () => void;
   compact?: boolean;
+  hideEmail?: boolean;
 }
 
 const PLAN_LABELS: Record<PlanId, string> = {
@@ -36,6 +37,7 @@ export function ProfileHeroCard({
   isActiveChallenge,
   onClick,
   compact = false,
+  hideEmail = false,
 }: ProfileHeroCardProps) {
   const displayName = name.trim() || 'Tu perfil';
   const displayEmail = email.trim() || 'Completá tu email';
@@ -69,7 +71,9 @@ export function ProfileHeroCard({
         <p className={`${compact ? 'text-sm' : 'text-base'} truncate font-bold text-[var(--text-primary)]`}>
           {displayName}
         </p>
-        <p className="truncate text-xs text-[var(--text-muted)]">{displayEmail}</p>
+        {!hideEmail && (
+          <p className="truncate text-xs text-[var(--text-muted)]">{displayEmail}</p>
+        )}
         {!compact && (
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
             <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 px-2 py-0.5 text-[11px] font-semibold text-[var(--accent-text)]">

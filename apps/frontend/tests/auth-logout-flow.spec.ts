@@ -79,6 +79,7 @@ test('login, section navigation, and logout never get stuck on loading spinner',
   await page.goto('/login');
   await expect(page.getByRole('heading', { name: 'Iniciar sesión' })).toBeVisible();
 
+  await page.getByRole('button', { name: 'Continuar con email' }).click();
   await page.getByLabel('Email').fill('facu@example.com');
   await page.getByRole('textbox', { name: 'Contraseña' }).fill('secret123');
   await page.getByRole('button', { name: 'Iniciar sesión' }).click();

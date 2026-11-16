@@ -14,7 +14,8 @@ model User {
   bannerUrl           String?
   profileQuote        String?
   email               String   @unique
-  passwordHash        String
+  passwordHash        String?
+  googleId            String?  @unique
   age                 Int?
   weight              Float?
   targetWeight        Float?

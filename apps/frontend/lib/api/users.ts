@@ -9,6 +9,8 @@ export interface UserProfileResponse {
         profileQuote?: string | null;
         email: string;
         registeredAt: string;
+        isGoogleUser?: boolean;
+        hasPassword?: boolean;
         initialWeight: number;
         currentWeight: number;
         targetWeight: number;
@@ -65,6 +67,11 @@ export const userService = {
         return apiClient<{ message: string }>('/users/password', {
             method: 'PUT',
             body: JSON.stringify(payload),
+        });
+    },
+    deleteAccount: () => {
+        return apiClient<{ message: string }>('/users/account', {
+            method: 'DELETE',
         });
     },
 };

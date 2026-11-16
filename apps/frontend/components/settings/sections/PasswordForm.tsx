@@ -1,10 +1,19 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { AlertCircle, CheckCircle2, Eye, EyeOff, Loader2 } from 'lucide-react';
+import {
+  AlertCircle,
+  CheckCircle2,
+  Eye,
+  EyeOff,
+  Loader2,
+  Trash2,
+} from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useAuthStore } from '@/store/useAuthStore';
 import { userService } from '@/lib/api/users';
 import { PasswordFormValues, passwordSchema } from '../schemas';
 
@@ -13,7 +22,12 @@ interface PasswordFormProps {
 }
 
 export function PasswordForm({ onSuccess }: PasswordFormProps) {
+  const router = useRouter();
+  const { user, logout } = useAuthStore();
+  const isGoogleUser = Boolean(user?.isGoogleUser);
+
   const [showPasswords, setShowPasswords] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [serverAlert, setServerAlert] = useState<{
     type: 'success' | 'error';
     message: string;
@@ -33,6 +47,72 @@ export function PasswordForm({ onSuccess }: PasswordFormProps) {
     },
     mode: 'onBlur',
   });
+
+  const handleDeleteGoogleAccount = async () => {
+    setServerAlert(null);
+    setIsDeleting(true);
+    try {
+      await userService.deleteAccount();
+      onSuccess?.();
+      logout();
+      router.replace('/login');
+    } catch (err: unknown) {
+      setIsDeleting(false);
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'No pudimos eliminar tu cuenta. Inténtalo de nuevo.';
+      setServerAlert({ type: 'error', message });
+    }
+  };
+
+  if (isGoogleUser) {
+    return (
+      <div className="space-y-4">
+        {serverAlert && (
+          <div
+            role="alert"
+            className="flex items-start gap-2.5 rounded-xl border border-red-500/30 bg-red-500/10 px-3.5 py-3 text-sm font-medium text-[var(--status-danger)]"
+          >
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{serverAlert.message}</span>
+          </div>
+        )}
+
+        <div className="space-y-1.5">
+          <h3 className="text-sm font-semibold text-[var(--text-primary)]">
+            Cuenta vinculada con Google
+          </h3>
+          <p className="text-xs leading-relaxed text-[var(--text-muted)]">
+            Iniciaste sesión con Google, por lo que no utilizás contraseña en la
+            aplicación. Si deseás desvincular por completo tu cuenta de Google y
+            borrar tus datos, podés eliminar tu cuenta.
+          </p>
+        </div>
+
+        <div className="pt-1">
+          <button
+            type="button"
+            disabled={isDeleting}
+            onClick={handleDeleteGoogleAccount}
+            className="pv2-destructive flex min-h-[46px] w-full items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold transition-colors cursor-pointer sm:w-auto"
+          >
+            {isDeleting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Eliminando cuenta...
+              </>
+            ) : (
+              <>
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
+                Eliminar cuenta
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const onSubmit = async (values: PasswordFormValues) => {
     setServerAlert(null);

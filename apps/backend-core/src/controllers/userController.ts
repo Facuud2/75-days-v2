@@ -149,6 +149,8 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
                 profileQuote: user.profileQuote,
                 email: user.email,
                 registeredAt: user.registeredAt,
+                isGoogleUser: Boolean(user.googleId),
+                hasPassword: Boolean(user.passwordHash),
                 initialWeight: initialWeight,
                 currentWeight: bestWeight || initialWeight,
                 targetWeight: user.targetWeight || 0,
@@ -218,11 +220,28 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
             select: {
                 id: true, name: true, email: true, avatarUrl: true, bannerUrl: true, profileQuote: true,
                 age: true, weight: true, targetWeight: true, height: true,
-                registeredAt: true, onboardingCompleted: true
+                registeredAt: true, onboardingCompleted: true, googleId: true, passwordHash: true
             }
         });
 
-        res.json({ user });
+        res.json({
+            user: {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                avatarUrl: user.avatarUrl,
+                bannerUrl: user.bannerUrl,
+                profileQuote: user.profileQuote,
+                age: user.age,
+                weight: user.weight,
+                targetWeight: user.targetWeight,
+                height: user.height,
+                registeredAt: user.registeredAt,
+                onboardingCompleted: user.onboardingCompleted,
+                isGoogleUser: Boolean(user.googleId),
+                hasPassword: Boolean(user.passwordHash),
+            }
+        });
     } catch (error) {
         if (error instanceof z.ZodError) {
             return res.status(400).json({ error: 'Datos inválidos', details: error.issues });
@@ -246,6 +265,10 @@ export const updatePassword = async (req: AuthRequest, res: Response) => {
         const user = await prisma.user.findUnique({ where: { id: userId } });
         if (!user) return res.status(404).json({ error: 'User not found' });
 
+        if (user.googleId || !user.passwordHash) {
+            return res.status(400).json({ error: 'Las cuentas de Google no permiten cambiar la contraseña.' });
+        }
+
         const isMatch = await bcrypt.compare(currentPassword, user.passwordHash);
         if (!isMatch) {
             return res.status(400).json({ error: 'La contraseña actual es incorrecta.' });
@@ -260,6 +283,47 @@ export const updatePassword = async (req: AuthRequest, res: Response) => {
             return res.status(400).json({ error: 'Datos inválidos', details: error.issues });
         }
         console.error('Error updating password:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// --- DELETE /users/account ---
+export const deleteAccount = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user!.id;
+
+        const user = await prisma.user.findUnique({ where: { id: userId } });
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        await prisma.$transaction(async (tx) => {
+            await tx.dailyGoal.deleteMany({
+                where: { dailyLog: { challenge: { userId } } },
+            });
+            await tx.dailyLog.deleteMany({
+                where: { challenge: { userId } },
+            });
+            await tx.goalTemplate.deleteMany({
+                where: { challenge: { userId } },
+            });
+            await tx.challenge.deleteMany({
+                where: { userId },
+            });
+            await tx.sideQuest.deleteMany({
+                where: { userId },
+            });
+            await tx.achievement.deleteMany({
+                where: { userId },
+            });
+            await tx.user.delete({
+                where: { id: userId },
+            });
+        });
+
+        res.json({ message: 'Cuenta eliminada y desvinculada correctamente.' });
+    } catch (error) {
+        console.error('Error deleting account:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 };

@@ -283,7 +283,7 @@ export default function Profile() {
   // Negativo = el usuario subió de peso. `ProfileHealth` decide el tono y el
   // texto ("ganados") a partir del signo; clampear a 0 ocultaba la subida.
   const weightLost =
-    safeNumber(profileData?.stats.totalWeightLost) ??
+    safeNumber(profileData?.stats?.totalWeightLost) ??
     (initialWeight !== null && currentWeight !== null
       ? initialWeight - currentWeight
       : null);
