@@ -18,6 +18,9 @@ import {
   Check,
   Camera,
   Upload,
+  Crop,
+  RotateCcw,
+  X,
 } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { PLANS } from '@/components/PlansModal';
@@ -86,11 +89,25 @@ export default function Onboarding() {
     null
   );
   const [cropSrc, setCropSrc] = useState<string | null>(null);
+  const [rawAvatarSourceUrl, setRawAvatarSourceUrl] = useState<string | null>(
+    null
+  );
+  const [isDragOverAvatar, setIsDragOverAvatar] = useState(false);
+  const [avatarUploadError, setAvatarUploadError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    return () => {
+      if (rawAvatarSourceUrl?.startsWith('blob:')) {
+        URL.revokeObjectURL(rawAvatarSourceUrl);
+      }
+    };
+  }, [rawAvatarSourceUrl]);
+
   // Sync initial user values once hydrated
-  const googleDefaultAge = user?.age ?? 25;
-  const [age, setAge] = useState(googleDefaultAge);
+  const googleDetectedAge =
+    isGoogleUser && typeof user?.age === 'number' ? user.age : null;
+  const [age, setAge] = useState(user?.age ?? 25);
   const [weight, setWeight] = useState(user?.weight ?? 70.0);
   const [targetWeight, setTargetWeight] = useState<number | null>(
     user?.targetWeight ?? null
@@ -108,7 +125,7 @@ export default function Onboarding() {
       setAge(user.age);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
+  }, [user?.id, user?.age]);
 
   // Side Quests
   const [selectedQuests, setSelectedQuests] = useState<string[]>([]);
@@ -170,12 +187,37 @@ export default function Onboarding() {
     setStep(nextStep);
   };
 
-  const handleAvatarFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file || !file.type.startsWith('image/')) return;
+  const processAvatarFile = (file: File | undefined) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setAvatarUploadError('Seleccioná un archivo de imagen válido.');
+      return;
+    }
+    setAvatarUploadError('');
     const objectUrl = URL.createObjectURL(file);
+    setRawAvatarSourceUrl((prev) => {
+      if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev);
+      return objectUrl;
+    });
     setCropSrc(objectUrl);
+  };
+
+  const handleAvatarFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    processAvatarFile(event.target.files?.[0]);
+    event.target.value = '';
+  };
+
+  const handleAvatarDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setIsDragOverAvatar(false);
+    processAvatarFile(event.dataTransfer.files?.[0]);
+  };
+
+  const handleOpenAvatarCropper = () => {
+    const source = rawAvatarSourceUrl || profileAvatarUrl.trim();
+    if (!source) return;
+    setAvatarUploadError('');
+    setCropSrc(source);
   };
 
   const handleNext = async () => {
@@ -296,11 +338,11 @@ export default function Onboarding() {
             'Revisá cómo queda tu tarjeta estilo Twitter y personalizá tu nombre o foto si querés.',
         };
       case 'age':
-        return isGoogleUser
+        return googleDetectedAge !== null
           ? {
               eyebrow: 'Paso 1 · Sobre vos',
-              title: `¿Tenés ${googleDefaultAge} años?`,
-              subtitle: `Confirmá si tu edad coincide con tu fecha de nacimiento en Google (${googleDefaultAge} años) o deslizá para cambiarla.`,
+              title: `¿Tenés ${googleDetectedAge} años?`,
+              subtitle: `Confirmá si tu edad coincide con tu fecha de nacimiento en Google (${googleDetectedAge} años) o deslizá para cambiarla.`,
             }
           : {
               eyebrow: 'Paso 1 · Sobre vos',
@@ -573,30 +615,149 @@ export default function Onboarding() {
                     />
                   </div>
 
-                  <div className="space-y-1">
-                    <label
-                      htmlFor="onboarding-avatar-url"
+                  <div className="space-y-1.5">
+                    <span
                       className="block text-xs font-semibold"
                       style={{ color: 'var(--text-secondary)' }}
                     >
-                      Foto de perfil (URL o imagen subida)
-                    </label>
-                    <input
-                      id="onboarding-avatar-url"
-                      type="url"
-                      value={profileAvatarUrl}
-                      onChange={(e) => {
-                        setFailedAvatarPreview(null);
-                        setProfileAvatarUrl(e.target.value);
+                      Foto de perfil
+                    </span>
+
+                    <div
+                      onDragEnter={(event) => {
+                        event.preventDefault();
+                        setIsDragOverAvatar(true);
                       }}
-                      placeholder="https://..."
-                      className="w-full min-h-[42px] rounded-xl border px-3 py-2 text-sm outline-none"
+                      onDragOver={(event) => {
+                        event.preventDefault();
+                        if (!isDragOverAvatar) setIsDragOverAvatar(true);
+                      }}
+                      onDragLeave={(event) => {
+                        if (
+                          !event.currentTarget.contains(
+                            event.relatedTarget as Node
+                          )
+                        ) {
+                          setIsDragOverAvatar(false);
+                        }
+                      }}
+                      onDrop={handleAvatarDrop}
+                      className="rounded-xl border border-dashed p-2.5 transition-colors space-y-2"
                       style={{
-                        backgroundColor: 'var(--surface-inset)',
-                        borderColor: 'var(--border-subtle)',
-                        color: 'var(--text-primary)',
+                        backgroundColor: isDragOverAvatar
+                          ? 'color-mix(in srgb, var(--accent-fill) 12%, var(--surface-inset))'
+                          : 'var(--surface-inset)',
+                        borderColor: isDragOverAvatar
+                          ? 'var(--accent-fill)'
+                          : 'var(--border-subtle)',
                       }}
-                    />
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="flex-1 min-h-[40px] inline-flex items-center justify-center gap-2 rounded-xl px-3.5 py-2 text-xs font-semibold transition-transform active:scale-[0.98] cursor-pointer"
+                          style={{
+                            backgroundColor: 'var(--accent-fill)',
+                            color: 'var(--on-accent)',
+                          }}
+                        >
+                          <Upload className="h-3.5 w-3.5 shrink-0" />
+                          {isDragOverAvatar
+                            ? 'Soltá la imagen acá'
+                            : 'Cargar o arrastrar imagen'}
+                        </button>
+
+                        {(rawAvatarSourceUrl || showAvatarImage) && (
+                          <button
+                            type="button"
+                            onClick={handleOpenAvatarCropper}
+                            className="min-h-[40px] inline-flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition-transform active:scale-[0.98] cursor-pointer"
+                            style={{
+                              backgroundColor: 'var(--surface-card)',
+                              borderColor: 'var(--border-subtle)',
+                              color: 'var(--text-primary)',
+                            }}
+                          >
+                            <Crop
+                              className="h-3.5 w-3.5 shrink-0"
+                              style={{ color: 'var(--accent-text)' }}
+                            />
+                            Recortar
+                          </button>
+                        )}
+
+                        {user?.avatarUrl &&
+                          profileAvatarUrl.trim() !== user.avatarUrl && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAvatarUploadError('');
+                                setFailedAvatarPreview(null);
+                                setRawAvatarSourceUrl((prev) => {
+                                  if (prev?.startsWith('blob:'))
+                                    URL.revokeObjectURL(prev);
+                                  return null;
+                                });
+                                setProfileAvatarUrl(user.avatarUrl || '');
+                              }}
+                              className="min-h-[40px] inline-flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition-transform active:scale-[0.98] cursor-pointer"
+                              style={{
+                                backgroundColor: 'var(--surface-card)',
+                                borderColor: 'var(--border-subtle)',
+                                color: 'var(--text-secondary)',
+                              }}
+                              title="Restaurar foto de Google"
+                            >
+                              <RotateCcw className="h-3.5 w-3.5 shrink-0" />
+                              Usar la de Google
+                            </button>
+                          )}
+
+                        {Boolean(profileAvatarUrl.trim()) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAvatarUploadError('');
+                              setFailedAvatarPreview(null);
+                              setRawAvatarSourceUrl((prev) => {
+                                if (prev?.startsWith('blob:'))
+                                  URL.revokeObjectURL(prev);
+                                return null;
+                              });
+                              setProfileAvatarUrl('');
+                            }}
+                            className="min-h-[40px] inline-flex items-center justify-center gap-1 rounded-xl border px-2.5 py-2 text-xs font-semibold transition-transform active:scale-[0.98] cursor-pointer"
+                            style={{
+                              backgroundColor: 'var(--surface-card)',
+                              borderColor: 'var(--border-subtle)',
+                              color: 'var(--text-muted)',
+                            }}
+                            aria-label="Quitar foto de perfil"
+                            title="Quitar foto"
+                          >
+                            <X className="h-3.5 w-3.5 shrink-0" />
+                            Quitar
+                          </button>
+                        )}
+                      </div>
+
+                      <p
+                        className="text-[11px] text-center"
+                        style={{ color: 'var(--text-muted)' }}
+                      >
+                        JPG, PNG o WebP · Podés recortarla antes de guardar
+                      </p>
+                    </div>
+
+                    {avatarUploadError && (
+                      <p
+                        className="text-xs font-medium"
+                        style={{ color: 'var(--status-danger)' }}
+                      >
+                        {avatarUploadError}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -1185,11 +1346,10 @@ export default function Onboarding() {
         src={cropSrc}
         mode="avatar"
         onCancel={() => {
-          if (cropSrc?.startsWith('blob:')) URL.revokeObjectURL(cropSrc);
           setCropSrc(null);
         }}
         onApply={(croppedDataUrl) => {
-          if (cropSrc?.startsWith('blob:')) URL.revokeObjectURL(cropSrc);
+          setAvatarUploadError('');
           setFailedAvatarPreview(null);
           setProfileAvatarUrl(croppedDataUrl);
           setCropSrc(null);

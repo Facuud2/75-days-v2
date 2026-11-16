@@ -8,9 +8,11 @@ declare global {
           initTokenClient: (config: {
             client_id: string;
             scope: string;
+            include_granted_scopes?: boolean;
             prompt?: string;
             callback: (response: {
               access_token?: string;
+              scope?: string;
               error?: string;
               error_description?: string;
             }) => void;
@@ -117,8 +119,9 @@ export function requestGoogleAccessToken(): GoogleTokenRequestHandle {
 
         const tokenClient = oauth2.initTokenClient({
           client_id: clientId,
-          scope: 'openid email profile https://www.googleapis.com/auth/user.birthday.read',
-          prompt: 'select_account',
+          scope:
+            'openid email profile https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/user.birthday.read',
+          include_granted_scopes: true,
           callback: (response) => {
             if (isCancelled) return;
             if (response.error || !response.access_token) {
@@ -143,7 +146,7 @@ export function requestGoogleAccessToken(): GoogleTokenRequestHandle {
           },
         });
 
-        tokenClient.requestAccessToken({ prompt: 'select_account' });
+        tokenClient.requestAccessToken();
       } catch (err) {
         if (!isCancelled) {
           reject(err);

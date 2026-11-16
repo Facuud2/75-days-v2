@@ -63,25 +63,93 @@ function computeAgeFromBirthDate(year: number, month = 1, day = 1): number | nul
     return age;
 }
 
-async function fetchGoogleBirthdayAge(accessToken: string): Promise<number | null> {
-    try {
-        const res = await fetch('https://people.googleapis.com/v1/people/me?personFields=birthdays', {
-            headers: { Authorization: `Bearer ${accessToken}` },
-        });
-        if (!res.ok) return null;
-        const data = (await res.json()) as {
-            birthdays?: Array<{ date?: { year?: number; month?: number; day?: number } }>;
+interface GooglePeopleBirthday {
+    metadata?: {
+        primary?: boolean;
+        source?: {
+            type?: string;
+            id?: string;
         };
-        const birthWithYear = data.birthdays?.find((b) => typeof b.date?.year === 'number');
-        if (!birthWithYear?.date?.year) return null;
+    };
+    date?: {
+        year?: number;
+        month?: number;
+        day?: number;
+    };
+    text?: string;
+}
+
+function parseAgeFromBirthdaysList(birthdays: GooglePeopleBirthday[] | undefined): number | null {
+    if (!Array.isArray(birthdays) || birthdays.length === 0) return null;
+
+    // 1. Prioritize ACCOUNT source with a full year (> 1900)
+    const accountBirth = birthdays.find(
+        (b) =>
+            b.metadata?.source?.type === 'ACCOUNT' &&
+            typeof b.date?.year === 'number' &&
+            b.date.year > 1900
+    );
+    // 2. Fallback to any birthday entry that includes a valid year (> 1900)
+    const birthWithYear =
+        accountBirth ??
+        birthdays.find((b) => typeof b.date?.year === 'number' && b.date.year > 1900);
+
+    if (birthWithYear?.date?.year) {
         return computeAgeFromBirthDate(
             birthWithYear.date.year,
             birthWithYear.date.month ?? 1,
             birthWithYear.date.day ?? 1
         );
-    } catch {
-        return null;
     }
+
+    // 3. Fallback: parse a 4-digit year from `text` if present
+    for (const b of birthdays) {
+        if (typeof b.text === 'string') {
+            const match = b.text.match(/\b(19\d{2}|20\d{2})\b/);
+            if (match) {
+                const parsedYear = Number(match[1]);
+                const computed = computeAgeFromBirthDate(
+                    parsedYear,
+                    b.date?.month ?? 1,
+                    b.date?.day ?? 1
+                );
+                if (computed !== null) return computed;
+            }
+        }
+    }
+
+    return null;
+}
+
+async function fetchGoogleBirthdayAge(accessToken: string): Promise<number | null> {
+    const endpoints = [
+        'https://people.googleapis.com/v1/people/me?personFields=birthdays&sources=READ_SOURCE_TYPE_PROFILE',
+        'https://people.googleapis.com/v1/people/me?personFields=birthdays',
+    ];
+
+    for (const url of endpoints) {
+        try {
+            const res = await fetch(url, {
+                headers: { Authorization: `Bearer ${accessToken}` },
+            });
+            if (!res.ok) {
+                const errBody = await res.text().catch(() => '');
+                console.warn(`[GoogleAuth] People API (${url}) status ${res.status}:`, errBody);
+                continue;
+            }
+            const data = (await res.json()) as {
+                birthdays?: GooglePeopleBirthday[];
+            };
+            const age = parseAgeFromBirthdaysList(data.birthdays);
+            if (age !== null) {
+                return age;
+            }
+        } catch (err) {
+            console.warn('[GoogleAuth] Error fetching Google birthday:', err);
+        }
+    }
+
+    return null;
 }
 
 async function verifyGoogleIdentity(params: {
@@ -103,7 +171,7 @@ async function verifyGoogleIdentity(params: {
             emailVerified: parsed.emailVerified ?? true,
             name: parsed.name || parsed.email.split('@')[0],
             picture: parsed.picture ?? null,
-            age: typeof parsed.age === 'number' ? parsed.age : 25,
+            age: typeof parsed.age === 'number' ? parsed.age : null,
         };
     }
 
@@ -356,12 +424,23 @@ export const googleAuth = async (req: Request, res: Response) => {
         });
 
         if (existingGoogleUser) {
-            // Respect app data over Google data: only fill age if missing in DB and available from Google
+            // Respect app data once onboarding is completed; before onboarding finishes, sync Google age
+            // (and clear any legacy hardcoded 25 if Google did not provide a birthday).
+            const shouldSyncGoogleAge =
+                googleIdentity.age != null &&
+                (existingGoogleUser.age == null || !existingGoogleUser.onboardingCompleted);
+            const shouldClearLegacyDefaultAge =
+                googleIdentity.age == null &&
+                !existingGoogleUser.onboardingCompleted &&
+                existingGoogleUser.age === 25;
+
             const updatedUser =
-                existingGoogleUser.age == null && googleIdentity.age != null
+                shouldSyncGoogleAge || shouldClearLegacyDefaultAge
                     ? await prisma.user.update({
                           where: { id: existingGoogleUser.id },
-                          data: { age: googleIdentity.age },
+                          data: {
+                              age: shouldSyncGoogleAge ? googleIdentity.age : null,
+                          },
                       })
                     : existingGoogleUser;
 
@@ -419,7 +498,7 @@ export const googleAuth = async (req: Request, res: Response) => {
                     googleId: googleIdentity.googleId,
                     passwordHash: null,
                     avatarUrl: googleIdentity.picture ?? null,
-                    age: googleIdentity.age ?? 25,
+                    age: googleIdentity.age ?? null,
                     onboardingCompleted: false,
                 },
             });
