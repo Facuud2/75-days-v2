@@ -485,6 +485,7 @@ export default function Dashboard() {
                   <Trophy size={16} /> Misiones Secundarias
                 </h2>
                 <button
+                  data-tour="new-mission-btn"
                   onClick={() => setIsSideQuestsModalOpen(true)}
                   className="text-xs font-bold text-rose-500 hover:text-white bg-rose-500/10 hover:bg-rose-500 transition-colors px-4 py-2 rounded-xl flex items-center gap-2"
                 >
@@ -604,6 +605,15 @@ export default function Dashboard() {
       {isTutorialOpen && (
         <OnboardingTutorial
           isOpen={isTutorialOpen}
+          userName={user?.name}
+          planDifficulty={currentPlanName}
+          onStepChange={(stepId) => {
+            if (stepId === 'missions-create') {
+              setActiveTab('missions');
+            } else if (stepId === 'daily-tasks' || stepId === 'daily-summary') {
+              setActiveTab('plan');
+            }
+          }}
           onSkip={handleDismissTutorial}
           onComplete={handleDismissTutorial}
         />

@@ -133,11 +133,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <nav className="app-nav flex items-center gap-1 md:gap-2">
             {isAuthenticated && user?.onboardingCompleted && (
               <div data-tour="site-nav" className="hidden lg:flex items-center gap-1 md:gap-2">
-                <Link href="/dashboard" className={`app-header-nav flex flex-col items-center p-2 transition-colors ${pathname === '/dashboard' ? 'is-active' : ''}`}>
+                <Link data-tour="nav-home" href="/dashboard" className={`app-header-nav flex flex-col items-center p-2 transition-colors ${pathname === '/dashboard' ? 'is-active' : ''}`}>
                   <Home size={20} strokeWidth={pathname === '/dashboard' ? 2.4 : 1.8} />
                   <span className="text-[10px] mt-1 hidden sm:block">Inicio</span>
                 </Link>
-                <Link href="/calendar" className={`app-header-nav flex flex-col items-center p-2 transition-colors ${pathname === '/calendar' ? 'is-active' : ''}`}>
+                <Link data-tour="nav-calendar" href="/calendar" className={`app-header-nav flex flex-col items-center p-2 transition-colors ${pathname === '/calendar' ? 'is-active' : ''}`}>
                   <Calendar size={20} strokeWidth={pathname === '/calendar' ? 2.4 : 1.8} />
                   <span className="text-[10px] mt-1 hidden sm:block">Calendario</span>
                 </Link>
@@ -145,11 +145,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   <Plus size={20} strokeWidth={2.2} />
 
                 </button>
-                <Link href="/profile" className={`app-header-nav flex flex-col items-center p-2 transition-colors ${pathname === '/profile' ? 'is-active' : ''}`}>
+                <Link data-tour="nav-profile" href="/profile" className={`app-header-nav flex flex-col items-center p-2 transition-colors ${pathname === '/profile' ? 'is-active' : ''}`}>
                   <User size={20} strokeWidth={pathname === '/profile' ? 2.4 : 1.8} />
                   <span className="text-[10px] mt-1 hidden sm:block">Perfil</span>
                 </Link>
-                <Link href="/settings" className={`app-header-nav flex flex-col items-center p-2 transition-colors ${pathname === '/settings' ? 'is-active' : ''}`}>
+                <Link data-tour="nav-settings" href="/settings" className={`app-header-nav flex flex-col items-center p-2 transition-colors ${pathname === '/settings' ? 'is-active' : ''}`}>
                   <Settings size={20} strokeWidth={pathname === '/settings' ? 2.4 : 1.8} />
                   <span className="text-[10px] mt-1 hidden sm:block">Ajustes</span>
                 </Link>
@@ -157,7 +157,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             )}
 
             {/* Always visible theme toggle */}
-            <button aria-label={appearance === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'} onClick={(e) => toggleTheme(e)} className="app-header-control inline-flex min-h-11 min-w-11 items-center justify-center transition-colors rounded-full border ml-2 relative overflow-hidden active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400" title={appearance === 'dark' ? 'Cambiar a claro' : 'Cambiar a oscuro'}>
+            <button data-tour="theme-toggle" aria-label={appearance === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'} onClick={(e) => toggleTheme(e)} className="app-header-control inline-flex min-h-11 min-w-11 items-center justify-center transition-colors rounded-full border ml-2 relative overflow-hidden active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400" title={appearance === 'dark' ? 'Cambiar a claro' : 'Cambiar a oscuro'}>
               <span className={`block transition-all duration-200 motion-reduce:transition-none ${appearance === 'dark' ? 'rotate-0 scale-100' : 'rotate-90 scale-0 absolute'}`}>
                 <Sun size={18} />
               </span>
@@ -209,11 +209,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Mobile Bottom Nav - Only visible if logged in */}
       {isAuthenticated && user?.onboardingCompleted && (
         <nav data-tour="site-nav" aria-label="Navegación principal" className="mobile-bottom-nav lg:hidden fixed bottom-0 left-0 right-0 z-50 flex items-end justify-around gap-1 border-t border-white/10 px-1 pt-1">
-          <Link href="/dashboard" aria-current={pathname === '/dashboard' ? 'page' : undefined} className={`flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl px-1 py-1.5 text-[11px] font-semibold ${pathname === '/dashboard' ? '' : 'text-white/55'}`}>
+          <Link data-tour="nav-home" href="/dashboard" aria-current={pathname === '/dashboard' ? 'page' : undefined} className={`flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl px-1 py-1.5 text-[11px] font-semibold ${pathname === '/dashboard' ? '' : 'text-white/55'}`}>
             <Home size={22} strokeWidth={pathname === '/dashboard' ? 2.4 : 1.8} />
             <span>Inicio</span>
           </Link>
-          <Link href="/calendar" aria-current={pathname === '/calendar' ? 'page' : undefined} className={`flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl px-1 py-1.5 text-[11px] font-semibold ${pathname === '/calendar' ? '' : 'text-white/55'}`}>
+          <Link data-tour="nav-calendar" href="/calendar" aria-current={pathname === '/calendar' ? 'page' : undefined} className={`flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl px-1 py-1.5 text-[11px] font-semibold ${pathname === '/calendar' ? '' : 'text-white/55'}`}>
             <Calendar size={22} strokeWidth={pathname === '/calendar' ? 2.4 : 1.8} />
             <span>Calendario</span>
           </Link>
@@ -222,11 +222,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <Plus size={28} strokeWidth={2.5} />
             </span>
           </button>
-          <Link href="/profile" aria-current={pathname === '/profile' ? 'page' : undefined} className={`flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl px-1 py-1.5 text-[11px] font-semibold ${pathname === '/profile' ? '' : 'text-white/55'}`}>
+          <Link data-tour="nav-profile" href="/profile" aria-current={pathname === '/profile' ? 'page' : undefined} className={`flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl px-1 py-1.5 text-[11px] font-semibold ${pathname === '/profile' ? '' : 'text-white/55'}`}>
             <User size={22} strokeWidth={pathname === '/profile' ? 2.4 : 1.8} />
             <span>Perfil</span>
           </Link>
-          <Link href="/settings" aria-current={pathname === '/settings' ? 'page' : undefined} className={`flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl px-1 py-1.5 text-[11px] font-semibold ${pathname === '/settings' ? '' : 'text-white/55'}`}>
+          <Link data-tour="nav-settings" href="/settings" aria-current={pathname === '/settings' ? 'page' : undefined} className={`flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl px-1 py-1.5 text-[11px] font-semibold ${pathname === '/settings' ? '' : 'text-white/55'}`}>
             <Settings size={22} strokeWidth={pathname === '/settings' ? 2.4 : 1.8} />
             <span>Ajustes</span>
           </Link>
