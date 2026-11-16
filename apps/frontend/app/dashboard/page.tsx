@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useChallengeStore } from '@/store/useChallengeStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useQuestStore } from '@/store/useQuestStore';
@@ -65,17 +65,22 @@ export default function Dashboard() {
   const router = useRouter();
 
   const todayStr = format(new Date(), 'yyyy-MM-dd');
-  const todayLog = logs[todayStr] ?? (isActive && customGoalsTemplate?.length > 0
-    ? {
-        date: todayStr,
-        status: 'pending' as const,
-        goals: customGoalsTemplate.map((g, idx) => ({
-          ...g,
-          id: `template-${idx}`,
-          completed: false,
-        })),
-      }
-    : undefined);
+  const todayLog = useMemo(
+    () =>
+      logs[todayStr] ??
+      (isActive && customGoalsTemplate?.length > 0
+        ? {
+            date: todayStr,
+            status: 'pending' as const,
+            goals: customGoalsTemplate.map((g, idx) => ({
+              ...g,
+              id: `template-${idx}`,
+              completed: false,
+            })),
+          }
+        : undefined),
+    [logs, todayStr, isActive, customGoalsTemplate]
+  );
   const inFlightGoalsRef = React.useRef<Set<string>>(new Set());
   const [isSideQuestsModalOpen, setIsSideQuestsModalOpen] = useState(false);
   const [selectedSideQuest, setSelectedSideQuest] = useState<any>(null);

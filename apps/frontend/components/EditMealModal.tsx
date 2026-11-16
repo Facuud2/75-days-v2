@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { X, Loader2, CheckCircle2, Edit3, Trash2 } from 'lucide-react';
 import { Meal, LogMealPayload } from '@/lib/api/health';
 import { useHealthStore } from '@/store/useHealthStore';
@@ -14,29 +14,30 @@ interface EditMealModalProps {
     date: string;
 }
 
+function buildInitialFormData(meal: Meal | null) {
+    return {
+        name: meal?.name ?? '',
+        calories: meal ? meal.calories.toString() : '',
+        proteinG: meal ? meal.proteinG.toString() : '',
+        carbG: meal ? meal.carbG.toString() : '',
+        fatG: meal ? meal.fatG.toString() : '',
+    };
+}
+
 export default function EditMealModal({ isOpen, onClose, onSaved, meal, date }: EditMealModalProps) {
     const { updateMealOptimistic, deleteMealOptimistic } = useHealthStore();
-    const [isSaving, setIsSaving] = useState(false);
-    const [isDeleting, setIsDeleting] = useState(false);
-    const [formData, setFormData] = useState({
-        name: '',
-        calories: '',
-        proteinG: '',
-        carbG: '',
-        fatG: ''
-    });
+    const isSaving = false;
+    const isDeleting = false;
+    const currentMealKey = isOpen && meal ? meal.id : null;
+    const [prevMealKey, setPrevMealKey] = useState<string | null>(currentMealKey);
+    const [formData, setFormData] = useState(() => buildInitialFormData(meal));
 
-    useEffect(() => {
+    if (currentMealKey !== prevMealKey) {
+        setPrevMealKey(currentMealKey);
         if (isOpen && meal) {
-            setFormData({
-                name: meal.name,
-                calories: meal.calories.toString(),
-                proteinG: meal.proteinG.toString(),
-                carbG: meal.carbG.toString(),
-                fatG: meal.fatG.toString()
-            });
+            setFormData(buildInitialFormData(meal));
         }
-    }, [isOpen, meal]);
+    }
 
     if (!isOpen || !meal) return null;
 
