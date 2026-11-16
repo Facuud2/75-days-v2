@@ -4,20 +4,15 @@ import { AuthRequest } from '../middlewares/auth';
 import { z } from 'zod';
 import { DEFAULT_GOALS } from '../constants/defaultGoals';
 import { localChallengeDate, parseTimezoneOffset } from '../utils/challengeDate';
+import { reconcileAndGetActiveChallenge } from '../utils/dailyReset';
 
 export const getCurrentChallenge = async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user!.id;
-        const challenge = await prisma.challenge.findFirst({
-            where: { userId, isActive: true },
-            include: {
-                customGoalsTemplate: true,
-                dailyLogs: {
-                    include: { goals: true },
-                    orderBy: { date: 'desc' }
-                }
-            }
-        });
+        const challenge = await reconcileAndGetActiveChallenge(
+            userId,
+            req.query?.timezoneOffset
+        );
 
         if (!challenge) {
             return res.status(404).json({ message: 'No active challenge found' });

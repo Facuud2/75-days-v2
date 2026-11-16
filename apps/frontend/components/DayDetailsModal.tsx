@@ -25,34 +25,36 @@ export default function DayDetailsModal({ date, onClose }: { date: string, onClo
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || !file.type.startsWith('image/')) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const img = new Image();
-      img.onload = () => {
+    const objectUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      try {
         const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 800;
-        let width = img.width;
-        let height = img.height;
-
-        if (width > MAX_WIDTH) {
-          height = Math.round((height * MAX_WIDTH) / width);
-          width = MAX_WIDTH;
-        }
+        const maxDim = 640;
+        const scale = Math.min(1, maxDim / Math.max(img.width || 1, img.height || 1));
+        const width = Math.max(1, Math.round(img.width * scale));
+        const height = Math.max(1, Math.round(img.height * scale));
 
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         ctx?.drawImage(img, 0, 0, width, height);
 
-        // Compress to base64 jpeg
-        const base64 = canvas.toDataURL('image/jpeg', 0.7);
+        const webpUrl = canvas.toDataURL('image/webp', 0.76);
+        const base64 = webpUrl.startsWith('data:image/webp')
+          ? webpUrl
+          : canvas.toDataURL('image/jpeg', 0.72);
         setPhotoUrl(base64);
-      };
-      img.src = event.target?.result as string;
+      } finally {
+        URL.revokeObjectURL(objectUrl);
+      }
     };
-    reader.readAsDataURL(file);
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+    };
+    img.src = objectUrl;
   };
 
   const handleSave = () => {

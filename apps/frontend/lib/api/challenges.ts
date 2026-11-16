@@ -9,8 +9,8 @@ export interface StartChallengeData {
 
 export const challengeService = {
     getCurrentChallenge: () => {
-        // Assuming backend returns a structure similar to ChallengeState core
-        return apiClient<ChallengeState>('/challenges/current');
+        const timezoneOffset = new Date().getTimezoneOffset();
+        return apiClient<ChallengeState>(`/challenges/current?timezoneOffset=${timezoneOffset}`);
     },
 
     startChallenge: (data: StartChallengeData) => {

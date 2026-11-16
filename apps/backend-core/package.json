@@ -4,12 +4,12 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node -r ts-node/register --test src/__tests__/*.test.ts",
     "dev": "ts-node src/index.ts",
     "build": "prisma generate && tsc",
-    "start": "prisma migrate deploy && node dist/src/index.js",
+    "start": "node scripts/migrate-direct.js && node dist/src/index.js",
     "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate deploy",
+    "db:migrate": "node scripts/migrate-direct.js",
     "db:seed": "ts-node -r dotenv/config prisma/seed.ts"
   },
   "keywords": [],

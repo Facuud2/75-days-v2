@@ -144,13 +144,20 @@ export default function EditProfileSheet({ mode, onClose, onSaved, initialValues
     setCropSrc(source);
   };
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!value.trim() && !isImage) {
       setError(mode === 'quote' ? 'Escribí una frase o dejá la frase actual.' : 'Elegí una opción antes de guardar.');
       return;
     }
     if (mode === 'name' && value.trim().length < 2) { setError('El nombre debe tener al menos 2 caracteres.'); return; }
-    setSaving(true); setError('');
+    setError('');
+    const previousPayload: UpdateProfilePayload = mode === 'avatar'
+      ? { avatarUrl: initialValues.avatarUrl ?? null }
+      : mode === 'banner'
+        ? { bannerUrl: initialValues.bannerUrl ?? null }
+        : mode === 'name'
+          ? { name: initialValues.name }
+          : { profileQuote: initialValues.profileQuote ?? null };
     const payload: UpdateProfilePayload = mode === 'avatar'
       ? { avatarUrl: value || null }
       : mode === 'banner'
@@ -158,24 +165,32 @@ export default function EditProfileSheet({ mode, onClose, onSaved, initialValues
         : mode === 'name'
           ? { name: value.trim() }
           : { profileQuote: value.trim() };
-    try { await userService.updateProfile(payload); onSaved(payload); toast.success('El cambio se guardó correctamente.'); onClose(); }
-    catch (err: any) { setError(err.message || 'No se pudieron guardar los cambios.'); }
-    finally { setSaving(false); }
+
+    // 0ms Optimistic UI: aplica el cambio y cierra el sheet al instante
+    onSaved(payload);
+    toast.success('El cambio se guardó correctamente.');
+    onClose();
+    void userService.updateProfile(payload).catch((err: any) => {
+      onSaved(previousPayload);
+      toast.error(err.message || 'No se pudieron guardar los cambios.');
+    });
   };
 
-  const handleRemoveImage = async () => {
-    setSaving(true); setError('');
+  const handleRemoveImage = () => {
+    setError('');
+    const previousPayload: UpdateProfilePayload = mode === 'avatar'
+      ? { avatarUrl: initialValues.avatarUrl ?? null }
+      : { bannerUrl: initialValues.bannerUrl ?? null };
     const payload: UpdateProfilePayload = mode === 'avatar' ? { avatarUrl: null } : { bannerUrl: null };
-    try {
-      await userService.updateProfile(payload);
-      onSaved(payload);
-      toast.success(`${mode === 'avatar' ? 'Foto de perfil' : 'Banner'} quitado correctamente.`);
-      onClose();
-    } catch (err: any) {
-      const message = err.message || 'No se pudo quitar la imagen.';
-      setError(message);
-      toast.error(message);
-    } finally { setSaving(false); }
+
+    // 0ms Optimistic UI: quita la imagen y cierra el sheet al instante
+    onSaved(payload);
+    toast.success(`${mode === 'avatar' ? 'Foto de perfil' : 'Banner'} quitado correctamente.`);
+    onClose();
+    void userService.updateProfile(payload).catch((err: any) => {
+      onSaved(previousPayload);
+      toast.error(err.message || 'No se pudo quitar la imagen.');
+    });
   };
 
   const enterTransition = reduceMotion ? REDUCED_MOTION_TRANSITION : SHEET_ENTER_SPRING;

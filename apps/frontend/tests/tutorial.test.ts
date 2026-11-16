@@ -8,7 +8,7 @@ import {
   resetAndQueueTutorial,
   setPendingTutorial,
 } from '@/lib/tutorial';
-import { computeSpotlightRect } from '@/components/OnboardingTutorial';
+import { buildTutorialSteps, computeSpotlightRect } from '@/components/OnboardingTutorial';
 import { useUIStore } from '@/store/useUIStore';
 
 function createMemoryStorage(): Storage {
@@ -140,5 +140,43 @@ describe('computeSpotlightRect', () => {
       width: 276,
       height: 76,
     });
+  });
+});
+
+describe('buildTutorialSteps', () => {
+  it('personalizes greeting and highlights custom plan goals when planDifficulty is Custom', () => {
+    const steps = buildTutorialSteps({
+      userName: 'Facundo Pérez',
+      planDifficulty: 'Custom',
+    });
+
+    expect(steps[0].title).toContain('Facundo');
+    const tasksStep = steps.find((s) => s.id === 'daily-tasks');
+    expect(tasksStep?.badge).toBe('Plan Custom');
+    expect(tasksStep?.description).toContain('plan Custom');
+  });
+
+  it('includes interactive dashboard, missions, theme toggle, and nav section targets', () => {
+    const steps = buildTutorialSteps({ planDifficulty: 'Medium' });
+    const ids = steps.map((s) => s.id);
+
+    expect(ids).toEqual([
+      'welcome',
+      'daily-summary',
+      'daily-tasks',
+      'missions-create',
+      'quick-actions',
+      'nav-calendar',
+      'nav-profile',
+      'theme-toggle',
+      'nav-settings',
+    ]);
+
+    expect(steps.find((s) => s.id === 'missions-create')?.targetSelector).toBe(
+      '[data-tour="new-mission-btn"]',
+    );
+    expect(steps.find((s) => s.id === 'theme-toggle')?.targetSelector).toBe(
+      '[data-tour="theme-toggle"]',
+    );
   });
 });

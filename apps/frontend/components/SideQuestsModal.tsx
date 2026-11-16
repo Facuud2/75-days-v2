@@ -32,10 +32,10 @@ export default function SideQuestsModal({ onClose }: SideQuestsModalProps) {
 
     const availableToSubscribe = (availableQuests || []).filter(q => !activeQuestTitles.includes(q.title));
 
-    const handleSubscribe = async (quest: SideQuestTemplate) => {
+    const handleSubscribe = (quest: SideQuestTemplate) => {
+        if (subscribingTo !== null) return;
         setSubscribingTo(quest.title);
-        await subscribeToQuest(quest.title, quest.difficulty, quest.durationDays);
-        setSubscribingTo(null);
+        void subscribeToQuest(quest.title, quest.difficulty, quest.durationDays);
         onClose();
     };
 
@@ -43,10 +43,10 @@ export default function SideQuestsModal({ onClose }: SideQuestsModalProps) {
         ...current, tasks: current.tasks.map((task, taskIndex) => taskIndex === index ? { ...task, ...patch } : task),
     }));
 
-    const handleCreate = async (event: React.FormEvent) => {
+    const handleCreate = (event: React.FormEvent) => {
         event.preventDefault();
-        const created = await createCustomQuest(customQuest);
-        if (created) onClose();
+        void createCustomQuest(customQuest);
+        onClose();
     };
 
     return (

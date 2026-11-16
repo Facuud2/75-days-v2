@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { AuthRequest } from '../middlewares/auth';
 import { getFoodDetails, searchFoods } from '../lib/fatsecret';
 import prisma from '../lib/prisma';
+import { invalidateSystemIngredientsCache } from './customFoodController';
 
 export const searchFoodController = async (req: AuthRequest, res: Response) => {
     try {
@@ -152,6 +153,7 @@ export const importFoodController = async (req: AuthRequest, res: Response) => {
             }
         });
 
+        invalidateSystemIngredientsCache();
         return res.json(ingredient);
     } catch (error: any) {
         console.error('FatSecret Import Error:', error.message);

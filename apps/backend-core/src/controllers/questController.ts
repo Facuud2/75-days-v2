@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 const taskInclude = { tasks: { orderBy: { order: 'asc' as const } } };
 
-const serializeQuest = (quest: any) => {
+export const serializeQuest = (quest: any) => {
     const run = quest.runs?.[0] ?? null;
     const tasks = run?.tasks ?? [];
     return {
@@ -32,7 +32,7 @@ const serializeQuest = (quest: any) => {
     };
 };
 
-const questInclude = {
+export const questInclude = {
     runs: { orderBy: { runNumber: 'desc' as const }, take: 1, include: taskInclude },
 };
 
@@ -50,12 +50,26 @@ export const getQuests = async (req: AuthRequest, res: Response) => {
     }
 };
 
+const TEMPLATES_CACHE_TTL_MS = 5 * 60 * 1000;
+let cachedTemplates: { data: any[]; expiresAt: number } | null = null;
+
+export async function fetchCachedAvailableQuestTemplates() {
+    const now = Date.now();
+    if (cachedTemplates && cachedTemplates.expiresAt > now) {
+        return cachedTemplates.data;
+    }
+    const templates = await prisma.sideQuestTemplate.findMany({
+        orderBy: { durationDays: 'asc' },
+        include: { tasks: { orderBy: { order: 'asc' } } },
+    });
+    cachedTemplates = { data: templates, expiresAt: now + TEMPLATES_CACHE_TTL_MS };
+    return templates;
+}
+
 export const getAvailableQuests = async (_req: Request, res: Response) => {
     try {
-        const templates = await prisma.sideQuestTemplate.findMany({
-            orderBy: { durationDays: 'asc' },
-            include: { tasks: { orderBy: { order: 'asc' } } },
-        });
+        const templates = await fetchCachedAvailableQuestTemplates();
+        res.setHeader('Cache-Control', 'private, max-age=300, stale-while-revalidate=3600');
         res.json(templates);
     } catch (error) {
         console.error('Error fetching side quest templates:', error);
@@ -140,20 +154,54 @@ export const toggleQuestTask = async (req: AuthRequest, res: Response) => {
         const quest = await getOwnedQuest(req.params.id as string, req.user!.id);
         if (!quest?.runs[0]) return res.status(404).json({ error: 'Active side quest run not found' });
         if (quest.runs[0].completed) return res.status(400).json({ error: 'Restart the mission to begin a new run' });
-        const task = quest.runs[0].tasks.find(item => item.id === req.params.taskId);
+        const run = quest.runs[0];
+        const task = run.tasks.find(item => item.id === req.params.taskId);
         if (!task) return res.status(404).json({ error: 'Side quest task not found' });
 
         const nextCompleted = !task.completed;
-        const updated = await prisma.$transaction(async (tx) => {
-            await tx.sideQuestTask.update({ where: { id: task.id }, data: { completed: nextCompleted, completedAt: nextCompleted ? new Date() : null } });
-            const tasks = await tx.sideQuestTask.findMany({ where: { runId: quest.runs[0].id } });
-            const runCompleted = tasks.length > 0 && tasks.every(item => item.completed);
-            await tx.sideQuestRun.update({ where: { id: quest.runs[0].id }, data: { completed: runCompleted, completedAt: runCompleted ? new Date() : null } });
-            if (runCompleted) await tx.sideQuest.update({ where: { id: quest.id }, data: { completed: true, completionCount: { increment: 1 } } });
-            else await tx.sideQuest.update({ where: { id: quest.id }, data: { completed: false } });
-            return tx.sideQuest.findUnique({ where: { id: quest.id }, include: questInclude });
-        });
-        res.json(serializeQuest(updated));
+        const now = new Date();
+        const updatedTasks = run.tasks.map(item =>
+            item.id === task.id
+                ? { ...item, completed: nextCompleted, completedAt: nextCompleted ? now : null }
+                : item
+        );
+        const runCompleted = updatedTasks.length > 0 && updatedTasks.every(item => item.completed);
+        const nextCompletionCount = runCompleted
+            ? quest.completionCount + 1
+            : quest.completionCount;
+
+        // Fase 3: 1 único batch de escrituras en paralelo dentro de la transacción (de 5 queries secuenciales -> 1 RTT)
+        await prisma.$transaction([
+            prisma.sideQuestTask.update({
+                where: { id: task.id },
+                data: { completed: nextCompleted, completedAt: nextCompleted ? now : null },
+            }),
+            prisma.sideQuestRun.update({
+                where: { id: run.id },
+                data: { completed: runCompleted, completedAt: runCompleted ? now : null },
+            }),
+            prisma.sideQuest.update({
+                where: { id: quest.id },
+                data: runCompleted
+                    ? { completed: true, completionCount: { increment: 1 } }
+                    : { completed: false },
+            }),
+        ]);
+
+        const updatedQuest = {
+            ...quest,
+            completed: runCompleted,
+            completionCount: nextCompletionCount,
+            runs: [
+                {
+                    ...run,
+                    completed: runCompleted,
+                    completedAt: runCompleted ? now : null,
+                    tasks: updatedTasks,
+                },
+            ],
+        };
+        res.json(serializeQuest(updatedQuest));
     } catch (error) {
         console.error('Error toggling side quest task:', error);
         res.status(500).json({ error: 'Internal server error' });

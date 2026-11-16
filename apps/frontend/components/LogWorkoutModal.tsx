@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { healthService } from '@/lib/api/health';
+import { useHealthStore } from '@/store/useHealthStore';
 import { X, Activity, Clock, Flame, Footprints } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 interface LogWorkoutModalProps {
     isOpen: boolean;
@@ -28,6 +29,7 @@ const INTENSITY_OPTIONS = [
 ];
 
 export default function LogWorkoutModal({ isOpen, onClose, date, onSaved, initialData, onDelete }: LogWorkoutModalProps) {
+    const { logWorkoutOptimistic, updateWorkoutOptimistic, deleteWorkoutOptimistic } = useHealthStore();
     const [sport, setSport] = useState('strength');
     const [durationMin, setDurationMin] = useState(45);
     const [intensity, setIntensity] = useState('medium');
@@ -70,55 +72,50 @@ export default function LogWorkoutModal({ isOpen, onClose, date, onSaved, initia
 
     if (!isOpen) return null;
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
-        setIsSubmitting(true);
 
-        try {
-            if (durationMin <= 0) {
-                throw new Error('La duración debe ser mayor a 0 minutos');
-            }
+        if (durationMin <= 0) {
+            setError('La duración debe ser mayor a 0 minutos');
+            return;
+        }
 
-            const payload = {
-                date,
-                sport,
-                durationMin,
-                intensity,
-                notes: notes || undefined,
-                caloriesBurned: caloriesBurned ? Number(caloriesBurned) : undefined,
-                distanceKm: distanceKm && Number(distanceKm) > 0 ? Number(distanceKm) : undefined,
-            };
+        const payload = {
+            date,
+            sport,
+            durationMin,
+            intensity,
+            notes: notes || undefined,
+            caloriesBurned: caloriesBurned ? Number(caloriesBurned) : undefined,
+            distanceKm: distanceKm && Number(distanceKm) > 0 ? Number(distanceKm) : undefined,
+        };
 
-            if (initialData?.id) {
-                await healthService.updateWorkout(initialData.id, payload);
-            } else {
-                await healthService.logWorkout(payload);
-            }
-
-            onSaved();
-            onClose();
-        } catch (err: any) {
-            setError(err.message || 'Error al guardar el entrenamiento');
-            console.error(err);
-        } finally {
-            setIsSubmitting(false);
+        // 0ms Optimistic UI: actualiza el store y cierra el modal al instante
+        onSaved();
+        onClose();
+        if (initialData?.id) {
+            void updateWorkoutOptimistic(initialData.id, payload).catch(() => {
+                toast.error('Error al actualizar el entrenamiento.');
+            });
+        } else {
+            void logWorkoutOptimistic(payload).catch(() => {
+                toast.error('Error al guardar el entrenamiento.');
+            });
         }
     };
 
-    const handleDelete = async () => {
+    const handleDelete = () => {
         if (!initialData?.id || !onDelete) return;
         if (!confirm('¿Estás seguro de que deseas eliminar este entrenamiento?')) return;
 
-        setIsSubmitting(true);
-        try {
-            await healthService.deleteWorkout(initialData.id);
-            onDelete(initialData.id);
-            onClose();
-        } catch (err: any) {
-            setError(err.message || 'Error al eliminar el entrenamiento');
-            setIsSubmitting(false);
-        }
+        const workoutId = initialData.id;
+        // 0ms Optimistic UI: elimina del store y cierra el modal al instante
+        onDelete(workoutId);
+        onClose();
+        void deleteWorkoutOptimistic(workoutId, date).catch(() => {
+            toast.error('Error al eliminar el entrenamiento.');
+        });
     };
 
     return (

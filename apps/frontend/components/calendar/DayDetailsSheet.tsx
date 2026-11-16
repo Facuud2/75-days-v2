@@ -73,22 +73,32 @@ export default function DayDetailsSheet({ day, onClose, onPrevious, onNext }: { 
 
   const processImageFile = (file: File | undefined) => {
     if (!file || !file.type.startsWith('image/')) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const image = new Image();
-      image.onload = () => {
+    // Fase 3 (Patrón imageProcessing.ts de appManifestV2): ObjectURL + revocación inmediata + WebP compacto
+    const objectUrl = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      try {
         const canvas = document.createElement('canvas');
-        const width = Math.min(image.width, 800);
-        canvas.width = width;
-        canvas.height = Math.round(image.height * (width / image.width));
+        const maxDim = 640;
+        const scale = Math.min(1, maxDim / Math.max(image.width || 1, image.height || 1));
+        canvas.width = Math.max(1, Math.round(image.width * scale));
+        canvas.height = Math.max(1, Math.round(image.height * scale));
         canvas.getContext('2d')?.drawImage(image, 0, 0, canvas.width, canvas.height);
-        setPhotoUrl(canvas.toDataURL('image/jpeg', 0.7));
+        const webpUrl = canvas.toDataURL('image/webp', 0.76);
+        const finalUrl = webpUrl.startsWith('data:image/webp')
+          ? webpUrl
+          : canvas.toDataURL('image/jpeg', 0.72);
+        setPhotoUrl(finalUrl);
         setJustDroppedPhoto(true);
         window.setTimeout(() => setJustDroppedPhoto(false), 500);
-      };
-      image.src = String(reader.result);
+      } finally {
+        URL.revokeObjectURL(objectUrl);
+      }
     };
-    reader.readAsDataURL(file);
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+    };
+    image.src = objectUrl;
   };
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -101,15 +111,17 @@ export default function DayDetailsSheet({ day, onClose, onPrevious, onNext }: { 
     processImageFile(event.dataTransfer.files?.[0]);
   };
 
-  const save = async () => {
-    setIsSaving(true);
+  const save = () => {
     const metrics: { weight?: number; photoUrl?: string; notes?: string } = {};
     if (weight) metrics.weight = Number(weight);
     if (photoUrl) metrics.photoUrl = photoUrl;
     if (notes) metrics.notes = notes;
-    if (Object.keys(metrics).length) await logDailyMetrics(day.date, metrics);
+    if (Object.keys(metrics).length) {
+      void logDailyMetrics(day.date, metrics).catch(() => {
+        toast.error('No se pudo sincronizar el registro.');
+      });
+    }
     toast.success(day.status === 'success' ? 'Registro guardado. Hoy cumpliste con vos.' : 'Registro guardado');
-    setIsSaving(false);
     dismiss();
   };
 

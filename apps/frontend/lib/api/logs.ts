@@ -13,7 +13,7 @@ export const logService = {
     },
 
     updateGoalStatus: (date: string, goalId: string, completed: boolean) => {
-        return apiClient<DailyLog>(`/logs/${date}/goal/${goalId}`, {
+        return apiClient<DailyLog & { challengeStreak?: number; challengePoints?: number }>(`/logs/${date}/goal/${goalId}`, {
             method: 'PUT',
             body: JSON.stringify({ completed }),
         });

@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import DatasetToggle, { type DatasetOption } from '@/components/dev/DatasetToggle';
+import DevTimePanel from '@/components/dev/DevTimePanel';
 
 export const DEV_DATASETS = ['demo', 'worst', 'empty', 'one', 'thousand'] as const;
 export type DevDataset = (typeof DEV_DATASETS)[number];
@@ -50,7 +51,7 @@ export default function DevDatasetPicker({
         positionClassName ?? 'bottom-4'
       }`}
     >
-      <div className="pointer-events-auto">
+      <div className="pointer-events-auto flex items-center gap-2">
         <DatasetToggle
           selected={selected}
           options={DEV_DATASET_OPTIONS}
@@ -65,6 +66,7 @@ export default function DevDatasetPicker({
             router.replace(query ? `${url.pathname}?${query}` : url.pathname, { scroll: false });
           }}
         />
+        <DevTimePanel />
       </div>
     </div>
   );

@@ -65,9 +65,15 @@ export default function Onboarding() {
   const { user, updateProfile, completeOnboarding } = useAuthStore();
   const isGoogleUser = Boolean(user?.isGoogleUser);
 
-  const steps: StepId[] = isGoogleUser
-    ? ['profile', 'age', 'height', 'weight', 'targetWeight', 'quests', 'plan']
-    : ['age', 'height', 'weight', 'targetWeight', 'quests', 'plan'];
+  const steps: StepId[] = [
+    'profile',
+    'age',
+    'height',
+    'weight',
+    'targetWeight',
+    'quests',
+    'plan',
+  ];
 
   const totalSteps = steps.length;
   const [step, setStep] = useState(0);
@@ -329,7 +335,7 @@ export default function Onboarding() {
     }
 
     if (currentStepId === 'quests') {
-      await Promise.all(
+      void Promise.all(
         selectedQuests.map((qId) => {
           const q = availableQuests.find((aq) => aq.id === qId);
           return q
@@ -351,11 +357,13 @@ export default function Onboarding() {
             description: description.trim(),
             icon,
           }));
-        await startChallenge(
-          difficulty,
-          difficulty === 'Custom' ? formattedCustomGoals : undefined
-        );
-        await completeOnboarding();
+        await Promise.all([
+          startChallenge(
+            difficulty,
+            difficulty === 'Custom' ? formattedCustomGoals : undefined
+          ),
+          completeOnboarding(),
+        ]);
         if (typeof window !== 'undefined') {
           sessionStorage.removeItem(draftStorageKey);
         }
@@ -407,12 +415,19 @@ export default function Onboarding() {
   const getStepMeta = (id: StepId) => {
     switch (id) {
       case 'profile':
-        return {
-          eyebrow: 'Tu perfil · Google',
-          title: 'Así se verá tu perfil',
-          subtitle:
-            'Revisá cómo queda tu tarjeta estilo Twitter y personalizá tu nombre o foto si querés.',
-        };
+        return isGoogleUser
+          ? {
+              eyebrow: 'Bienvenida · Perfil de Google',
+              title: 'Así se verá tu perfil',
+              subtitle:
+                'Revisá cómo queda tu tarjeta y personalizá tu nombre o foto si querés.',
+            }
+          : {
+              eyebrow: '¡Cuenta creada con éxito!',
+              title: 'Te damos la bienvenida',
+              subtitle:
+                'Antes de empezar, podés subir tu foto de perfil y elegir cómo querés que se vea tu nombre.',
+            };
       case 'age':
         return googleDetectedAge !== null
           ? {
@@ -453,7 +468,8 @@ export default function Onboarding() {
         return {
           eyebrow: 'Paso 3 · Plan principal',
           title: 'Elegí tu desafío',
-          subtitle: 'Definí la intensidad de tus próximos 75 días.',
+          subtitle:
+            'Seleccioná un plan base o elegí Custom para idear tus propias reglas diarias.',
         };
     }
   };
