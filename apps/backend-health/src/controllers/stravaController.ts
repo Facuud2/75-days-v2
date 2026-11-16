@@ -1,10 +1,8 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import axios from 'axios';
+import prisma from '../lib/prisma';
 import { AuthRequest } from '../middlewares/auth';
 import { estimateCaloriesBurned } from '../utils/calorieCalculator';
-
-const prisma = new PrismaClient();
 
 const STRAVA_CLIENT_ID = process.env.STRAVA_CLIENT_ID;
 const STRAVA_CLIENT_SECRET = process.env.STRAVA_CLIENT_SECRET;
@@ -166,60 +164,81 @@ export const syncStravaWorkouts = async (req: AuthRequest, res: Response) => {
             }
         });
 
-        const activities = response.data;
+        const activities = Array.isArray(response.data) ? response.data : [];
         let syncedCount = 0;
 
-        for (const activity of activities) {
-            const externalId = activity.id.toString();
+        if (activities.length > 0) {
+            const externalIds = activities.map((a: any) => String(a.id));
 
-            // Verificar si ya existe
-            const existing = await prisma.workoutEntry.findUnique({
-                where: { externalId }
+            // Fase 3: 1 única lectura en lote en lugar de N consultas findUnique secuenciales
+            const existingEntries = await prisma.workoutEntry.findMany({
+                where: { externalId: { in: externalIds } },
+                select: { externalId: true },
             });
+            const existingSet = new Set(existingEntries.map((e) => e.externalId));
 
-            if (!existing) {
-                // Determine sport from Strava type
-                let sport = 'other';
-                const lowerType = activity.type.toLowerCase();
-                if (lowerType.includes('run')) sport = 'running';
-                else if (lowerType.includes('ride') || lowerType.includes('bike') || lowerType.includes('cycling')) sport = 'cycling';
-                else if (lowerType.includes('swim')) sport = 'swimming';
-                else if (lowerType.includes('weight') || lowerType.includes('workout')) sport = 'strength';
-                else if (lowerType.includes('yoga')) sport = 'yoga';
-                else if (lowerType.includes('walk')) sport = 'walking';
+            // Reutiliza el perfil ya leído arriba en vez de consultarlo 30 veces dentro del loop
+            const weightKg = profile.weightKg ?? 70;
+            const heightCm = (profile as any).heightCm ?? 170;
 
-                // Determinar intensidad rudimentaria (basada en el score de sufrimiento si existe o defecto a medium)
-                let intensity = 'medium';
-                if (activity.suffer_score) {
-                    if (activity.suffer_score > 100) intensity = 'high';
-                    else if (activity.suffer_score < 30) intensity = 'low';
-                }
+            const newWorkoutsData = activities
+                .filter((activity: any) => !existingSet.has(String(activity.id)))
+                .map((activity: any) => {
+                    const externalId = String(activity.id);
+                    let sport = 'other';
+                    const lowerType = String(activity.type || '').toLowerCase();
+                    if (lowerType.includes('run')) sport = 'running';
+                    else if (
+                        lowerType.includes('ride') ||
+                        lowerType.includes('bike') ||
+                        lowerType.includes('cycling')
+                    ) {
+                        sport = 'cycling';
+                    } else if (lowerType.includes('swim')) sport = 'swimming';
+                    else if (lowerType.includes('weight') || lowerType.includes('workout')) {
+                        sport = 'strength';
+                    } else if (lowerType.includes('yoga')) sport = 'yoga';
+                    else if (lowerType.includes('walk')) sport = 'walking';
 
-                const durationMin = Math.round(activity.moving_time / 60);
+                    let intensity = 'medium';
+                    if (activity.suffer_score) {
+                        if (activity.suffer_score > 100) intensity = 'high';
+                        else if (activity.suffer_score < 30) intensity = 'low';
+                    }
 
-                const profile = await prisma.userHealthProfile.findUnique({ where: { userId } });
-                const weightKg = profile?.weightKg ?? 70;
-                // @ts-ignore: Bypass IDE Prisma cache
-                const heightCm = (profile as any)?.heightCm ?? 170;
-
-                const estimatedCals = estimateCaloriesBurned(sport, durationMin, intensity, weightKg, heightCm);
-
-                await prisma.workoutEntry.create({
-                    data: {
-                        userId,
-                        date: activity.start_date_local.split('T')[0],
+                    const durationMin = Math.max(1, Math.round((activity.moving_time || 60) / 60));
+                    const estimatedCals = estimateCaloriesBurned(
                         sport,
                         durationMin,
                         intensity,
-                        caloriesBurned: activity.kilojoules ? (activity.kilojoules * 0.239006) : estimatedCals,
+                        weightKg,
+                        heightCm
+                    );
+
+                    return {
+                        userId,
+                        date: String(activity.start_date_local || '').split('T')[0],
+                        sport,
+                        durationMin,
+                        intensity,
+                        caloriesBurned: activity.kilojoules
+                            ? activity.kilojoules * 0.239006
+                            : estimatedCals,
                         isManualCalories: false,
-                        distanceKm: Number((activity.distance / 1000).toFixed(2)),
+                        distanceKm: Number(((activity.distance || 0) / 1000).toFixed(2)),
                         source: 'strava',
-                        externalId: externalId,
-                        notes: activity.name,
-                    }
+                        externalId,
+                        notes: activity.name ?? null,
+                    };
                 });
-                syncedCount++;
+
+            if (newWorkoutsData.length > 0) {
+                // Fase 3: 1 único INSERT en lote (createMany) en lugar de N inserts secuenciales
+                const created = await prisma.workoutEntry.createMany({
+                    data: newWorkoutsData,
+                    skipDuplicates: true,
+                });
+                syncedCount = created.count;
             }
         }
 

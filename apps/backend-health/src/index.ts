@@ -59,6 +59,15 @@ app.use('/api/sync', syncRoutes);
 
 app.use('/internal', internalRoutes);
 
+// ── Global Error Handler (F-08: evita peticiones colgadas ante fallos async) ─
+
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    console.error('[backend-health] Unhandled error:', err);
+    if (!res.headersSent) {
+        res.status(err?.status || 500).json({ error: 'Internal server error' });
+    }
+});
+
 app.listen(Number(port), '0.0.0.0', () => {
     console.log(`[backend-health] Service running on port ${port} (IPv4)`);
 });

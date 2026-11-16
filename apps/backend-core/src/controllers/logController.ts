@@ -53,7 +53,13 @@ export const updateGoalStatus = async (req: AuthRequest, res: Response) => {
                     challenge: { userId, isActive: true },
                 },
             },
-            include: { dailyLog: true },
+            select: {
+                id: true,
+                dailyLogId: true,
+                dailyLog: {
+                    select: { id: true, status: true },
+                },
+            },
         });
 
         if (!goal) {
@@ -70,70 +76,87 @@ export const updateGoalStatus = async (req: AuthRequest, res: Response) => {
             // leer valores viejos y pisarse. El lock se libera al hacer commit.
             await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(hashtext(${goal.dailyLogId}))) AS lock`;
 
-            const currentGoal = await tx.dailyGoal.findUnique({
-                where: { id: goalId },
-                include: { dailyLog: true },
+            // Fase 3: 1 única lectura con join (log + goals + challenge) en lugar de 6 lecturas secuenciales
+            const logWithContext = await tx.dailyLog.findUnique({
+                where: { id: goal.dailyLogId },
+                include: {
+                    goals: true,
+                    challenge: {
+                        select: { id: true, points: true, streak: true },
+                    },
+                },
             });
 
-            if (!currentGoal) {
-                throw new NotFoundError('Goal not found');
-            }
-
-            await tx.dailyGoal.update({
-                where: { id: goalId },
-                data: { completed },
-            });
-
-            const goals = await tx.dailyGoal.findMany({
-                where: { dailyLogId: currentGoal.dailyLogId },
-            });
-            const allCompleted = goals.length > 0 && goals.every((g) => g.completed);
-
-            const log = await tx.dailyLog.findUnique({ where: { id: currentGoal.dailyLogId } });
-            if (!log) {
+            if (!logWithContext) {
                 throw new NotFoundError('Log not found');
             }
-            if (log.status === 'fail') {
+            if (!logWithContext.goals.some((g) => g.id === goalId)) {
+                throw new NotFoundError('Goal not found');
+            }
+            if (logWithContext.status === 'fail') {
                 throw new LockedDayError('Cannot modify goals for a failed day');
             }
-
-            const challenge = await tx.challenge.findUnique({ where: { id: log.challengeId } });
-            if (!challenge) {
+            if (!logWithContext.challenge) {
                 throw new NotFoundError('Challenge not found');
             }
 
-            let status = log.status;
-            let points = challenge.points;
-            let streak = challenge.streak;
+            const updatedGoals = logWithContext.goals.map((g) =>
+                g.id === goalId ? { ...g, completed } : g
+            );
+            const allCompleted =
+                updatedGoals.length > 0 && updatedGoals.every((g) => g.completed);
 
-            if (allCompleted && log.status !== 'success') {
+            let status = logWithContext.status;
+            let points = logWithContext.challenge.points;
+            let streak = logWithContext.challenge.streak;
+
+            if (allCompleted && logWithContext.status !== 'success') {
                 status = 'success';
                 points += 10;
                 streak += 1;
-            } else if (!allCompleted && log.status === 'success') {
+            } else if (!allCompleted && logWithContext.status === 'success') {
                 status = 'pending';
                 points = Math.max(0, points - 10);
                 streak = Math.max(0, streak - 1);
             }
 
-            if (status !== log.status) {
-                await tx.dailyLog.update({ where: { id: log.id }, data: { status } });
+            // Fase 3: ejecuta todas las escrituras requeridas en paralelo (1 solo batch RTT)
+            const writeOps: Promise<any>[] = [
+                tx.dailyGoal.update({
+                    where: { id: goalId },
+                    data: { completed },
+                }),
+            ];
+
+            if (status !== logWithContext.status) {
+                writeOps.push(
+                    tx.dailyLog.update({
+                        where: { id: logWithContext.id },
+                        data: { status },
+                    })
+                );
             }
 
-            if (points !== challenge.points || streak !== challenge.streak) {
-                await tx.challenge.update({
-                    where: { id: challenge.id },
-                    data: { points, streak },
-                });
+            if (
+                points !== logWithContext.challenge.points ||
+                streak !== logWithContext.challenge.streak
+            ) {
+                writeOps.push(
+                    tx.challenge.update({
+                        where: { id: logWithContext.challenge.id },
+                        data: { points, streak },
+                    })
+                );
             }
 
-            const updatedLog = await tx.dailyLog.findUnique({
-                where: { id: log.id },
-                include: { goals: true },
-            });
-            if (!updatedLog) {
-                throw new NotFoundError('Log not found');
-            }
+            await Promise.all(writeOps);
+
+            const { challenge: _challenge, ...logFields } = logWithContext;
+            const updatedLog = {
+                ...logFields,
+                status,
+                goals: updatedGoals,
+            };
 
             return { updatedLog, streak, points };
         });

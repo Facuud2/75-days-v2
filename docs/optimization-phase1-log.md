@@ -57,3 +57,24 @@
 ### Verificación Ejecutada (Fase 2)
 - **Tests Unitarios (`npm run test:unit`)**: **9 suites / 49 tests pasados (100% verde)**.
 - **Chequeo Estático de Tipos (`npx tsc --noEmit`)**: **0 errores** en `apps/frontend`, `apps/backend-core` y `apps/backend-health`.
+
+---
+
+## 4. Fase 3: Optimización SQL, Egress, Conexiones y Resiliencia en Backend (`neon-postgres`)
+
+| Archivo | Cambio Realizado |
+| :--- | :--- |
+| `apps/backend-core/src/controllers/logController.ts` | `updateGoalStatus` reduce **9–10 queries secuenciales → 1 lectura con join (`dailyLog` + `goals` + `challenge`) + 1 batch de escrituras en paralelo (`Promise.all`)** dentro de la transacción. |
+| `apps/backend-core/src/controllers/questController.ts` | `toggleQuestTask` reduce **5 queries secuenciales → 1 batch transaccional**; `fetchCachedAvailableQuestTemplates()` añade caché en memoria (`TTL 5 min`) y `Cache-Control`. |
+| `apps/backend-core/src/controllers/userController.ts` | `buildUserProfilePayload` excluye `photoUrl` (Base64 pesado) y `notes` de `dailyLogs` (reducción drástica de egress) y paraleliza/omite escrituras de logros sin cambios (**F-05**). |
+| `apps/backend-health/src/controllers/statsController.ts` | `getWeeklyStats` y `getMonthlyStats` reemplazan **15 a 63 queries N+1 por request → 3 queries concurrentes por rango (`date: { gte, lte }`)** agrupadas en memoria en $O(N)$ (**F-09**). |
+| `apps/backend-health/src/controllers/stravaController.ts` y `lib/prisma.ts` | Elimina el `new PrismaClient()` duplicado (**F-16**), usa el singleton `healthPrisma`, y reduce la sincronización de Strava de **91 queries secuenciales → 2 queries en lote (`findMany` + `createMany`)**. |
+| `apps/backend-health/src/controllers/customFoodController.ts` y `fatsecretController.ts` | Caché en memoria (`TTL 5 min`) de los 51 ingredientes base con invalidación automática al importar desde FatSecret. |
+| `apps/backend-health/src/utils/asyncHandler.ts`, `routes/*` e `index.ts` | Wrapper `asyncHandler` en todas las rutas Express 4 y middleware global de errores para evitar peticiones colgadas ante rechazos async de Prisma (**F-08**). |
+| `apps/frontend/components/calendar/DayDetailsSheet.tsx` y `DayDetailsModal.tsx` | Procesamiento de fotos de progreso con `URL.createObjectURL` + revocación inmediata en `finally` y compresión Canvas a `image/webp` (`<=640px`). |
+| `apps/backend-core/src/__tests__/phase3-core-sql.test.ts` y `apps/backend-health/src/__tests__/phase3-health-sql.test.ts` *(Nuevos)* | Suites de tests unitarios para ambos backends ejecutables vía `npm test` (resolviendo además **F-20**). |
+
+### Verificación Ejecutada (Fase 3)
+- **`apps/backend-core` (`npm test` + `npx tsc --noEmit`)**: **2/2 tests pasados (100% verde)** y **0 errores TS**.
+- **`apps/backend-health` (`npm test` + `npx tsc --noEmit`)**: **3/3 tests pasados (100% verde)** y **0 errores TS**.
+- **`apps/frontend` (`npm run test:unit` + `npx tsc --noEmit`)**: **9 suites / 49 tests pasados (100% verde)** y **0 errores TS**.

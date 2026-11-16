@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import prisma from '../lib/prisma';
 import { AuthRequest } from '../middlewares/auth';
+import { fetchCachedSystemIngredients } from './customFoodController';
 
 /**
  * GET /api/sync/:date
@@ -40,7 +41,7 @@ export const getHealthSync = async (req: AuthRequest, res: Response) => {
                       })
                     : Promise.resolve(undefined),
                 includeCatalog
-                    ? prisma.ingredient.findMany({ orderBy: { name: 'asc' } })
+                    ? fetchCachedSystemIngredients()
                     : Promise.resolve(undefined),
             ]);
 

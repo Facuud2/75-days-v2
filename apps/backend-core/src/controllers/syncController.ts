@@ -2,7 +2,11 @@ import { Response } from 'express';
 import { AuthRequest } from '../middlewares/auth';
 import { prisma } from '../utils/prisma';
 import { reconcileAndGetActiveChallenge } from '../utils/dailyReset';
-import { questInclude, serializeQuest } from './questController';
+import {
+    fetchCachedAvailableQuestTemplates,
+    questInclude,
+    serializeQuest,
+} from './questController';
 import { buildUserProfilePayload } from './userController';
 
 /**
@@ -24,10 +28,7 @@ export const getCoreSync = async (req: AuthRequest, res: Response) => {
                 orderBy: { startedAt: 'desc' },
                 include: questInclude,
             }),
-            prisma.sideQuestTemplate.findMany({
-                orderBy: { durationDays: 'asc' },
-                include: { tasks: { orderBy: { order: 'asc' } } },
-            }),
+            fetchCachedAvailableQuestTemplates(),
             includeProfile ? buildUserProfilePayload(userId) : Promise.resolve(null),
         ]);
 

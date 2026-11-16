@@ -10,12 +10,19 @@ export async function buildUserProfilePayload(userId: string) {
         include: {
             challenges: {
                 include: {
-                    dailyLogs: true
-                }
+                    // Fase 3 (Egress optimization): excluir photoUrl (Base64 pesado) y notes al calcular estadísticas de perfil
+                    dailyLogs: {
+                        select: {
+                            date: true,
+                            status: true,
+                            weight: true,
+                        },
+                    },
+                },
             },
             sideQuests: true,
-            achievements: true
-        }
+            achievements: true,
+        },
     });
 
     if (!user) {
@@ -83,29 +90,30 @@ export async function buildUserProfilePayload(userId: string) {
         { id: '6', title: 'Transformación', description: 'Perder tus primeros 5 kg.', icon: '✨', color: 'bg-purple-500/20 text-purple-500', total: 5, currentProgress: totalWeightLost },
     ];
 
-    const updatedAchievements = [];
+    // Fase 3: reemplaza hasta 6 escrituras secuenciales por un único Promise.all en paralelo
+    // (0 escrituras cuando los logros ya existen y no cambiaron de progreso)
+    const updatedAchievements = await Promise.all(
+        achievementDefinitions.map((def) => {
+            const existing = user.achievements.find((a) => a.title === def.title);
+            const progress = Math.min(Math.floor(def.currentProgress), def.total);
+            const unlocked = progress >= def.total;
 
-    for (const def of achievementDefinitions) {
-        const existing = user.achievements.find(a => a.title === def.title);
-        const progress = Math.min(Math.floor(def.currentProgress), def.total);
-        const unlocked = progress >= def.total;
-
-        if (existing) {
-            if (existing.progress !== progress || existing.unlocked !== unlocked) {
-                const updated = await prisma.achievement.update({
-                    where: { id: existing.id },
-                    data: {
-                        progress,
-                        unlocked,
-                        unlockedAt: unlocked && !existing.unlocked ? new Date() : existing.unlockedAt
-                    }
-                });
-                updatedAchievements.push(updated);
-            } else {
-                updatedAchievements.push(existing);
+            if (existing) {
+                if (existing.progress !== progress || existing.unlocked !== unlocked) {
+                    return prisma.achievement.update({
+                        where: { id: existing.id },
+                        data: {
+                            progress,
+                            unlocked,
+                            unlockedAt:
+                                unlocked && !existing.unlocked ? new Date() : existing.unlockedAt,
+                        },
+                    });
+                }
+                return Promise.resolve(existing);
             }
-        } else {
-            const created = await prisma.achievement.create({
+
+            return prisma.achievement.create({
                 data: {
                     userId,
                     title: def.title,
@@ -115,12 +123,11 @@ export async function buildUserProfilePayload(userId: string) {
                     progress,
                     total: def.total,
                     unlocked,
-                    unlockedAt: unlocked ? new Date() : null
-                }
+                    unlockedAt: unlocked ? new Date() : null,
+                },
             });
-            updatedAchievements.push(created);
-        }
-    }
+        })
+    );
 
     return {
         user: {
