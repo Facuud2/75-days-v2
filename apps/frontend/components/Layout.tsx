@@ -90,7 +90,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   // Auth surfaces own the full viewport (safe areas, status bar, scroll) and
   // must not inherit the app header or the padded content shell.
-  if (pathname === '/login' || pathname === '/register') {
+  if (pathname === '/login' || pathname === '/register' || (!isAuthenticated && pathname === '/')) {
     return <>{children}</>;
   }
 
@@ -121,13 +121,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <Flame className="text-rose-500" fill="currentColor" />
           <span className="font-bold text-xl tracking-wider hidden sm:inline">75 DAYS</span>
           <span className="text-rose-500 italic font-bold text-xl">
-            {isAuthenticated ? (difficulty?.toUpperCase() || 'ACTIVO') : 'APP'}
+            {isAuthenticated
+              ? user?.onboardingCompleted
+                ? difficulty?.toUpperCase() || 'ACTIVO'
+                : 'BIENVENIDA'
+              : 'APP'}
           </span>
         </div>
 
         <div className="flex items-center gap-4 md:gap-6">
-          {/* Timer - Only visible if logged in */}
-          {isAuthenticated && <HeaderCountdownTimer />}
+          {/* Timer - Only visible once onboarding is completed */}
+          {isAuthenticated && user?.onboardingCompleted && <HeaderCountdownTimer />}
 
           {/* Nav - Desktop links (mobile uses bottom nav) + utility controls */}
           <nav className="app-nav flex items-center gap-1 md:gap-2">

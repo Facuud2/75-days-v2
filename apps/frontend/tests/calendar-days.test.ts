@@ -70,4 +70,16 @@ describe('challenge calendar model', () => {
     expect(getDefaultWeekIndex(groupChallengeWeeks(days))).toBe(0);
     expect(getDefaultWeekIndex([])).toBe(0);
   });
+
+  it('converts a global UTC ISO startDate to the user local calendar day', () => {
+    const utcTimestamp = '2026-11-17T02:06:29.232Z';
+    const expectedLocalToday = new Date(utcTimestamp);
+    const days = buildChallengeDays(utcTimestamp, {}, expectedLocalToday);
+
+    expect(days[0].dayNumber).toBe(1);
+    expect(days[0].isToday).toBe(true);
+    expect(days[0].dateValue.getFullYear()).toBe(expectedLocalToday.getFullYear());
+    expect(days[0].dateValue.getMonth()).toBe(expectedLocalToday.getMonth());
+    expect(days[0].dateValue.getDate()).toBe(expectedLocalToday.getDate());
+  });
 });

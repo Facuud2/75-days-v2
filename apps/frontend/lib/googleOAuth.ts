@@ -105,7 +105,7 @@ export function requestGoogleAccessToken(): GoogleTokenRequestHandle {
         const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID?.trim() || '';
         if (!clientId) {
           throw new Error(
-            'Falta configurar NEXT_PUBLIC_GOOGLE_CLIENT_ID en las variables de entorno.'
+            'El inicio de sesión con Google no está disponible en este momento. Podés continuar con tu email.'
           );
         }
 

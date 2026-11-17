@@ -8,8 +8,8 @@ import RouteBootSkeleton from '@/components/auth/RouteBootSkeleton';
 // Public routes that anyone can access, logged in or not.
 const PUBLIC_ROUTES =
     process.env.NODE_ENV === 'development'
-        ? ['/login', '/register', '/dev/edge-cases', '/dev/profile-edge-cases']
-        : ['/login', '/register'];
+        ? ['/', '/login', '/register', '/dev/edge-cases', '/dev/profile-edge-cases']
+        : ['/', '/login', '/register'];
 
 // Routes that are ONLY for non-authenticated users (e.g., they shouldn't see login if already logged in)
 const AUTH_ROUTES = ['/login', '/register'];

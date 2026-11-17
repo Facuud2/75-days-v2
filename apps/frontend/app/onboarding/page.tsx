@@ -396,6 +396,15 @@ export default function Onboarding() {
     }
   };
 
+  const handleSkipPhysicalData = () => {
+    const questsIndex = steps.indexOf('quests');
+    const planIndex = steps.indexOf('plan');
+    const targetIndex = questsIndex >= 0 ? questsIndex : planIndex;
+    if (targetIndex > step) {
+      goToStep(targetIndex);
+    }
+  };
+
   const activePlan = PLANS.find((p) => p.difficulty === difficulty) ?? PLANS[1];
   const activePlanTasks =
     activePlan.difficulty === 'Custom' && hasCustomTasks
@@ -867,7 +876,7 @@ export default function Onboarding() {
 
             {/* Substep Edad — Vertical numbers-only wheel */}
             {currentStepId === 'age' && (
-              <div className="flex flex-col items-center justify-center py-2">
+              <div className="flex flex-col items-center justify-center gap-3 py-2">
                 <VerticalWheelPicker
                   label="Edad en años"
                   value={age}
@@ -876,12 +885,23 @@ export default function Onboarding() {
                   max={110}
                   unitLabel="años"
                 />
+                <button
+                  type="button"
+                  onClick={handleSkipPhysicalData}
+                  className="min-h-[36px] px-4 rounded-full text-xs font-semibold transition-transform active:scale-95 cursor-pointer shrink-0"
+                  style={{
+                    touchAction: 'manipulation',
+                    color: 'var(--text-muted)',
+                  }}
+                >
+                  Omitir datos físicos por ahora
+                </button>
               </div>
             )}
 
             {/* Substep Altura — Horizontal iOS ruler */}
             {currentStepId === 'height' && (
-              <div className="flex flex-col items-center justify-center px-1">
+              <div className="flex flex-col items-center justify-center gap-3 px-1">
                 <div
                   className="w-full rounded-3xl border px-4 py-7"
                   style={{
@@ -903,6 +923,17 @@ export default function Onboarding() {
                     formatValue={(v) => String(Math.round(v))}
                   />
                 </div>
+                <button
+                  type="button"
+                  onClick={handleSkipPhysicalData}
+                  className="min-h-[36px] px-4 rounded-full text-xs font-semibold transition-transform active:scale-95 cursor-pointer shrink-0"
+                  style={{
+                    touchAction: 'manipulation',
+                    color: 'var(--text-muted)',
+                  }}
+                >
+                  Omitir datos físicos por ahora
+                </button>
               </div>
             )}
 
@@ -998,6 +1029,18 @@ export default function Onboarding() {
                     })}
                   </div>
                 </section>
+
+                <button
+                  type="button"
+                  onClick={handleSkipPhysicalData}
+                  className="min-h-[36px] px-4 rounded-full text-xs font-semibold transition-transform active:scale-95 cursor-pointer shrink-0"
+                  style={{
+                    touchAction: 'manipulation',
+                    color: 'var(--text-muted)',
+                  }}
+                >
+                  Omitir datos físicos por ahora
+                </button>
               </div>
             )}
 

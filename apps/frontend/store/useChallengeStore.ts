@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { differenceInCalendarDays, format } from 'date-fns';
+import { parseLocalDate } from '@/lib/utils/date';
 import { challengeService } from '../lib/api/challenges';
 import { logService, UpdateMetricsData } from '../lib/api/logs';
 
@@ -97,10 +98,9 @@ function normalizeLogs(dailyLogs: unknown): Record<string, DailyLog> {
   }, {});
 }
 
-/** Día del reto en calendario local (1-based), sin desfases por UTC. */
+/** Día del reto en calendario local (1-based), partiendo desde la hora global. */
 function calculateCurrentDay(startDate: string): number {
-  const [year, month, day] = startDate.slice(0, 10).split('-').map(Number);
-  const start = new Date(year, month - 1, day);
+  const start = parseLocalDate(startDate);
   const now = new Date();
   now.setHours(0, 0, 0, 0);
   return Math.max(1, differenceInCalendarDays(now, start) + 1);
