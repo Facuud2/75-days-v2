@@ -357,13 +357,14 @@ export default function Onboarding() {
             description: description.trim(),
             icon,
           }));
-        await Promise.all([
-          startChallenge(
-            difficulty,
-            difficulty === 'Custom' ? formattedCustomGoals : undefined
-          ),
-          completeOnboarding(),
-        ]);
+        // startChallenge debe completar antes que completeOnboarding: si corren en
+        // paralelo y completeOnboarding termina primero, AuthGuard redirige a
+        // /dashboard antes de que el reto exista en la DB y en el store.
+        await startChallenge(
+          difficulty,
+          difficulty === 'Custom' ? formattedCustomGoals : undefined
+        );
+        await completeOnboarding();
         if (typeof window !== 'undefined') {
           sessionStorage.removeItem(draftStorageKey);
         }
