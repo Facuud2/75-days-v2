@@ -44,6 +44,7 @@ export const aiService = {
     return apiClient<AiCustomPlanResponse>('/ai/custom-plan', {
       method: 'POST',
       body: JSON.stringify(payload),
+      timeoutMs: 45_000,
     });
   },
 };

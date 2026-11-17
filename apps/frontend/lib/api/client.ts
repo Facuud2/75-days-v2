@@ -1,8 +1,8 @@
-import { baseRequest, API_BASE_URL } from './base';
+import { baseRequest, API_BASE_URL, type RequestOptions } from './base';
 
 export async function apiClient<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestOptions = {}
 ): Promise<T> {
   return baseRequest<T>(endpoint, { baseUrl: API_BASE_URL, ...options });
 }
