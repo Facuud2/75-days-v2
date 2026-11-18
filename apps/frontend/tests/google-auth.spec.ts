@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-const CORE_API = 'http://localhost:3001/api';
+const CORE_API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
 
 function uniqueEmail(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}@example.com`;

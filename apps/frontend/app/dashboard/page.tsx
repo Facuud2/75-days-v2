@@ -81,7 +81,6 @@ export default function Dashboard() {
         : undefined),
     [logs, todayStr, isActive, customGoalsTemplate]
   );
-  const inFlightGoalsRef = React.useRef<Set<string>>(new Set());
   const [isSideQuestsModalOpen, setIsSideQuestsModalOpen] = useState(false);
   const [selectedSideQuest, setSelectedSideQuest] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<TabView>('plan');
@@ -127,13 +126,7 @@ export default function Dashboard() {
 
     const handleClick = () => {
       if (String(goal.id).startsWith('template-')) return;
-      if (inFlightGoalsRef.current.has(goal.id)) return;
-      inFlightGoalsRef.current.add(goal.id);
-      void logDailyGoal(todayStr, goal.id, !goal.completed)
-        .catch(() => {})
-        .finally(() => {
-          inFlightGoalsRef.current.delete(goal.id);
-        });
+      void logDailyGoal(todayStr, goal.id, !goal.completed).catch(() => {});
     };
 
     return (
@@ -142,9 +135,9 @@ export default function Dashboard() {
         key={goal.id}
         onClick={handleClick}
         aria-pressed={goal.completed}
-        className={`group w-full text-left bg-rose-950/20 border rounded-2xl px-3.5 py-3 sm:p-5 flex items-center gap-3 sm:gap-5 transition-all duration-200 min-h-14 ${goal.completed
-          ? 'border-rose-500/30 bg-rose-500/5'
-          : 'border-[#361726] hover:border-rose-500/50 hover:bg-rose-950/40 active:scale-[0.99]'
+        className={`group cursor-pointer w-full text-left bg-rose-950/20 border rounded-2xl px-3.5 py-3 sm:p-5 flex items-center gap-3 sm:gap-5 transition-all duration-200 min-h-14 active:scale-[0.99] ${goal.completed
+          ? 'border-rose-500/30 bg-rose-500/5 hover:border-rose-500/50 hover:bg-rose-500/10'
+          : 'border-[#361726] hover:border-rose-500/50 hover:bg-rose-950/40'
           }`}
       >
         <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0 transition-colors ${goal.completed
@@ -165,8 +158,8 @@ export default function Dashboard() {
           ) : null}
         </div>
 
-        <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center shrink-0 transition-all duration-200 ${goal.completed
-          ? 'bg-rose-500 border-rose-500 shadow-[0_0_15px_var(--color-rose-500)]'
+        <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center shrink-0 transition-all duration-200 group-active:scale-90 ${goal.completed
+          ? 'bg-rose-500 border-rose-500 shadow-[0_0_15px_var(--color-rose-500)] group-hover:bg-rose-400 group-hover:border-rose-400'
           : 'border-rose-950/40 group-hover:border-rose-500/50'
           }`}>
           {goal.completed && <Check size={16} className="text-white" strokeWidth={3} />}

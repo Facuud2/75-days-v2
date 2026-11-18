@@ -76,14 +76,14 @@ export default function DayDetailsModal({ date, onClose }: { date: string, onClo
 
   return (
     <div className="mobile-sheet-root fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in" role="dialog" aria-modal="true" aria-labelledby="day-details-title">
-      <div className="mobile-sheet-panel bg-[#1c0f16] border border-[#361726] rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+      <div className="mobile-sheet-panel bg-[var(--surface-card)] border border-[var(--border-subtle)] text-[var(--text-primary)] rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
 
-        <div className="flex items-center justify-between p-6 border-b border-white/5">
+        <div className="flex items-center justify-between p-6 border-b border-[var(--divider)]">
           <div className="flex items-center gap-3">
             <Calendar className="text-rose-500" />
-             <h2 id="day-details-title" className="text-xl font-bold text-white tracking-tight capitalize">{formattedDate}</h2>
+             <h2 id="day-details-title" className="text-xl font-bold text-[var(--text-primary)] tracking-tight capitalize">{formattedDate}</h2>
           </div>
-           <button aria-label="Cerrar detalle del día" onClick={onClose} className="text-white/60 hover:text-white transition-colors p-2 rounded-full hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300">
+           <button aria-label="Cerrar detalle del día" onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors p-2 rounded-full hover:bg-[var(--surface-inset)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300">
             <X size={20} />
           </button>
         </div>
@@ -92,7 +92,7 @@ export default function DayDetailsModal({ date, onClose }: { date: string, onClo
 
           {/* Weight */}
           <div className="space-y-2">
-            <label className="flex items-center gap-2 text-sm font-medium text-white/70">
+            <label className="flex items-center gap-2 text-sm font-medium text-[var(--text-secondary)]">
               <Scale size={16} className="text-rose-500" />
               Peso (kg)
             </label>
@@ -104,14 +104,14 @@ export default function DayDetailsModal({ date, onClose }: { date: string, onClo
                   const currentDec = weight === '' ? '0' : Math.round((Number(weight) - Math.floor(Number(weight))) * 10).toString();
                   setWeight(`${newInt}.${currentDec}`);
                 }}
-                className="flex-1 px-4 py-3 rounded-xl bg-[#050505] border border-[#361726] text-white outline-none focus:border-rose-500 transition-colors appearance-none"
+                className="flex-1 px-4 py-3 rounded-xl bg-[var(--surface-inset)] border border-[var(--border-subtle)] text-[var(--text-primary)] outline-none focus:border-rose-500 transition-colors appearance-none"
               >
                 <option value="" disabled>Entero</option>
                 {Array.from({ length: 271 }, (_, i) => i + 30).map((kg) => (
                   <option key={kg} value={kg}>{kg}</option>
                 ))}
               </select>
-              <span className="text-xl font-bold text-white/50">.</span>
+              <span className="text-xl font-bold text-[var(--text-muted)]">.</span>
               <select
                 value={weight === '' ? '' : Math.round((Number(weight) - Math.floor(Number(weight))) * 10)}
                 onChange={(e) => {
@@ -119,7 +119,7 @@ export default function DayDetailsModal({ date, onClose }: { date: string, onClo
                   const currentInt = weight === '' ? '75' : Math.floor(Number(weight)).toString();
                   setWeight(`${currentInt}.${newDec}`);
                 }}
-                className="w-24 px-4 py-3 rounded-xl bg-[#050505] border border-[#361726] text-white outline-none focus:border-rose-500 transition-colors appearance-none text-center"
+                className="w-24 px-4 py-3 rounded-xl bg-[var(--surface-inset)] border border-[var(--border-subtle)] text-[var(--text-primary)] outline-none focus:border-rose-500 transition-colors appearance-none text-center"
               >
                 <option value="" disabled>Gr</option>
                 {Array.from({ length: 10 }, (_, i) => i).map((g) => (
@@ -131,7 +131,7 @@ export default function DayDetailsModal({ date, onClose }: { date: string, onClo
 
           {/* Photo */}
           <div className="space-y-2">
-            <label className="flex items-center justify-between text-sm font-medium text-white/70">
+            <label className="flex items-center justify-between text-sm font-medium text-[var(--text-secondary)]">
               <div className="flex items-center gap-2">
                 <Camera size={16} className="text-rose-500" />
                 Foto de Progreso
@@ -149,7 +149,7 @@ export default function DayDetailsModal({ date, onClose }: { date: string, onClo
             {!photoUrl ? (
               <div
                 onClick={() => fileInputRef.current?.click()}
-                className="w-full h-32 rounded-xl border-2 border-dashed border-[#361726] hover:border-rose-500/50 bg-[#050505] flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors text-white/50 hover:text-rose-500"
+                className="w-full h-32 rounded-xl border-2 border-dashed border-[var(--border-subtle)] hover:border-rose-500/50 bg-[var(--surface-inset)] flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors text-[var(--text-muted)] hover:text-rose-500"
               >
                 <Upload size={24} />
                 <span className="text-sm font-medium">Subir Imagen</span>
@@ -157,7 +157,7 @@ export default function DayDetailsModal({ date, onClose }: { date: string, onClo
             ) : (
               <div
                 onClick={() => fileInputRef.current?.click()}
-                className="mt-2 rounded-xl overflow-hidden border border-[#361726] aspect-video relative cursor-pointer group"
+                className="mt-2 rounded-xl overflow-hidden border border-[var(--border-subtle)] aspect-video relative cursor-pointer group"
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={photoUrl} alt="Progreso" className="w-full h-full object-cover" onError={(e) => (e.currentTarget.style.display = 'none')} />
@@ -179,7 +179,7 @@ export default function DayDetailsModal({ date, onClose }: { date: string, onClo
 
           {/* Notes */}
           <div className="space-y-2">
-            <label className="flex items-center gap-2 text-sm font-medium text-white/70">
+            <label className="flex items-center gap-2 text-sm font-medium text-[var(--text-secondary)]">
               <AlignLeft size={16} className="text-rose-500" />
               Notas del Día
             </label>
@@ -188,16 +188,16 @@ export default function DayDetailsModal({ date, onClose }: { date: string, onClo
               onChange={(e) => setNotes(e.target.value)}
               placeholder="¿Cómo te sentiste hoy? ¿Algún obstáculo?"
               rows={4}
-              className="w-full px-4 py-3 rounded-xl bg-[#050505] border border-[#361726] text-white outline-none focus:border-rose-500 transition-colors resize-none"
+              className="w-full px-4 py-3 rounded-xl bg-[var(--surface-inset)] border border-[var(--border-subtle)] text-[var(--text-primary)] outline-none focus:border-rose-500 transition-colors resize-none"
             />
           </div>
 
         </div>
 
-        <div className="p-6 border-t border-white/5 flex justify-end gap-3 bg-[#050505]">
+        <div className="p-6 border-t border-[var(--divider)] flex justify-end gap-3 bg-[var(--surface-inset)]">
           <button
             onClick={onClose}
-            className="px-6 py-3 rounded-xl font-medium text-white/70 hover:text-white hover:bg-white/5 transition-colors"
+            className="px-6 py-3 rounded-xl font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-raised)] transition-colors"
           >
             Cancelar
           </button>

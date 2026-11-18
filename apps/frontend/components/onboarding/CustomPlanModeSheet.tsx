@@ -44,6 +44,7 @@ export default function CustomPlanModeSheet({
           role="dialog"
           aria-modal="true"
           aria-labelledby="custom-mode-sheet-title"
+          onClick={(e) => e.stopPropagation()}
         >
           <motion.button
             type="button"

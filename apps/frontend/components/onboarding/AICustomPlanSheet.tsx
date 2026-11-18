@@ -190,10 +190,11 @@ export default function AICustomPlanSheet({
     <AnimatePresence>
       {isOpen && (
         <div
-          className="fixed inset-0 z-[75] flex items-end sm:items-center justify-center sm:p-4"
+          className="fixed inset-0 z-[125] flex items-end sm:items-center justify-center sm:p-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby="ai-plan-sheet-title"
+          onClick={(e) => e.stopPropagation()}
         >
           <motion.button
             type="button"

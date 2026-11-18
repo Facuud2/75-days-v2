@@ -145,13 +145,32 @@ export default function PlansModal() {
   useEffect(() => {
     if (!isPlansModalOpen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !isCustomEditorOpen && !isAiPlanSheetOpen) {
-        handleClose();
+      if (event.key !== 'Escape') return;
+      if (isCustomEditorOpen || isAiPlanSheetOpen) return;
+      if (showCustomModePicker) {
+        event.stopPropagation();
+        setShowCustomModePicker(false);
+        return;
       }
+      if (showModifyChoiceModal) {
+        event.stopPropagation();
+        if (!isSavingCustom) setShowModifyChoiceModal(false);
+        return;
+      }
+      event.stopPropagation();
+      handleClose();
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isPlansModalOpen, isCustomEditorOpen, isAiPlanSheetOpen, handleClose]);
+  }, [
+    isPlansModalOpen,
+    isCustomEditorOpen,
+    isAiPlanSheetOpen,
+    showCustomModePicker,
+    showModifyChoiceModal,
+    isSavingCustom,
+    handleClose,
+  ]);
 
   if (!isPlansModalOpen) return null;
 
@@ -223,17 +242,18 @@ export default function PlansModal() {
   const selectedPlan = PLANS.find(p => p.difficulty === difficulty);
 
   return (
-    <div
-      className="mobile-sheet-root fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in"
-      onClick={handleClose}
-    >
+    <>
       <div
-        className="mobile-sheet-panel bg-zinc-950 border border-white/10 rounded-2xl w-full max-w-5xl overflow-hidden shadow-2xl flex flex-col max-h-[90dvh] animate-in slide-in-from-bottom-4 duration-200"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="plans-modal-title"
-        onClick={e => e.stopPropagation()}
+        className="mobile-sheet-root fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in"
+        onClick={handleClose}
       >
+        <div
+          className="mobile-sheet-panel bg-zinc-950 border border-white/10 rounded-2xl w-full max-w-5xl overflow-hidden shadow-2xl flex flex-col max-h-[90dvh] animate-in slide-in-from-bottom-4 duration-200"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="plans-modal-title"
+          onClick={e => e.stopPropagation()}
+        >
         {/* Header */}
         <div className="flex items-center justify-between gap-3 px-5 py-4 sm:px-8 sm:py-5 border-b border-white/5">
           <div className="flex items-center gap-3">
@@ -385,6 +405,7 @@ export default function PlansModal() {
                   : (isActive ? 'Reiniciar Desafío' : 'Comenzar Desafío')}
               </button>
             )}
+            </div>
           </div>
         </div>
       </div>
@@ -393,7 +414,10 @@ export default function PlansModal() {
       {showCustomModePicker && (
         <div
           className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
-          onClick={() => setShowCustomModePicker(false)}
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowCustomModePicker(false);
+          }}
         >
           <div
             className="w-full max-w-md rounded-2xl border border-white/10 bg-zinc-950 p-6 space-y-4 shadow-2xl"
@@ -429,7 +453,10 @@ export default function PlansModal() {
       {showModifyChoiceModal && (
         <div
           className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm"
-          onClick={() => !isSavingCustom && setShowModifyChoiceModal(false)}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (!isSavingCustom) setShowModifyChoiceModal(false);
+          }}
         >
           <div
             className="w-full max-w-md rounded-2xl border border-white/10 bg-zinc-950 p-6 space-y-4 shadow-2xl"
@@ -466,9 +493,10 @@ export default function PlansModal() {
         tasks={customTasks}
         onChange={setCustomTasks}
         onClose={() => {
-          setCustomTasks((prev) => prev.filter((t) => t.title.trim() !== ''));
+          const validTasks = customTasks.filter((t) => t.title.trim() !== '');
+          setCustomTasks(validTasks);
           setIsCustomEditorOpen(false);
-          if (isActiveCustom) {
+          if (isActiveCustom && validTasks.length > 0) {
             setShowModifyChoiceModal(true);
           }
         }}
@@ -478,9 +506,10 @@ export default function PlansModal() {
         isOpen={isAiPlanSheetOpen}
         initialTasks={customTasks}
         onApplyPlan={(tasks) => {
-          setCustomTasks(tasks);
+          const validTasks = tasks.filter((t) => t.title.trim() !== '');
+          setCustomTasks(validTasks);
           setIsAiPlanSheetOpen(false);
-          if (isActiveCustom) {
+          if (isActiveCustom && validTasks.length > 0) {
             setShowModifyChoiceModal(true);
           }
         }}
@@ -491,6 +520,6 @@ export default function PlansModal() {
         }}
         onClose={() => setIsAiPlanSheetOpen(false)}
       />
-    </div>
+    </>
   );
 }

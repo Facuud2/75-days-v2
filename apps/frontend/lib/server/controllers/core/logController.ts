@@ -1,0 +1,258 @@
+import { z } from 'zod';
+import { getCorePrisma } from '../../db';
+import { ControllerRequest, ControllerResponse } from '../../http';
+import { reconcileAndGetActiveChallenge } from '../../utils/dailyReset';
+
+export const getLogs = async (req: ControllerRequest, res: ControllerResponse) => {
+  try {
+    const prisma = getCorePrisma();
+    const userId = req.user!.id;
+    const challenge = await prisma.challenge.findFirst({
+      where: { userId, isActive: true },
+    });
+
+    if (!challenge) {
+      return res.status(404).json({ error: 'No active challenge found' });
+    }
+
+    const logs = await prisma.dailyLog.findMany({
+      where: { challengeId: challenge.id },
+      include: { goals: true },
+      orderBy: { date: 'asc' },
+    });
+
+    return res.json(logs);
+  } catch (error) {
+    console.error('[logController.getLogs]', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+const goalUpdateSchema = z.object({
+  completed: z.boolean(),
+});
+
+class NotFoundError extends Error {}
+class LockedDayError extends Error {}
+
+export const updateGoalStatus = async (
+  req: ControllerRequest,
+  res: ControllerResponse
+) => {
+  try {
+    const prisma = getCorePrisma();
+    const date = req.params.date as string;
+    const goalId = req.params.goalId as string;
+    const { completed } = goalUpdateSchema.parse(req.body);
+    const userId = req.user!.id;
+
+    const goal = await prisma.dailyGoal.findFirst({
+      where: {
+        id: goalId,
+        dailyLog: {
+          date,
+          challenge: { userId, isActive: true },
+        },
+      },
+      select: {
+        id: true,
+        dailyLogId: true,
+        dailyLog: {
+          select: { id: true, status: true },
+        },
+      },
+    });
+
+    if (!goal) {
+      return res.status(404).json({ error: 'Goal not found' });
+    }
+
+    if (goal.dailyLog.status === 'fail') {
+      return res.status(400).json({ error: 'Cannot modify goals for a failed day' });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(hashtext(${goal.dailyLogId}))) AS lock`;
+
+      const logWithContext = await tx.dailyLog.findUnique({
+        where: { id: goal.dailyLogId },
+        include: {
+          goals: true,
+          challenge: {
+            select: { id: true, points: true, streak: true },
+          },
+        },
+      });
+
+      if (!logWithContext) {
+        throw new NotFoundError('Log not found');
+      }
+      if (!logWithContext.goals.some((g) => g.id === goalId)) {
+        throw new NotFoundError('Goal not found');
+      }
+      if (logWithContext.status === 'fail') {
+        throw new LockedDayError('Cannot modify goals for a failed day');
+      }
+      if (!logWithContext.challenge) {
+        throw new NotFoundError('Challenge not found');
+      }
+
+      const updatedGoals = logWithContext.goals.map((g) =>
+        g.id === goalId ? { ...g, completed } : g
+      );
+      const allCompleted =
+        updatedGoals.length > 0 && updatedGoals.every((g) => g.completed);
+
+      let status = logWithContext.status;
+      let points = logWithContext.challenge.points;
+      let streak = logWithContext.challenge.streak;
+
+      if (allCompleted && logWithContext.status !== 'success') {
+        status = 'success';
+        points += 10;
+        streak += 1;
+      } else if (!allCompleted && logWithContext.status === 'success') {
+        status = 'pending';
+        points = Math.max(0, points - 10);
+        streak = Math.max(0, streak - 1);
+      }
+
+      const writeOps: Promise<any>[] = [
+        tx.dailyGoal.update({
+          where: { id: goalId },
+          data: { completed },
+        }),
+      ];
+
+      if (status !== logWithContext.status) {
+        writeOps.push(
+          tx.dailyLog.update({
+            where: { id: logWithContext.id },
+            data: { status },
+          })
+        );
+      }
+
+      if (
+        points !== logWithContext.challenge.points ||
+        streak !== logWithContext.challenge.streak
+      ) {
+        writeOps.push(
+          tx.challenge.update({
+            where: { id: logWithContext.challenge.id },
+            data: { points, streak },
+          })
+        );
+      }
+
+      await Promise.all(writeOps);
+
+      const { challenge: _challenge, ...logFields } = logWithContext;
+      const updatedLog = {
+        ...logFields,
+        status,
+        goals: updatedGoals,
+      };
+
+      return { updatedLog, streak, points };
+    });
+
+    return res.json({
+      ...result.updatedLog,
+      challengeStreak: result.streak,
+      challengePoints: result.points,
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Validation failed', details: error.issues });
+    }
+    if (error instanceof NotFoundError) {
+      return res.status(404).json({ error: error.message });
+    }
+    if (error instanceof LockedDayError) {
+      return res.status(400).json({ error: error.message });
+    }
+    console.error('[logController.updateGoalStatus]', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+const metricsSchema = z.object({
+  weight: z.number().optional(),
+  photoUrl: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+export const updateMetrics = async (
+  req: ControllerRequest,
+  res: ControllerResponse
+) => {
+  try {
+    const prisma = getCorePrisma();
+    const date = req.params.date as string;
+    const { weight, photoUrl, notes } = metricsSchema.parse(req.body);
+    const userId = req.user!.id;
+
+    const challenge = await prisma.challenge.findFirst({
+      where: { userId, isActive: true },
+      include: { dailyLogs: { where: { date } } },
+    });
+
+    if (!challenge || !challenge.dailyLogs || challenge.dailyLogs.length === 0) {
+      return res.status(404).json({ error: 'Challenge or Log not found' });
+    }
+
+    const log = challenge.dailyLogs[0];
+
+    const updatedLog = await prisma.dailyLog.update({
+      where: { id: log.id },
+      data: { weight, photoUrl, notes },
+      include: { goals: true },
+    });
+
+    if (weight) {
+      const best = challenge.bestWeight;
+      if (best === null || weight < best) {
+        await prisma.challenge.update({
+          where: { id: challenge.id },
+          data: { bestWeight: weight },
+        });
+      }
+    }
+
+    return res.json(updatedLog);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Validation failed', details: error.issues });
+    }
+    console.error('[logController.updateMetrics]', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const checkDailyReset = async (
+  req: ControllerRequest,
+  res: ControllerResponse
+) => {
+  try {
+    const userId = req.user!.id;
+    const challenge = await reconcileAndGetActiveChallenge(
+      userId,
+      (req.body || {}).timezoneOffset
+    );
+
+    if (!challenge) {
+      return res.json({ message: 'No active challenge' });
+    }
+
+    return res.json({
+      message: 'Checked',
+      streak: challenge.streak,
+      currentDay: challenge.currentDay,
+      logs: challenge.dailyLogs,
+    });
+  } catch (error) {
+    console.error('[logController.checkDailyReset]', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};

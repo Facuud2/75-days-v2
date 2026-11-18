@@ -131,10 +131,11 @@ export default function CustomTaskEditorSheet({
     <AnimatePresence>
       {isOpen && (
         <div
-          className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center sm:p-4"
+          className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center sm:p-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby="custom-editor-title"
+          onClick={(e) => e.stopPropagation()}
         >
           <motion.button
             type="button"

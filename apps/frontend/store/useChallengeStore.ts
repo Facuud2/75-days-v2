@@ -67,6 +67,46 @@ let challengeSyncSeq = 0;
 let inFlightChallengePromise: Promise<void> | null = null;
 let lastReconciledDate: string | null = null;
 
+interface GoalSyncEntry {
+  latestDesired: boolean;
+  baselineCompleted: boolean;
+  seq: number;
+  waiters: Array<{ resolve: () => void; reject: (err: unknown) => void }>;
+}
+
+const goalSyncQueue = new Map<string, GoalSyncEntry>();
+let goalSyncSeqCounter = 0;
+
+function applyGoalCompletionToLog(
+  log: DailyLog,
+  goalId: string,
+  completed: boolean,
+  currentStreak: number,
+  currentPoints: number
+) {
+  const updatedGoals = log.goals.map((g: any) =>
+    g.id === goalId ? { ...g, completed } : g
+  );
+  const allCompleted =
+    updatedGoals.length > 0 && updatedGoals.every((g: any) => g.completed);
+
+  let nextStatus = log.status;
+  let nextPoints = currentPoints;
+  let nextStreak = currentStreak;
+
+  if (allCompleted && log.status !== 'success') {
+    nextStatus = 'success';
+    nextPoints += 10;
+    nextStreak += 1;
+  } else if (!allCompleted && log.status === 'success') {
+    nextStatus = 'pending';
+    nextPoints = Math.max(0, nextPoints - 10);
+    nextStreak = Math.max(0, nextStreak - 1);
+  }
+
+  return { updatedGoals, nextStatus, nextStreak, nextPoints };
+}
+
 /**
  * Estado inicial del reto. Se usa para arrancar el store y para limpiar todo
  * al cerrar sesión (F-37: antes el reto del usuario anterior sobrevivía).
@@ -212,14 +252,28 @@ export const useChallengeStore = create<ChallengeState>()(
       },
 
       updateCustomGoals: async (customGoalsTemplate) => {
+        const seq = ++challengeSyncSeq;
         set({ isLoading: true, error: null });
         try {
           const response = (await challengeService.updateCustomGoals(customGoalsTemplate)) as any;
+          if (seq !== challengeSyncSeq) return;
           const { dailyLogs, ...restData } = response;
           const parsedLogs = Array.isArray(dailyLogs) ? normalizeLogs(dailyLogs) : get().logs;
-          set({ ...restData, logs: parsedLogs, isActive: true, isLoading: false });
+          set({
+            ...restData,
+            logs: parsedLogs,
+            isActive: true,
+            isLoading: false,
+            isValidating: false,
+          });
         } catch (error: any) {
-          set({ error: error.message || 'Failed to update custom goals', isLoading: false });
+          if (seq === challengeSyncSeq) {
+            set({
+              error: error.message || 'Failed to update custom goals',
+              isLoading: false,
+              isValidating: false,
+            });
+          }
           throw error;
         }
       },
@@ -227,35 +281,22 @@ export const useChallengeStore = create<ChallengeState>()(
       logDailyGoal: async (date, goalId, completed) => {
         // Invalida lecturas en vuelo más viejas para que no pisen el estado optimista
         ++challengeSyncSeq;
-        const snapshot = {
-          logs: get().logs,
-          streak: get().streak,
-          points: get().points,
-        };
+        const syncKey = `${date}:${goalId}`;
+        const existingLog = get().logs[date];
+        const existingGoal = existingLog?.goals?.find((g: any) => g.id === goalId);
+        const currentCompleted = Boolean(existingGoal?.completed);
 
         // Optimistic update completo en Frame 0 (0ms): metas, status del día, racha y puntos
         set((state) => {
           const log = state.logs[date];
           if (!log || !Array.isArray(log.goals)) return state;
-          const updatedGoals = log.goals.map((g: any) =>
-            g.id === goalId ? { ...g, completed } : g
+          const { updatedGoals, nextStatus, nextStreak, nextPoints } = applyGoalCompletionToLog(
+            log,
+            goalId,
+            completed,
+            state.streak,
+            state.points
           );
-          const allCompleted =
-            updatedGoals.length > 0 && updatedGoals.every((g: any) => g.completed);
-
-          let nextStatus = log.status;
-          let nextPoints = state.points;
-          let nextStreak = state.streak;
-
-          if (allCompleted && log.status !== 'success') {
-            nextStatus = 'success';
-            nextPoints += 10;
-            nextStreak += 1;
-          } else if (!allCompleted && log.status === 'success') {
-            nextStatus = 'pending';
-            nextPoints = Math.max(0, nextPoints - 10);
-            nextStreak = Math.max(0, nextStreak - 1);
-          }
 
           return {
             logs: {
@@ -267,29 +308,88 @@ export const useChallengeStore = create<ChallengeState>()(
           };
         });
 
+        const existingEntry = goalSyncQueue.get(syncKey);
+        if (existingEntry) {
+          existingEntry.latestDesired = completed;
+          existingEntry.seq = ++goalSyncSeqCounter;
+          return new Promise<void>((resolve, reject) => {
+            existingEntry.waiters.push({ resolve, reject });
+          });
+        }
+
+        const entry: GoalSyncEntry = {
+          latestDesired: completed,
+          baselineCompleted: currentCompleted,
+          seq: ++goalSyncSeqCounter,
+          waiters: [],
+        };
+        goalSyncQueue.set(syncKey, entry);
+
         try {
-          const response = await logService.updateGoalStatus(date, goalId, completed);
-          // Sincroniza status/racha/puntos autoritativos conservando las metas optimistas en memoria
+          while (true) {
+            const targetCompleted = entry.latestDesired;
+            const targetSeq = entry.seq;
+
+            const response = await logService.updateGoalStatus(date, goalId, targetCompleted);
+            entry.baselineCompleted = targetCompleted;
+
+            // Si hubo un clic más reciente mientras el PUT estaba en vuelo, enviamos
+            // el último estado deseado sin aplicar todavía los totales intermedios.
+            if (entry.seq !== targetSeq && entry.latestDesired !== targetCompleted) {
+              continue;
+            }
+
+            // Sincroniza status/racha/puntos autoritativos solo cuando no quedan otras
+            // metas sincronizándose en paralelo que quedarían desactualizadas.
+            if (goalSyncQueue.size <= 1) {
+              set((state) => {
+                const log = state.logs[date];
+                if (!log) return state;
+                return {
+                  logs: {
+                    ...state.logs,
+                    [date]: { ...log, status: (response as any).status ?? log.status },
+                  },
+                  streak: (response as any).challengeStreak ?? state.streak,
+                  points: (response as any).challengePoints ?? state.points,
+                };
+              });
+            }
+            break;
+          }
+
+          goalSyncQueue.delete(syncKey);
+          for (const waiter of entry.waiters) {
+            waiter.resolve();
+          }
+        } catch (error: any) {
+          // Rollback al último estado confirmado por el servidor para esta meta
           set((state) => {
             const log = state.logs[date];
-            if (!log) return state;
+            if (!log || !Array.isArray(log.goals)) {
+              return { error: error.message || 'Failed to update goal' };
+            }
+            const { updatedGoals, nextStatus, nextStreak, nextPoints } = applyGoalCompletionToLog(
+              log,
+              goalId,
+              entry.baselineCompleted,
+              state.streak,
+              state.points
+            );
             return {
               logs: {
                 ...state.logs,
-                [date]: { ...log, status: (response as any).status ?? log.status },
+                [date]: { ...log, goals: updatedGoals, status: nextStatus },
               },
-              streak: (response as any).challengeStreak ?? state.streak,
-              points: (response as any).challengePoints ?? state.points,
+              streak: nextStreak,
+              points: nextPoints,
+              error: error.message || 'Failed to update goal',
             };
           });
-        } catch (error: any) {
-          // Rollback automático en caso de error
-          set({
-            logs: snapshot.logs,
-            streak: snapshot.streak,
-            points: snapshot.points,
-            error: error.message || 'Failed to update goal',
-          });
+          goalSyncQueue.delete(syncKey);
+          for (const waiter of entry.waiters) {
+            waiter.reject(error);
+          }
           throw error;
         }
       },
@@ -433,6 +533,7 @@ export const useChallengeStore = create<ChallengeState>()(
         ++challengeSyncSeq;
         inFlightChallengePromise = null;
         lastReconciledDate = null;
+        goalSyncQueue.clear();
         set({ ...INITIAL_CHALLENGE_STATE });
       },
     }),

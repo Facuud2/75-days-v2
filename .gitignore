@@ -12,4 +12,6 @@ coverage/
 .env.*.local
 !.env.example
 .next-dev/
+.next-local/
 .neon
+apps/frontend/lib/generated/

@@ -3,8 +3,8 @@
  * Centralizes auth token retrieval, error handling, and request logic.
  */
 
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
-export const HEALTH_API_BASE_URL = process.env.NEXT_PUBLIC_HEALTH_API_URL || 'http://localhost:3002/api';
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
+export const HEALTH_API_BASE_URL = process.env.NEXT_PUBLIC_HEALTH_API_URL || '/api';
 
 /**
  * Retrieves the auth token from localStorage.

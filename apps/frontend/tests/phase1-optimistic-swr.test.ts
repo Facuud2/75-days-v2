@@ -151,6 +151,55 @@ describe('Fase 1: Optimistic UI (0ms) & Stale-While-Revalidate', () => {
       expect(useChallengeStore.getState().streak).toBe(2);
     });
 
+    it('logDailyGoal updates optimistically on rapid repeated toggles and coalesces in-flight network requests', async () => {
+      const resolvers: Array<(val: any) => void> = [];
+      const spy = vi.spyOn(logService, 'updateGoalStatus').mockImplementation(
+        () =>
+          new Promise((res) => {
+            resolvers.push(res);
+          })
+      );
+
+      useChallengeStore.setState({
+        isActive: true,
+        streak: 2,
+        points: 20,
+        logs: {
+          '2026-11-16': {
+            date: '2026-11-16',
+            status: 'success',
+            goals: [{ id: 'g1', title: 'Dieta', completed: true }],
+          },
+        },
+      });
+
+      // Click 1: uncheck while network is slow
+      const p1 = useChallengeStore.getState().logDailyGoal('2026-11-16', 'g1', false);
+      expect(useChallengeStore.getState().logs['2026-11-16'].goals[0].completed).toBe(false);
+      expect(useChallengeStore.getState().logs['2026-11-16'].status).toBe('pending');
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy).toHaveBeenLastCalledWith('2026-11-16', 'g1', false);
+
+      // Click 2 & 3 while first request is still in flight: UI updates immediately in 0ms, no parallel PUTs
+      const p2 = useChallengeStore.getState().logDailyGoal('2026-11-16', 'g1', true);
+      expect(useChallengeStore.getState().logs['2026-11-16'].goals[0].completed).toBe(true);
+      const p3 = useChallengeStore.getState().logDailyGoal('2026-11-16', 'g1', false);
+      expect(useChallengeStore.getState().logs['2026-11-16'].goals[0].completed).toBe(false);
+      expect(spy).toHaveBeenCalledTimes(1);
+
+      // Resolve first PUT -> latestDesired is also false, so no redundant PUT needed
+      resolvers[0]({
+        status: 'pending',
+        challengeStreak: 1,
+        challengePoints: 10,
+      });
+      await Promise.all([p1, p2, p3]);
+
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(useChallengeStore.getState().logs['2026-11-16'].goals[0].completed).toBe(false);
+      expect(useChallengeStore.getState().streak).toBe(1);
+    });
+
     it('logDailyMetrics updates weight, notes, and bestWeight synchronously in 0ms without setting isLoading=true', async () => {
       let resolveMetrics!: (val: any) => void;
       vi.spyOn(logService, 'updateMetrics').mockImplementation(

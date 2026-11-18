@@ -763,10 +763,10 @@ html[data-appearance="light"] {
 /* Las tarjetas de misión son botones reales (accesibles por teclado). El anillo
    va en CSS plano: las utilidades ring-* de Tailwind v4 no se generan acá y el
    foco quedaba invisible. */
-.side-quest-card { cursor: pointer; border-color: #361726; }
+.side-quest-card { cursor: pointer; border-color: var(--app-border); }
 .side-quest-card[data-completed='true'] { border-color: color-mix(in srgb, #34d399 30%, transparent); background-color: color-mix(in srgb, #34d399 5%, transparent); }
 @media (hover: hover) and (pointer: fine) {
-  .side-quest-card[data-completed='false']:hover { border-color: color-mix(in srgb, #34d399 50%, transparent); background-color: color-mix(in srgb, #022c22 20%, transparent); }
+  .side-quest-card[data-completed='false']:hover { border-color: color-mix(in srgb, #34d399 50%, transparent); background-color: color-mix(in srgb, var(--status-success) 8%, var(--app-surface)); }
 }
 .side-quest-card[data-completed='false']:active { transform: scale(0.98); }
 .side-quest-card:focus-visible { outline: 2px solid var(--color-rose-300); outline-offset: 3px; }
@@ -1223,7 +1223,7 @@ a,
     height: 0.3rem;
     transform: translateX(-50%);
     border-radius: 999px;
-    background: color-mix(in srgb, white 22%, transparent);
+    background: color-mix(in srgb, var(--app-text) 22%, transparent);
   }
 }
 

@@ -4,7 +4,7 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   // Mantiene separado el artefacto HMR del build de producción. Así se puede
   // probar `next dev` y `next start` a la vez sin que uno borre `.next` del otro.
-  distDir: process.env.NODE_ENV === 'development' ? '.next-dev' : '.next',
+  distDir: process.env.NODE_ENV === 'development' ? '.next-local' : '.next',
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -23,6 +23,12 @@ const nextConfig: NextConfig = {
     ],
   },
   output: 'standalone',
+  outputFileTracingIncludes: {
+    '/api/**/*': [
+      './lib/generated/prisma-core/**/*',
+      './lib/generated/prisma-health/**/*',
+    ],
+  },
   transpilePackages: ['motion'],
   async headers() {
     return [

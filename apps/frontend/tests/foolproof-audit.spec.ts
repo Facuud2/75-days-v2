@@ -1,7 +1,7 @@
 import { expect, Page, test } from '@playwright/test';
 
-const CORE_API = 'http://localhost:3001/api';
-const HEALTH_API = 'http://localhost:3002/api';
+const CORE_API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
+const HEALTH_API = process.env.NEXT_PUBLIC_HEALTH_API_URL || 'http://localhost:3000/api';
 
 function uniqueEmail(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}@example.com`;
@@ -195,13 +195,11 @@ test.describe('Foolproof Exploratory & Security Audit', () => {
     await expect(dialog).toBeVisible({ timeout: 10_000 });
 
     await page.getByRole('button', { name: /Empezar recorrido/i }).click();
-    await expect(page.getByText(/Paso 2 de 5/i)).toBeVisible();
-    await page.getByRole('button', { name: /Siguiente/i }).click();
-    await expect(page.getByText(/Paso 3 de 5/i)).toBeVisible();
-    await page.getByRole('button', { name: /Siguiente/i }).click();
-    await expect(page.getByText(/Paso 4 de 5/i)).toBeVisible();
-    await page.getByRole('button', { name: /Siguiente/i }).click();
-    await expect(page.getByText(/Paso 5 de 5/i)).toBeVisible();
+    for (let stepNum = 2; stepNum <= 8; stepNum++) {
+      await expect(page.getByText(new RegExp(`Paso ${stepNum} de 9`, 'i'))).toBeVisible();
+      await page.getByRole('button', { name: /Siguiente/i }).click();
+    }
+    await expect(page.getByText(/Paso 9 de 9/i)).toBeVisible();
     await page.getByRole('button', { name: /¡Listo, a explorar!/i }).click();
     await expect(dialog).toBeHidden();
 
