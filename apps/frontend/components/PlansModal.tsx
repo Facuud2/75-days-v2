@@ -1,10 +1,12 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUIStore } from '@/store/useUIStore';
 import { useChallengeStore, Difficulty } from '@/store/useChallengeStore';
 import { useAuthStore } from '@/store/useAuthStore';
+import { useQuestStore } from '@/store/useQuestStore';
+import type { AiSideQuestDraft, AiUserContext } from '@/lib/api/ai';
 import {
   X, Target, Calendar, Utensils, Dumbbell, Droplets, ClipboardList, Star, Pencil, Sparkles,
 } from 'lucide-react';
@@ -97,13 +99,34 @@ export default function PlansModal() {
     customGoalsTemplate,
   } = useChallengeStore();
   const { user } = useAuthStore();
+  const { quests, createCustomQuest } = useQuestStore();
   const [difficulty, setDifficulty] = useState<Difficulty>(currentDifficulty || 'Hard');
   const [customTasks, setCustomTasks] = useState<CustomTask[]>(DEFAULT_CUSTOM_TASKS);
+  const [pendingAiSideQuests, setPendingAiSideQuests] = useState<AiSideQuestDraft[]>([]);
   const [isCustomEditorOpen, setIsCustomEditorOpen] = useState(false);
   const [isAiPlanSheetOpen, setIsAiPlanSheetOpen] = useState(false);
   const [showCustomModePicker, setShowCustomModePicker] = useState(false);
   const [showModifyChoiceModal, setShowModifyChoiceModal] = useState(false);
   const [isSavingCustom, setIsSavingCustom] = useState(false);
+
+  const plansModalUserContext = useMemo<AiUserContext>(
+    () => ({
+      age: user?.age ?? null,
+      heightCm: user?.height ?? null,
+      weightKg: user?.weight ?? null,
+      targetWeightKg: user?.targetWeight ?? null,
+      activeSideQuests: (quests || [])
+        .filter((q) => !q.completed)
+        .map((q) => ({
+          title: q.title,
+          difficulty: q.difficulty,
+          durationDays: q.durationDays,
+          description: q.description,
+          tasks: q.currentRun?.tasks?.map((t) => t.title) ?? [],
+        })),
+    }),
+    [user?.age, user?.height, user?.weight, user?.targetWeight, quests]
+  );
 
   const onboardingCompleted = user?.onboardingCompleted === true;
   // Reiniciar con el plan que ya está corriendo no cambia nada para planes fijos;
@@ -120,6 +143,7 @@ export default function PlansModal() {
     setDifficulty(currentDifficulty || 'Hard');
     setShowCustomModePicker(false);
     setShowModifyChoiceModal(false);
+    setPendingAiSideQuests([]);
     if (currentDifficulty === 'Custom' && customGoalsTemplate.length > 0) {
       setCustomTasks(
         customGoalsTemplate.map((g, idx) => ({
@@ -200,12 +224,37 @@ export default function PlansModal() {
     router.push('/dashboard');
   };
 
+  const persistPendingSideQuests = async (sideQuestsToCreate: AiSideQuestDraft[]) => {
+    if (sideQuestsToCreate.length === 0) return;
+    await Promise.all(
+      sideQuestsToCreate.map((quest) =>
+        createCustomQuest({
+          title: quest.title,
+          description: quest.description,
+          icon: quest.icon,
+          difficulty: quest.difficulty,
+          durationDays: quest.durationDays,
+          tasks: quest.tasks.map((t) => ({
+            title: t.title,
+            description: t.description || null,
+            icon: t.icon || 'target',
+            frequency: t.frequency,
+            targetValue: t.targetValue ?? null,
+            targetUnit: t.targetUnit || null,
+          })),
+        })
+      )
+    );
+  };
+
   const handleContinueActiveCustom = async () => {
     const formattedCustomGoals = formatCustomGoals(customTasks);
     if (formattedCustomGoals.length === 0) return;
     setIsSavingCustom(true);
     try {
       await updateCustomGoals(formattedCustomGoals);
+      await persistPendingSideQuests(pendingAiSideQuests);
+      setPendingAiSideQuests([]);
       handleClose();
       router.push('/dashboard');
     } finally {
@@ -219,6 +268,8 @@ export default function PlansModal() {
     setIsSavingCustom(true);
     try {
       await startChallenge('Custom', formattedCustomGoals);
+      await persistPendingSideQuests(pendingAiSideQuests);
+      setPendingAiSideQuests([]);
       handleClose();
       router.push('/dashboard');
     } finally {
@@ -505,12 +556,41 @@ export default function PlansModal() {
       <AICustomPlanSheet
         isOpen={isAiPlanSheetOpen}
         initialTasks={customTasks}
-        onApplyPlan={(tasks) => {
+        userContext={plansModalUserContext}
+        saveButtonLabel={isActiveCustom ? 'Guardar cambios del plan' : 'Guardar todo y comenzar plan'}
+        isSaving={isSavingCustom}
+        onApplyPlan={async (tasks, createdSideQuests = []) => {
           const validTasks = tasks.filter((t) => t.title.trim() !== '');
           setCustomTasks(validTasks);
-          setIsAiPlanSheetOpen(false);
-          if (isActiveCustom && validTasks.length > 0) {
+          if (validTasks.length === 0) {
+            setIsAiPlanSheetOpen(false);
+            return;
+          }
+
+          if (isActiveCustom) {
+            setPendingAiSideQuests(createdSideQuests);
+            setIsAiPlanSheetOpen(false);
             setShowModifyChoiceModal(true);
+            return;
+          }
+
+          if (
+            isActive &&
+            !confirm(
+              'Ya tienes un desafío activo. ¿Estás seguro de que quieres reiniciarlo con este nuevo plan Custom? Perderás tu racha actual.'
+            )
+          ) {
+            return;
+          }
+
+          setIsSavingCustom(true);
+          try {
+            await startChallenge('Custom', formatCustomGoals(validTasks));
+            await persistPendingSideQuests(createdSideQuests);
+            handleClose();
+            router.push('/dashboard');
+          } finally {
+            setIsSavingCustom(false);
           }
         }}
         onEditManually={(tasks) => {

@@ -120,12 +120,12 @@ const createRun = async (
       sideQuestId: sideQuest.id,
       runNumber,
       tasks: {
-        create: templateTasks.map((task: any) => ({
+        create: templateTasks.map((task: any, index: number) => ({
           templateTaskId: task.id,
           title: task.title,
           description: task.description,
           icon: task.icon,
-          order: task.order,
+          order: task.order ?? index,
           frequency: task.frequency,
           targetValue: task.targetValue,
           targetUnit: task.targetUnit,
