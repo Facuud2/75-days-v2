@@ -8,7 +8,24 @@ import { useUIStore } from '@/store/useUIStore';
 import dynamic from 'next/dynamic';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Check, Utensils, Dumbbell, Sun, Droplet, Book, Camera, Target, PlusCircle, Trophy } from 'lucide-react';
+import {
+  Check,
+  Utensils,
+  Dumbbell,
+  Sun,
+  Droplet,
+  Book,
+  Camera,
+  Target,
+  PlusCircle,
+  Trophy,
+  Brain,
+  HeartPulse,
+  CalendarRange,
+  CalendarClock,
+  Minus,
+  Plus,
+} from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { DEFAULT_GOALS } from '@/lib/constants/plans';
 import { syncCoreStores } from '@/lib/api/sync';
@@ -43,8 +60,29 @@ const iconMap: Record<string, any> = {
   droplet: Droplet,
   book: Book,
   camera: Camera,
-  target: Target
+  brain: Brain,
+  heart: HeartPulse,
+  target: Target,
 };
+
+function getSmartStep(measurementType: string | undefined, targetValue: number): number {
+  if (measurementType === 'count') return 1;
+  if (targetValue <= 2) return 0.25;
+  if (targetValue <= 5) return 0.5;
+  if (targetValue <= 25) return 1;
+  if (targetValue <= 100) return 5;
+  return 10;
+}
+
+function formatMetricReadout(
+  currentValue: number,
+  targetValue: number,
+  unit?: string | null
+): string {
+  const fmt = (n: number) => (Number.isInteger(n) ? String(n) : String(Math.round(n * 100) / 100));
+  const suffix = unit?.trim() ? ` ${unit.trim()}` : '';
+  return `${fmt(currentValue)} / ${fmt(targetValue)}${suffix}`;
+}
 
 export default function Dashboard() {
   const { user } = useAuthStore();
@@ -52,9 +90,12 @@ export default function Dashboard() {
     isActive,
     currentDay,
     logs,
+    periodGoals,
     startDate,
     customGoalsTemplate,
     logDailyGoal,
+    logDailyGoalProgress,
+    logPeriodGoalProgress,
     fetchCurrentChallenge,
     checkDailyReset,
     isLoading: isChallengeLoading
@@ -72,11 +113,14 @@ export default function Dashboard() {
         ? {
             date: todayStr,
             status: 'pending' as const,
-            goals: customGoalsTemplate.map((g, idx) => ({
-              ...g,
-              id: `template-${idx}`,
-              completed: false,
-            })),
+            goals: customGoalsTemplate
+              .filter((g) => (g.cadence || 'daily') === 'daily')
+              .map((g, idx) => ({
+                ...g,
+                id: `template-${idx}`,
+                completed: false,
+                currentValue: 0,
+              })),
           }
         : undefined),
     [logs, todayStr, isActive, customGoalsTemplate]
@@ -123,50 +167,246 @@ export default function Dashboard() {
 
   const renderGoalItem = useCallback((goal: any) => {
     const IconComponent = iconMap[goal.icon || 'target'] || Target;
+    const measurementType = goal.measurementType || 'boolean';
+    const targetValue = typeof goal.targetValue === 'number' && goal.targetValue > 0 ? goal.targetValue : 1;
+    const currentValue =
+      typeof goal.currentValue === 'number'
+        ? goal.currentValue
+        : goal.completed
+          ? targetValue
+          : 0;
+    const isQuantified = measurementType !== 'boolean';
+    const pct = Math.min(100, Math.round((currentValue / targetValue) * 100));
+    const step = getSmartStep(measurementType, targetValue);
+    const isTemplatePlaceholder = String(goal.id).startsWith('template-');
 
-    const handleClick = () => {
-      if (String(goal.id).startsWith('template-')) return;
+    const handleToggle = () => {
+      if (isTemplatePlaceholder) return;
       void logDailyGoal(todayStr, goal.id, !goal.completed).catch(() => {});
     };
 
+    const handleDelta = (e: React.MouseEvent, delta: number) => {
+      e.stopPropagation();
+      if (isTemplatePlaceholder) return;
+      void logDailyGoalProgress(todayStr, goal.id, { delta }).catch(() => {});
+    };
+
     return (
-      <button
-        type="button"
+      <div
         key={goal.id}
-        onClick={handleClick}
+        role="button"
+        tabIndex={0}
+        onClick={handleToggle}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleToggle();
+          }
+        }}
         aria-pressed={goal.completed}
-        className={`group cursor-pointer w-full text-left bg-rose-950/20 border rounded-2xl px-3.5 py-3 sm:p-5 flex items-center gap-3 sm:gap-5 transition-all duration-200 min-h-14 active:scale-[0.99] ${goal.completed
+        className={`group cursor-pointer w-full text-left bg-rose-950/20 border rounded-2xl px-3.5 py-3 sm:p-5 flex flex-col gap-3 transition-all duration-200 min-h-14 ${goal.completed
           ? 'border-rose-500/30 bg-rose-500/5 hover:border-rose-500/50 hover:bg-rose-500/10'
           : 'border-[#361726] hover:border-rose-500/50 hover:bg-rose-950/40'
           }`}
       >
-        <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0 transition-colors ${goal.completed
-          ? 'bg-rose-500/20 text-rose-500'
-          : 'bg-rose-950/60 text-rose-500/70 group-hover:text-rose-500'
-          }`}>
-          <IconComponent size={20} strokeWidth={1.5} className="sm:w-6 sm:h-6" />
+        <div className="flex items-center gap-3 sm:gap-5">
+          <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0 transition-colors ${goal.completed
+            ? 'bg-rose-500/20 text-rose-500'
+            : 'bg-rose-950/60 text-rose-500/70 group-hover:text-rose-500'
+            }`}>
+            <IconComponent size={20} strokeWidth={1.5} className="sm:w-6 sm:h-6" />
+          </div>
+
+          <div className="flex-1 min-w-0">
+            <h3 className={`font-semibold text-base sm:text-lg ${goal.description ? 'mb-0.5 sm:mb-1' : ''} transition-colors ${goal.completed ? 'text-white/70 line-through' : 'text-white'}`}>
+              {goal.title}
+            </h3>
+            {goal.description ? (
+              <p className={`text-sm transition-colors ${goal.completed ? 'text-white/50' : 'text-white/60'}`}>
+                {goal.description}
+              </p>
+            ) : null}
+          </div>
+
+          <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center shrink-0 transition-all duration-200 group-active:scale-90 ${goal.completed
+            ? 'bg-rose-500 border-rose-500 shadow-[0_0_15px_var(--color-rose-500)] group-hover:bg-rose-400 group-hover:border-rose-400'
+            : 'border-rose-950/40 group-hover:border-rose-500/50'
+            }`}>
+            {goal.completed && <Check size={16} className="text-white" strokeWidth={3} />}
+          </div>
         </div>
 
-        <div className="flex-1 min-w-0">
-          <h3 className={`font-semibold text-base sm:text-lg ${goal.description ? 'mb-0.5 sm:mb-1' : ''} transition-colors ${goal.completed ? 'text-white/70 line-through' : 'text-white'}`}>
-            {goal.title}
-          </h3>
-          {goal.description ? (
-            <p className={`text-sm transition-colors ${goal.completed ? 'text-white/50' : 'text-white/60'}`}>
-              {goal.description}
-            </p>
-          ) : null}
-        </div>
-
-        <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center shrink-0 transition-all duration-200 group-active:scale-90 ${goal.completed
-          ? 'bg-rose-500 border-rose-500 shadow-[0_0_15px_var(--color-rose-500)] group-hover:bg-rose-400 group-hover:border-rose-400'
-          : 'border-rose-950/40 group-hover:border-rose-500/50'
-          }`}>
-          {goal.completed && <Check size={16} className="text-white" strokeWidth={3} />}
-        </div>
-      </button>
+        {isQuantified && (
+          <div className="flex items-center gap-3 pl-0 sm:pl-[68px]" onClick={(e) => e.stopPropagation()}>
+            <div className="flex-1 min-w-0 space-y-1">
+              <div className="flex items-center justify-between text-xs font-medium tabular-nums">
+                <span className={goal.completed ? 'text-emerald-400 font-semibold' : 'text-white/75'}>
+                  {formatMetricReadout(currentValue, targetValue, goal.targetUnit)}
+                </span>
+                <span className="text-white/45">{pct}%</span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                <div
+                  className={`h-full rounded-full transition-all duration-200 ${goal.completed ? 'bg-emerald-500' : 'bg-rose-500'}`}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={(e) => handleDelta(e, -step)}
+                disabled={currentValue <= 0}
+                aria-label={`Restar ${step} a ${goal.title}`}
+                className="h-8 w-8 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 disabled:opacity-30 flex items-center justify-center text-white transition-transform active:scale-90 cursor-pointer"
+              >
+                <Minus size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={(e) => handleDelta(e, step)}
+                aria-label={`Sumar ${step} a ${goal.title}`}
+                className="h-8 w-8 rounded-lg border border-rose-500/30 bg-rose-500/15 hover:bg-rose-500/25 flex items-center justify-center text-rose-300 transition-transform active:scale-90 cursor-pointer"
+              >
+                <Plus size={14} />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     );
-  }, [todayStr, logDailyGoal]);
+  }, [todayStr, logDailyGoal, logDailyGoalProgress]);
+
+  const renderPeriodGoalItem = useCallback((pg: any) => {
+    const IconComponent = iconMap[pg.icon || 'target'] || Target;
+    const isCompleted = pg.status === 'success';
+    const isFailed = pg.status === 'fail';
+    const targetValue = typeof pg.targetValue === 'number' && pg.targetValue > 0 ? pg.targetValue : 1;
+    const currentValue = typeof pg.currentValue === 'number' ? pg.currentValue : 0;
+    const pct = Math.min(100, Math.round((currentValue / targetValue) * 100));
+    const step = getSmartStep(pg.measurementType, targetValue);
+
+    const handleToggle = () => {
+      if (isFailed) return;
+      void logPeriodGoalProgress(pg.id, { completed: !isCompleted }).catch(() => {});
+    };
+
+    const handleDelta = (e: React.MouseEvent, delta: number) => {
+      e.stopPropagation();
+      if (isFailed) return;
+      void logPeriodGoalProgress(pg.id, { delta }).catch(() => {});
+    };
+
+    const accentBorder =
+      pg.cadence === 'monthly'
+        ? isCompleted
+          ? 'border-violet-400/40 bg-violet-500/10'
+          : 'border-violet-500/25 hover:border-violet-400/50 bg-violet-950/15'
+        : isCompleted
+          ? 'border-sky-400/40 bg-sky-500/10'
+          : 'border-sky-500/25 hover:border-sky-400/50 bg-sky-950/15';
+
+    const accentBar =
+      isCompleted
+        ? 'bg-emerald-500'
+        : pg.cadence === 'monthly'
+          ? 'bg-violet-400'
+          : 'bg-sky-400';
+
+    return (
+      <div
+        key={pg.id}
+        role="button"
+        tabIndex={0}
+        onClick={handleToggle}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleToggle();
+          }
+        }}
+        aria-pressed={isCompleted}
+        className={`group cursor-pointer w-full text-left border rounded-2xl px-3.5 py-3 sm:p-5 flex flex-col gap-3 transition-all duration-200 ${accentBorder}`}
+      >
+        <div className="flex items-center gap-3 sm:gap-5">
+          <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0 transition-colors ${isCompleted
+            ? 'bg-emerald-500/20 text-emerald-400'
+            : pg.cadence === 'monthly'
+              ? 'bg-violet-500/15 text-violet-300'
+              : 'bg-sky-500/15 text-sky-300'
+            }`}>
+            <IconComponent size={20} strokeWidth={1.5} className="sm:w-6 sm:h-6" />
+          </div>
+
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className={`font-semibold text-base sm:text-lg transition-colors ${isCompleted ? 'text-white/75 line-through' : 'text-white'}`}>
+                {pg.title}
+              </h3>
+              <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${pg.cadence === 'monthly' ? 'bg-violet-500/20 text-violet-300' : 'bg-sky-500/20 text-sky-300'}`}>
+                {pg.cadence === 'monthly' ? `Mes ${pg.periodNumber}` : `Sem ${pg.periodNumber}`}
+              </span>
+            </div>
+            {pg.description ? (
+              <p className={`text-sm mt-0.5 transition-colors ${isCompleted ? 'text-white/50' : 'text-white/60'}`}>
+                {pg.description}
+              </p>
+            ) : null}
+          </div>
+
+          <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center shrink-0 transition-all duration-200 group-active:scale-90 ${isCompleted
+            ? 'bg-emerald-500 border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.45)]'
+            : 'border-white/20 group-hover:border-white/50'
+            }`}>
+            {isCompleted && <Check size={16} className="text-white" strokeWidth={3} />}
+          </div>
+        </div>
+
+        {pg.measurementType !== 'boolean' && (
+          <div className="flex items-center gap-3 pl-0 sm:pl-[68px]" onClick={(e) => e.stopPropagation()}>
+            <div className="flex-1 min-w-0 space-y-1">
+              <div className="flex items-center justify-between text-xs font-medium tabular-nums">
+                <span className={isCompleted ? 'text-emerald-400 font-semibold' : 'text-white/80'}>
+                  {formatMetricReadout(currentValue, targetValue, pg.targetUnit)}
+                </span>
+                <span className="text-white/45">{pct}%</span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                <div
+                  className={`h-full rounded-full transition-all duration-200 ${accentBar}`}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={(e) => handleDelta(e, -step)}
+                disabled={currentValue <= 0 || isFailed}
+                aria-label={`Restar ${step} a ${pg.title}`}
+                className="h-8 w-8 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 disabled:opacity-30 flex items-center justify-center text-white transition-transform active:scale-90 cursor-pointer"
+              >
+                <Minus size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={(e) => handleDelta(e, step)}
+                disabled={isFailed}
+                aria-label={`Sumar ${step} a ${pg.title}`}
+                className={`h-8 w-8 rounded-lg border flex items-center justify-center transition-transform active:scale-90 cursor-pointer ${pg.cadence === 'monthly'
+                  ? 'border-violet-400/30 bg-violet-500/20 hover:bg-violet-500/30 text-violet-200'
+                  : 'border-sky-400/30 bg-sky-500/20 hover:bg-sky-500/30 text-sky-200'
+                  }`}
+              >
+                <Plus size={14} />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }, [logPeriodGoalProgress]);
 
   // Stale-While-Revalidate: solo muestra el esqueleto completo en el primer arranque en frío sin datos en caché
   if (isChallengeLoading && !todayLog) {
@@ -311,6 +551,29 @@ export default function Dashboard() {
   // Determine current active plan name mapped to UI strings
   const currentPlanName = useChallengeStore.getState().difficulty || 'Activo';
 
+  // Active weekly and monthly goals for the current challenge period (relative to startDate)
+  const currentWeekNumber = Math.floor((Math.max(1, currentDay) - 1) / 7) + 1;
+  const currentMonthNumber = Math.floor((Math.max(1, currentDay) - 1) / 30) + 1;
+
+  const currentWeeklyGoals = useMemo(
+    () =>
+      (periodGoals || []).filter(
+        (pg) => pg.cadence === 'weekly' && pg.periodNumber === currentWeekNumber
+      ),
+    [periodGoals, currentWeekNumber]
+  );
+
+  const currentMonthlyGoals = useMemo(
+    () =>
+      (periodGoals || []).filter(
+        (pg) => pg.cadence === 'monthly' && pg.periodNumber === currentMonthNumber
+      ),
+    [periodGoals, currentMonthNumber]
+  );
+
+  const completedWeeklyCount = currentWeeklyGoals.filter((g) => g.status === 'success').length;
+  const completedMonthlyCount = currentMonthlyGoals.filter((g) => g.status === 'success').length;
+
   return (
     <div className="dashboard-page grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 animate-in fade-in">
 
@@ -380,10 +643,28 @@ export default function Dashboard() {
               </div>
             </div>
             <p className="mt-3 max-w-[18rem] text-sm leading-relaxed text-white/60">
-              {remainingTasks === 0
-                ? '¡Todas las tareas completadas por hoy! Gran trabajo.'
-                : `${remainingTasks} tareas restantes para terminar el día.`}
+              {totalTasks === 0
+                ? 'Tu plan actual se enfoca en metas semanales o mensuales.'
+                : remainingTasks === 0
+                  ? '¡Todas las tareas diarias completadas por hoy! Gran trabajo.'
+                  : `${remainingTasks} tareas diarias restantes para terminar el día.`}
             </p>
+            {(currentWeeklyGoals.length > 0 || currentMonthlyGoals.length > 0) && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {currentWeeklyGoals.length > 0 && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-400/25 bg-sky-500/10 px-2.5 py-1 text-[11px] font-semibold text-sky-300 tabular-nums">
+                    <CalendarRange size={12} aria-hidden="true" />
+                    Sem {currentWeekNumber}: {completedWeeklyCount}/{currentWeeklyGoals.length}
+                  </span>
+                )}
+                {currentMonthlyGoals.length > 0 && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-400/25 bg-violet-500/10 px-2.5 py-1 text-[11px] font-semibold text-violet-300 tabular-nums">
+                    <CalendarClock size={12} aria-hidden="true" />
+                    Mes {currentMonthNumber}: {completedMonthlyCount}/{currentMonthlyGoals.length}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </section>
 
@@ -473,6 +754,40 @@ export default function Dashboard() {
                     </div>
                   )}
                 </>
+              )}
+
+              {/* SECCIÓN APILADA: METAS SEMANALES */}
+              {currentWeeklyGoals.length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-4">
+                    <h2 className="text-sm font-bold tracking-widest text-sky-300 uppercase flex items-center gap-2">
+                      <CalendarRange size={16} /> Esta Semana (Semana {currentWeekNumber})
+                    </h2>
+                    <span className="text-xs font-semibold text-sky-300/80 tabular-nums">
+                      {completedWeeklyCount}/{currentWeeklyGoals.length} completadas
+                    </span>
+                  </div>
+                  <div className="space-y-3">
+                    {currentWeeklyGoals.map(renderPeriodGoalItem)}
+                  </div>
+                </div>
+              )}
+
+              {/* SECCIÓN APILADA: METAS MENSUALES */}
+              {currentMonthlyGoals.length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-4">
+                    <h2 className="text-sm font-bold tracking-widest text-violet-300 uppercase flex items-center gap-2">
+                      <CalendarClock size={16} /> Este Mes (Mes {currentMonthNumber})
+                    </h2>
+                    <span className="text-xs font-semibold text-violet-300/80 tabular-nums">
+                      {completedMonthlyCount}/{currentMonthlyGoals.length} completadas
+                    </span>
+                  </div>
+                  <div className="space-y-3">
+                    {currentMonthlyGoals.map(renderPeriodGoalItem)}
+                  </div>
+                </div>
               )}
             </>
           ) : (

@@ -30,58 +30,99 @@ export const ALLOWED_SIDE_QUEST_ICONS = [
 
 export type AllowedSideQuestIcon = (typeof ALLOWED_SIDE_QUEST_ICONS)[number];
 
+const boundedString = (max: number) =>
+  z
+    .string()
+    .transform((s) => s.trim().slice(0, max))
+    .pipe(z.string().min(1));
+
+const optionalBoundedString = (max: number) =>
+  z
+    .string()
+    .optional()
+    .default('')
+    .transform((s) => s.trim().slice(0, max));
+
+const boundedStringList = (maxItemLen: number, maxItems: number) =>
+  z
+    .array(z.string())
+    .optional()
+    .default([])
+    .transform((arr) =>
+      arr
+        .map((s) => s.trim().slice(0, maxItemLen))
+        .filter((s) => s.length > 0)
+        .slice(0, maxItems)
+    );
+
 export const aiTaskSchema = z.object({
   id: z.string().max(80).optional(),
-  title: z.string().min(1).max(80),
-  description: z.string().min(1).max(260),
+  title: boundedString(120),
+  description: boundedString(500),
   icon: z.enum(ALLOWED_ICONS),
+  cadence: z.enum(['daily', 'weekly', 'monthly']).optional().default('daily'),
+  measurementType: z.enum(['boolean', 'count', 'numeric']).optional().default('boolean'),
+  targetValue: z.number().positive().optional().default(1),
+  targetUnit: optionalBoundedString(30),
   changeType: z.enum(['kept', 'modified', 'added']).optional(),
 });
 
 export const aiSideQuestSuggestionSchema = z.object({
-  title: z.string().min(1).max(100),
-  reason: z.string().min(1).max(240),
-  ideaPrompt: z.string().min(1).max(320),
+  title: boundedString(120),
+  reason: boundedString(400),
+  ideaPrompt: boundedString(500),
 });
 
 export const aiPlanResponseSchema = z.object({
   status: z.enum(['needs_clarification', 'ready']),
-  userTranscript: z.string().min(1).max(2000),
-  assistantMessage: z.string().min(1).max(1500),
-  openQuestions: z.array(z.string().min(1).max(260)).max(8).optional().default([]),
-  understoodFacts: z.array(z.string().min(1).max(180)).max(20).optional().default([]),
-  suggestedQuickReplies: z.array(z.string().min(1).max(100)).max(4).optional().default([]),
+  userTranscript: boundedString(2500),
+  assistantMessage: boundedString(3000),
+  openQuestions: boundedStringList(400, 10),
+  understoodFacts: boundedStringList(260, 20),
+  suggestedQuickReplies: boundedStringList(280, 4),
   sideQuestSuggestion: aiSideQuestSuggestionSchema.nullable().optional(),
-  tasks: z.array(aiTaskSchema).max(12),
+  tasks: z.array(aiTaskSchema).transform((arr) => arr.slice(0, 12)),
 });
 
 export const aiSideQuestTaskSchema = z.object({
   id: z.string().max(80).optional(),
-  title: z.string().min(1).max(200),
-  description: z.string().max(1000).optional().default(''),
+  title: boundedString(200),
+  description: optionalBoundedString(1000),
   icon: z.enum(ALLOWED_SIDE_QUEST_ICONS).optional().default('target'),
   frequency: z.enum(['daily', 'weekly', 'once']).optional().default('daily'),
-  targetValue: z.number().int().positive().nullable().optional().default(null),
-  targetUnit: z.string().max(40).optional().default(''),
+  targetValue: z
+    .number()
+    .nullable()
+    .optional()
+    .transform((val) =>
+      typeof val === 'number' && Number.isFinite(val) && val > 0 ? Math.round(val) : null
+    ),
+  targetUnit: optionalBoundedString(40),
   changeType: z.enum(['kept', 'modified', 'added']).optional(),
 });
 
 export const aiSideQuestDraftSchema = z.object({
-  title: z.string().min(1).max(100),
-  description: z.string().max(2000).optional().default(''),
+  title: boundedString(100),
+  description: optionalBoundedString(2000),
   icon: z.enum(ALLOWED_SIDE_QUEST_ICONS).optional().default('target'),
   difficulty: z.enum(['Easy', 'Medium', 'Hard']),
-  durationDays: z.number().int().min(1).max(365),
-  tasks: z.array(aiSideQuestTaskSchema).min(1).max(15),
+  durationDays: z
+    .number()
+    .transform((val) => Math.max(1, Math.min(365, Math.round(val))))
+    .pipe(z.number().int().min(1).max(365)),
+  tasks: z
+    .array(aiSideQuestTaskSchema)
+    .min(1)
+    .transform((arr) => arr.slice(0, 15)),
 });
 
 export const aiSideQuestResponseSchema = z.object({
   status: z.enum(['needs_clarification', 'ready']),
-  userTranscript: z.string().min(1).max(2000),
-  assistantMessage: z.string().min(1).max(1500),
-  openQuestions: z.array(z.string().min(1).max(260)).max(8).optional().default([]),
-  understoodFacts: z.array(z.string().min(1).max(180)).max(20).optional().default([]),
-  suggestedQuickReplies: z.array(z.string().min(1).max(100)).max(4).optional().default([]),
+  userTranscript: boundedString(2500),
+  assistantMessage: boundedString(3000),
+  openQuestions: boundedStringList(400, 10),
+  understoodFacts: boundedStringList(260, 20),
+  suggestedQuickReplies: boundedStringList(280, 4),
   quest: aiSideQuestDraftSchema.nullable().optional(),
 });
 
@@ -114,6 +155,7 @@ export const aiUserContextSchema = z.object({
 });
 
 export type AiTask = z.infer<typeof aiTaskSchema>;
+export type AiTaskInput = z.input<typeof aiTaskSchema>;
 export type AiSideQuestSuggestion = z.infer<typeof aiSideQuestSuggestionSchema>;
 export type AiPlanResponse = z.infer<typeof aiPlanResponseSchema>;
 export type AiSideQuestTask = z.infer<typeof aiSideQuestTaskSchema>;
@@ -131,7 +173,7 @@ export interface ProcessCustomPlanInput {
   mimeType?: string;
   textInput?: string;
   history?: ConversationTurn[];
-  currentTasks?: AiTask[];
+  currentTasks?: AiTaskInput[];
   selectedTaskIds?: string[];
   understoodFacts?: string[];
   userContext?: AiUserContext;
@@ -206,7 +248,7 @@ const CUSTOM_PLAN_JSON_SCHEMA = {
     tasks: {
       type: 'array',
       description:
-        'Lista ordenada de tareas diarias atómicas. Vacía si status es needs_clarification y todavía no hay borrador; si ya existía borrador o status es ready, contiene la lista completa y ordenada.',
+        'Lista ordenada de tareas atómicas (pueden ser diarias, semanales o mensuales, con medición boolean, count o numeric). Vacía si status es needs_clarification y todavía no hay borrador; si ya existía borrador o status es ready, contiene la lista completa y ordenada.',
       items: {
         type: 'object',
         properties: {
@@ -217,16 +259,38 @@ const CUSTOM_PLAN_JSON_SCHEMA = {
           },
           title: {
             type: 'string',
-            description: 'Título corto y verificable de la meta diaria (máx 60 caracteres).',
+            description: 'Título corto y verificable de la meta (máx 60 caracteres).',
           },
           description: {
             type: 'string',
-            description: 'Instrucción concreta y verificable para cumplir la meta cada día.',
+            description: 'Instrucción concreta y verificable para cumplir la meta en su período.',
           },
           icon: {
             type: 'string',
             enum: [...ALLOWED_ICONS],
             description: 'Uno de los 8 íconos permitidos.',
+          },
+          cadence: {
+            type: 'string',
+            enum: ['daily', 'weekly', 'monthly'],
+            description:
+              'Frecuencia de evaluación: daily (cada día), weekly (cada semana del reto) o monthly (cada mes del reto).',
+          },
+          measurementType: {
+            type: 'string',
+            enum: ['boolean', 'count', 'numeric'],
+            description:
+              'Cómo se mide: boolean (check simple sí/no), count (cantidad de veces/sesiones en el período, ej. 4 veces/sem) o numeric (meta cuantitativa acumulable con unidad, ej. 3.7 L/día, 20 km/sem, 300 págs/mes).',
+          },
+          targetValue: {
+            type: 'number',
+            description:
+              'Valor objetivo positivo para completar la meta en su período (1 para boolean, entero >= 1 para count, número positivo para numeric).',
+          },
+          targetUnit: {
+            type: 'string',
+            description:
+              'Unidad corta cuando measurementType es count o numeric (ej. "sesiones", "veces", "L", "km", "págs", "min"). Vacío si es boolean.',
           },
           changeType: {
             type: 'string',
@@ -235,7 +299,7 @@ const CUSTOM_PLAN_JSON_SCHEMA = {
               'Indica si la tarea se mantuvo intacta (kept), fue modificada (modified) o fue recién agregada (added).',
           },
         },
-        required: ['title', 'description', 'icon'],
+        required: ['title', 'description', 'icon', 'cadence', 'measurementType', 'targetValue'],
         additionalProperties: false,
       },
     },
@@ -440,7 +504,7 @@ PRINCIPIOS CLAVE DE CONVERSACIÓN Y DISEÑO:
 7. **Planes base de referencia**: Si el usuario pide tomar como base Soft, Medium o Hard, usá estas definiciones y aplicá solo sus cambios:
 ${defaultsContext}
 8. **Transcripción y tono**:
-   - Llená siempre \`userTranscript\` con lo que dijo el usuario (transcripción real si hubo audio, o texto limpio si escribió).
+   - Llená siempre \`userTranscript\` con lo que dijo el usuario (transcripción real y literal si hubo audio, o texto limpio si escribió). Si el audio está en silencio, vacío o inentendible, NO inventes una frase: poné \`"Audio sin voz detectable"\` en \`userTranscript\`, devolvé \`status: "needs_clarification"\` y pedile amablemente que repita el mensaje o lo escriba.
    - Idioma: español rioplatense/neutro natural, claro, directo y cercano. Sin clichés vacíos.`;
 }
 
@@ -467,7 +531,7 @@ PRINCIPIOS CLAVE:
    - En un mismo mensaje el usuario puede pedir editar tareas, eliminar tareas, agregar nuevas tareas, reordenarlas y/o cambiar el título, descripción, duración o dificultad de la misión.
    - Preservá intactas (\`changeType: "kept"\`) las tareas no seleccionadas ni mencionadas.
 5. **Transcripción y tono**:
-   - Llená siempre \`userTranscript\` con la transcripción real del audio o el texto enviado.
+   - Llená siempre \`userTranscript\` con la transcripción literal del audio o el texto enviado. Si el audio está en silencio, vacío o inentendible, NO inventes contenido: poné \`"Audio sin voz detectable"\` en \`userTranscript\`, devolvé \`status: "needs_clarification"\` y pedile amablemente que vuelva a hablar o escribir.
    - Español natural, directo y motivador sin relleno.`;
 }
 
@@ -570,7 +634,7 @@ export async function processCustomPlanTurn(
   const interaction = await ai.interactions.create({
     model: 'gemini-4-hydrogen',
     system_instruction: buildCustomPlanSystemInstruction(forceProposal),
-    input: parts,
+    input: [{ type: 'user_input', content: parts }],
     response_format: {
       type: 'text',
       mime_type: 'application/json',
@@ -688,7 +752,7 @@ export async function processSideQuestTurn(
   const interaction = await ai.interactions.create({
     model: 'gemini-4-hydrogen',
     system_instruction: buildSideQuestSystemInstruction(forceProposal),
-    input: parts,
+    input: [{ type: 'user_input', content: parts }],
     response_format: {
       type: 'text',
       mime_type: 'application/json',

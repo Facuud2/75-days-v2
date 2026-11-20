@@ -10,8 +10,8 @@ const CustomFoodSchema = z.object({
     ingredients: z.array(z.object({
         ingredientId: z.string().uuid(),
         weightGrams: z.number().min(1)
-    })).min(1, "Debe tener al menos un ingrediente")
-});
+    }).strict()).min(1, "Debe tener al menos un ingrediente")
+}).strict();
 
 const INGREDIENTS_CACHE_TTL_MS = 5 * 60 * 1000;
 let cachedIngredients: { data: any[]; expiresAt: number } | null = null;

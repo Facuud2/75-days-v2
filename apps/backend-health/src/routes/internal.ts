@@ -1,7 +1,11 @@
 import { Router } from 'express';
 import { internalAuth } from '../middlewares/internalAuth';
 import { asyncHandler } from '../utils/asyncHandler';
-import { getInternalSummary } from '../controllers/internalController';
+import {
+    deleteInternalUserData,
+    exportInternalUserData,
+    getInternalSummary,
+} from '../controllers/internalController';
 
 const router = Router();
 
@@ -9,5 +13,7 @@ const router = Router();
 router.use(internalAuth);
 
 router.get('/summary/:userId/:date', asyncHandler(getInternalSummary));
+router.delete('/users/:userId', asyncHandler(deleteInternalUserData));
+router.get('/users/:userId/export', asyncHandler(exportInternalUserData));
 
 export default router;

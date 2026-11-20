@@ -32,8 +32,8 @@ const startChallengeSchema = z.object({
         title: z.string(),
         description: z.string().optional(),
         icon: z.string().optional()
-    })).optional()
-});
+    }).strict()).optional()
+}).strict();
 
 /** Dos listas de metas son el mismo plan si coinciden título e ícono, en orden. */
 function isSameGoalTemplate(
@@ -157,8 +157,8 @@ const updateCustomGoalsSchema = z.object({
         title: z.string().min(1),
         description: z.string().optional(),
         icon: z.string().optional()
-    })).min(1)
-});
+    }).strict()).min(1)
+}).strict();
 
 /**
  * Actualiza las metas plantilla de un reto Custom activo sin reiniciar el reto

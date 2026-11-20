@@ -30,30 +30,39 @@ model User {
 }
 
 model Challenge {
-  id                  String   @id @default(uuid())
-  userId              String
-  isActive            Boolean  @default(true)
-  difficulty          String
-  startDate           DateTime @default(now())
-  currentDay          Int      @default(1)
-  streak              Int      @default(0)
-  points              Int      @default(0)
-  bestWeight          Float?
-  challengesCompleted Int      @default(0)
+  id                       String   @id @default(uuid())
+  userId                   String
+  isActive                 Boolean  @default(true)
+  difficulty               String
+  startDate                DateTime @default(now())
+  currentDay               Int      @default(1)
+  streak                   Int      @default(0)
+  points                   Int      @default(0)
+  bestWeight               Float?
+  challengesCompleted      Int      @default(0)
+  breakStreakOnPeriodFail  Boolean  @default(false)
 
-  user                User           @relation(fields: [userId], references: [id])
+  user                User                 @relation(fields: [userId], references: [id])
   customGoalsTemplate GoalTemplate[]
   dailyLogs           DailyLog[]
+  periodGoals         PeriodGoalProgress[]
 }
 
 model GoalTemplate {
-  id          String  @id @default(uuid())
-  challengeId String
-  title       String
-  description String?
-  icon        String?
+  id              String  @id @default(uuid())
+  challengeId     String
+  title           String
+  description     String?
+  icon            String?
+  cadence         String  @default("daily") // daily, weekly, monthly
+  measurementType String  @default("boolean") // boolean, count, numeric
+  targetValue     Float   @default(1)
+  targetUnit      String?
+  order           Int     @default(0)
+  isActive        Boolean @default(true)
 
-  challenge Challenge @relation(fields: [challengeId], references: [id])
+  challenge      Challenge            @relation(fields: [challengeId], references: [id])
+  periodProgress PeriodGoalProgress[]
 }
 
 model DailyLog {
@@ -72,14 +81,45 @@ model DailyLog {
 }
 
 model DailyGoal {
-  id          String  @id @default(uuid())
-  dailyLogId  String
-  title       String
-  description String?
-  icon        String?
-  completed   Boolean @default(false)
+  id              String  @id @default(uuid())
+  dailyLogId      String
+  templateId      String?
+  title           String
+  description     String?
+  icon            String?
+  measurementType String  @default("boolean") // boolean, count, numeric
+  targetValue     Float   @default(1)
+  targetUnit      String?
+  currentValue    Float   @default(0)
+  completed       Boolean @default(false)
 
   dailyLog DailyLog @relation(fields: [dailyLogId], references: [id])
+}
+
+model PeriodGoalProgress {
+  id              String   @id @default(uuid())
+  challengeId     String
+  templateId      String?
+  title           String
+  description     String?
+  icon            String?
+  cadence         String   // weekly, monthly
+  measurementType String   @default("count") // boolean, count, numeric
+  targetValue     Float    @default(1)
+  targetUnit      String?
+  currentValue    Float    @default(0)
+  periodNumber    Int
+  periodKey       String   // W01..W11, M01..M03
+  startDate       String   // YYYY-MM-DD
+  endDate         String   // YYYY-MM-DD
+  status          String   @default("pending") // pending, success, fail
+  updatedAt       DateTime @updatedAt
+
+  challenge Challenge     @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  template  GoalTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  @@unique([challengeId, periodKey, templateId])
+  @@index([challengeId, cadence, periodNumber])
 }
 
 model SideQuest {

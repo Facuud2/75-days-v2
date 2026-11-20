@@ -11,10 +11,10 @@ const CustomFoodSchema = z.object({
       z.object({
         ingredientId: z.string().uuid(),
         weightGrams: z.number().min(1),
-      })
+      }).strict()
     )
     .min(1, 'Debe tener al menos un ingrediente'),
-});
+}).strict();
 
 const INGREDIENTS_TTL_MS = 5 * 60 * 1000;
 let memoizedIngredients: { data: any[]; expiresAt: number } | null = null;

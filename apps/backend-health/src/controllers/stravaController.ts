@@ -3,14 +3,31 @@ import axios from 'axios';
 import prisma from '../lib/prisma';
 import { AuthRequest } from '../middlewares/auth';
 import { estimateCaloriesBurned } from '../utils/calorieCalculator';
+import {
+    decryptSecret,
+    encryptSecret,
+    signOAuthState,
+    verifyOAuthState,
+} from '../utils/tokenCrypto';
 
-const STRAVA_CLIENT_ID = process.env.STRAVA_CLIENT_ID;
-const STRAVA_CLIENT_SECRET = process.env.STRAVA_CLIENT_SECRET;
-const STRAVA_REDIRECT_URI = process.env.STRAVA_REDIRECT_URI || 'http://localhost:3002/api/strava/callback';
+const STRAVA_TIMEOUT_MS = 5_000;
+
+const getStravaClientId = () => process.env.STRAVA_CLIENT_ID;
+const getStravaClientSecret = () => process.env.STRAVA_CLIENT_SECRET;
+const getStravaRedirectUri = () =>
+    process.env.STRAVA_REDIRECT_URI || 'http://localhost:3002/api/strava/callback';
+const getSafeFrontendBaseUrl = () => {
+    const raw = (process.env.FRONTEND_URL || 'http://localhost:3000')
+        .split(',')[0]
+        .trim()
+        .replace(/\/+$/, '');
+    return raw || 'http://localhost:3000';
+};
 
 export const connectStrava = (req: AuthRequest, res: Response) => {
     try {
-        if (!STRAVA_CLIENT_ID) {
+        const clientId = getStravaClientId();
+        if (!clientId) {
             return res.status(500).json({ error: 'Strava Client ID no configurado en el servidor' });
         }
 
@@ -19,8 +36,9 @@ export const connectStrava = (req: AuthRequest, res: Response) => {
             return res.status(401).json({ error: 'No autorizado' });
         }
 
-        // State can be the user ID so we know who authorized it in the callback
-        const authUrl = `https://www.strava.com/oauth/authorize?client_id=${STRAVA_CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(STRAVA_REDIRECT_URI)}&approval_prompt=force&scope=read,activity:read_all&state=${userId}`;
+        // F-14: Signed short-lived OAuth state prevents CSRF account-linking attacks
+        const signedState = signOAuthState(userId);
+        const authUrl = `https://www.strava.com/oauth/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(getStravaRedirectUri())}&approval_prompt=force&scope=read,activity:read_all&state=${encodeURIComponent(signedState)}`;
 
         res.json({ url: authUrl });
     } catch (error) {
@@ -30,55 +48,60 @@ export const connectStrava = (req: AuthRequest, res: Response) => {
 };
 
 export const stravaCallback = async (req: Request, res: Response) => {
+    const frontendUrl = getSafeFrontendBaseUrl();
     try {
-        const { code, state } = req.query; // State contains the userId passed from the frontend
+        const { code, state } = req.query;
 
-        if (!code) {
+        if (!code || typeof code !== 'string') {
             return res.status(400).json({ error: 'Código de autorización faltante' });
         }
 
         if (!state || typeof state !== 'string') {
-            return res.status(400).json({ error: 'ID de usuario (state) faltante o inválido' });
+            return res.status(400).json({ error: 'Parámetro state faltante o inválido' });
         }
 
-        const userId = state;
+        // F-14: Verify HMAC/JWT signature on state — reject raw or tampered userIds
+        const userId = verifyOAuthState(state);
+        if (!userId) {
+            return res.status(400).json({ error: 'Parámetro state inválido o expirado' });
+        }
 
-        // Intercambiar el código por tokens
+        // Intercambiar el código por tokens (con timeout explícito)
         const response = await axios.post('https://www.strava.com/oauth/token', {
-            client_id: STRAVA_CLIENT_ID,
-            client_secret: STRAVA_CLIENT_SECRET,
+            client_id: getStravaClientId(),
+            client_secret: getStravaClientSecret(),
             code,
             grant_type: 'authorization_code'
-        });
+        }, { timeout: STRAVA_TIMEOUT_MS });
 
         const { access_token, refresh_token, expires_at, athlete } = response.data;
+        // F-15: Encrypt third-party OAuth tokens at rest before storing in Postgres
+        const encryptedAccess = encryptSecret(access_token);
+        const encryptedRefresh = encryptSecret(refresh_token);
 
         // Guardar/Actualizar en la base de datos
         await prisma.userHealthProfile.upsert({
             where: { userId },
             update: {
-                stravaAccessToken: access_token,
-                stravaRefreshToken: refresh_token,
+                stravaAccessToken: encryptedAccess,
+                stravaRefreshToken: encryptedRefresh,
                 stravaTokenExpiresAt: expires_at,
                 stravaAthleteId: athlete.id.toString(),
             },
             create: {
                 userId,
-                stravaAccessToken: access_token,
-                stravaRefreshToken: refresh_token,
+                stravaAccessToken: encryptedAccess,
+                stravaRefreshToken: encryptedRefresh,
                 stravaTokenExpiresAt: expires_at,
                 stravaAthleteId: athlete.id.toString(),
             }
         });
 
-        // Redirect back to frontend profile page
-        const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
-        res.redirect(`${FRONTEND_URL}/profile?strava=success`);
+        res.redirect(`${frontendUrl}/profile?strava=success`);
 
     } catch (error) {
         console.error('Error in Strava callback:', error);
-        const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
-        res.redirect(`${FRONTEND_URL}/profile?strava=error`);
+        res.redirect(`${frontendUrl}/profile?strava=error`);
     }
 };
 
@@ -110,20 +133,21 @@ const refreshStravaTokenIfNeeded = async (profile: any) => {
 
     // Si expira en menos de 5 minutos, refrescar
     if (profile.stravaTokenExpiresAt && profile.stravaTokenExpiresAt < nowInSeconds + 300) {
+        const plainRefreshToken = decryptSecret(profile.stravaRefreshToken);
         const response = await axios.post('https://www.strava.com/oauth/token', {
-            client_id: STRAVA_CLIENT_ID,
-            client_secret: STRAVA_CLIENT_SECRET,
+            client_id: getStravaClientId(),
+            client_secret: getStravaClientSecret(),
             grant_type: 'refresh_token',
-            refresh_token: profile.stravaRefreshToken
-        });
+            refresh_token: plainRefreshToken
+        }, { timeout: STRAVA_TIMEOUT_MS });
 
         const { access_token, refresh_token, expires_at } = response.data;
 
         await prisma.userHealthProfile.update({
             where: { id: profile.id },
             data: {
-                stravaAccessToken: access_token,
-                stravaRefreshToken: refresh_token,
+                stravaAccessToken: encryptSecret(access_token),
+                stravaRefreshToken: encryptSecret(refresh_token),
                 stravaTokenExpiresAt: expires_at
             }
         });
@@ -131,7 +155,7 @@ const refreshStravaTokenIfNeeded = async (profile: any) => {
         return access_token;
     }
 
-    return profile.stravaAccessToken;
+    return decryptSecret(profile.stravaAccessToken);
 };
 
 export const syncStravaWorkouts = async (req: AuthRequest, res: Response) => {
@@ -159,6 +183,7 @@ export const syncStravaWorkouts = async (req: AuthRequest, res: Response) => {
         const afterEpoch = Math.floor(thirtyDaysAgoInfo.getTime() / 1000);
 
         const response = await axios.get(`https://www.strava.com/api/v3/athlete/activities?after=${afterEpoch}&per_page=30`, {
+            timeout: STRAVA_TIMEOUT_MS,
             headers: {
                 Authorization: `Bearer ${accessToken}`
             }

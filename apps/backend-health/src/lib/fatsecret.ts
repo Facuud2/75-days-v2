@@ -1,5 +1,7 @@
 import axios from 'axios';
 
+const FATSECRET_TIMEOUT_MS = 5_000;
+
 let currentToken: string | null = null;
 let tokenExpiry = 0;
 
@@ -22,6 +24,7 @@ async function getFatSecretToken(): Promise<string> {
     params.append('scope', 'basic'); // basic scope is sufficient for foods.search
 
     const res = await axios.post<{ access_token: string; expires_in: number }>('https://oauth.fatsecret.com/connect/token', params.toString(), {
+        timeout: FATSECRET_TIMEOUT_MS,
         headers: {
             'Authorization': `Basic ${credentials}`,
             'Content-Type': 'application/x-www-form-urlencoded'
@@ -39,6 +42,7 @@ export async function searchFoods(query: string, pageNumber: number = 0) {
     const token = await getFatSecretToken();
 
     const res = await axios.get('https://platform.fatsecret.com/rest/server.api', {
+        timeout: FATSECRET_TIMEOUT_MS,
         headers: {
             'Authorization': `Bearer ${token}`
         },
@@ -58,6 +62,7 @@ export async function getFoodDetails(foodId: string) {
     const token = await getFatSecretToken();
 
     const res = await axios.get('https://platform.fatsecret.com/rest/server.api', {
+        timeout: FATSECRET_TIMEOUT_MS,
         headers: {
             'Authorization': `Bearer ${token}`
         },

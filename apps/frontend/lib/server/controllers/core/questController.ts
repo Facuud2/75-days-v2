@@ -101,12 +101,12 @@ const addQuestSchema = z.object({
         frequency: z.enum(['daily', 'weekly', 'once']).default('daily'),
         targetValue: z.number().int().positive().nullable().optional(),
         targetUnit: z.string().max(40).optional().default(''),
-      })
+      }).strict()
     )
     .min(1)
     .max(20)
     .optional(),
-});
+}).strict();
 
 const createRun = async (
   tx: any,

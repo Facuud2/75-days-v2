@@ -16,8 +16,10 @@ import {
     isDbWarmed,
     warmupDatabaseAndCaches,
 } from './utils/dbLifecycle';
+import { securityHeaders } from './middlewares/securityHeaders';
 
 const app = express();
+app.disable('x-powered-by');
 const port = process.env.PORT || 3002;
 const configuredOrigins = (process.env.FRONTEND_URL || '')
     .split(',')
@@ -34,6 +36,7 @@ const allowedOrigins = configuredOrigins.length > 0
 
 // ── Global Middleware ─────────────────────────────────────────────────────────
 
+app.use(securityHeaders);
 app.use(cors({
     origin: (origin, callback) => {
         // Requests without an Origin (health checks, curl, service-to-service)
@@ -45,7 +48,7 @@ app.use(cors({
     // Cache preflight OPTIONS responses for 24h to save a full RTT on mutations
     maxAge: 86_400,
 }));
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
 
 // ── Health Check ──────────────────────────────────────────────────────────────
 

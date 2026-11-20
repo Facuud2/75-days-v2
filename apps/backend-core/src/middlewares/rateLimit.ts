@@ -15,3 +15,11 @@ export const aiRateLimit = rateLimit({
     legacyHeaders: false,
     message: { error: 'Demasiadas solicitudes a la IA. Intentá de nuevo en unos minutos.' },
 });
+
+export const sensitiveAccountRateLimit = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: process.env.NODE_ENV === 'production' ? 20 : 500,
+    standardHeaders: 'draft-8',
+    legacyHeaders: false,
+    message: { error: 'Demasiadas operaciones sensibles de cuenta. Intentá más tarde.' },
+});

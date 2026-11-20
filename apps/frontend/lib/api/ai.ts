@@ -26,6 +26,10 @@ export interface AiCustomTask {
   title: string;
   description: string;
   icon: AiCustomTaskIcon;
+  cadence?: 'daily' | 'weekly' | 'monthly';
+  measurementType?: 'boolean' | 'count' | 'numeric';
+  targetValue?: number;
+  targetUnit?: string;
   changeType?: 'kept' | 'modified' | 'added';
 }
 

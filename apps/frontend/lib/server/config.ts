@@ -4,7 +4,11 @@
  * during static analysis if secrets are injected only at runtime.
  */
 export function getServerConfig() {
-  const jwtSecret = process.env.JWT_SECRET?.trim() || 'dev-fallback-jwt-secret-change-in-prod';
+  const rawJwtSecret = process.env.JWT_SECRET?.trim();
+  if (!rawJwtSecret && process.env.NODE_ENV === 'production') {
+    throw new Error('[config] Missing required environment variable: JWT_SECRET');
+  }
+  const jwtSecret = rawJwtSecret || 'dev-fallback-jwt-secret-change-in-prod';
   const googleClientId =
     process.env.GOOGLE_CLIENT_ID?.trim() ||
     process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID?.trim() ||

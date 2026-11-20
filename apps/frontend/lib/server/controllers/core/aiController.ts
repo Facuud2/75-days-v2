@@ -11,7 +11,7 @@ import {
 const historyItemSchema = z.object({
   role: z.enum(['user', 'assistant']),
   text: z.string().max(2500),
-});
+}).strict();
 
 const customPlanRequestSchema = z
   .object({
@@ -26,6 +26,7 @@ const customPlanRequestSchema = z
     forceProposal: z.boolean().optional(),
     askedQuestionsCount: z.number().int().min(0).max(50).optional(),
   })
+  .strict()
   .refine(
     (data) =>
       Boolean(
@@ -48,6 +49,7 @@ const sideQuestRequestSchema = z
     userContext: aiUserContextSchema.optional(),
     forceProposal: z.boolean().optional(),
   })
+  .strict()
   .refine(
     (data) =>
       Boolean(

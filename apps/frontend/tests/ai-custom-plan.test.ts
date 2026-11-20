@@ -152,7 +152,11 @@ describe('AI Custom Plan, Side Quest & Challenge Store', () => {
     expect(capturedParams.model).toBe('gemini-4-hydrogen');
     expect(capturedParams.response_format?.type).toBe('text');
     expect(capturedParams.response_format?.mime_type).toBe('application/json');
-    const textPrompt = ((capturedParams.input as Array<any>)?.[0]?.text as string) ?? '';
+    const step = (capturedParams.input as Array<any>)?.[0];
+    expect(step?.type).toBe('user_input');
+    expect(step?.content?.[1]?.type).toBe('audio');
+    expect(step?.content?.[1]?.mime_type).toBe('audio/webm');
+    const textPrompt = (step?.content?.[0]?.text as string) ?? '';
     expect(textPrompt).toContain('Detox de Azúcar');
     expect(textPrompt).toContain('Peso objetivo: 76 kg');
   });
@@ -162,7 +166,7 @@ describe('AI Custom Plan, Side Quest & Challenge Store', () => {
     const mockClient: GeminiClientLike = {
       interactions: {
         create: async (params) => {
-          capturedPrompt = ((params.input as Array<any>)?.[0]?.text as string) ?? '';
+          capturedPrompt = ((params.input as Array<any>)?.[0]?.content?.[0]?.text as string) ?? '';
           return {
             output_text: JSON.stringify({
               status: 'ready',
@@ -231,7 +235,7 @@ describe('AI Custom Plan, Side Quest & Challenge Store', () => {
     const mockClient: GeminiClientLike = {
       interactions: {
         create: async (params) => {
-          capturedPrompt = ((params.input as Array<any>)?.[0]?.text as string) ?? '';
+          capturedPrompt = ((params.input as Array<any>)?.[0]?.content?.[0]?.text as string) ?? '';
           return {
             output_text: JSON.stringify({
               status: 'ready',

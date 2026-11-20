@@ -10,7 +10,7 @@ const MealEntrySchema = z.object({
   proteinG: z.number().min(0).max(2000).default(0),
   carbG: z.number().min(0).max(2000).default(0),
   fatG: z.number().min(0).max(2000).default(0),
-});
+}).strict();
 
 const GoalsSchema = z.object({
   dailyCalorieGoal: z.number().int().positive().max(25000).optional(),
@@ -18,7 +18,21 @@ const GoalsSchema = z.object({
   carbGoalG: z.number().positive().max(2000).optional(),
   fatGoalG: z.number().positive().max(2000).optional(),
   weightKg: z.number().min(20).max(500).optional(),
-});
+}).strict();
+
+const PUBLIC_HEALTH_PROFILE_SELECT = {
+  id: true,
+  userId: true,
+  dailyCalorieGoal: true,
+  proteinGoalG: true,
+  carbGoalG: true,
+  fatGoalG: true,
+  weightKg: true,
+  heightCm: true,
+  stravaAthleteId: true,
+  updatedAt: true,
+  createdAt: true,
+} as const;
 
 export const logMeal = async (req: ControllerRequest, res: ControllerResponse) => {
   const prisma = getHealthPrisma();
@@ -129,6 +143,7 @@ export const upsertGoals = async (
     where: { userId },
     update: parsed.data,
     create: { userId, ...parsed.data },
+    select: PUBLIC_HEALTH_PROFILE_SELECT,
   });
 
   return res.json(profile);
@@ -138,7 +153,10 @@ export const getGoals = async (req: ControllerRequest, res: ControllerResponse) 
   const prisma = getHealthPrisma();
   const userId = req.user!.id;
 
-  const profile = await prisma.userHealthProfile.findUnique({ where: { userId } });
+  const profile = await prisma.userHealthProfile.findUnique({
+    where: { userId },
+    select: PUBLIC_HEALTH_PROFILE_SELECT,
+  });
 
   if (!profile) {
     return res.json({

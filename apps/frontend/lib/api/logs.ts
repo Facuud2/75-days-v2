@@ -1,35 +1,67 @@
 import { apiClient } from './client';
-import { DailyLog } from '../../store/useChallengeStore';
+import { DailyLog, PeriodGoalProgress } from '../../store/useChallengeStore';
 
 export interface UpdateMetricsData {
-    weight?: number;
-    photoUrl?: string;
-    notes?: string;
+  weight?: number;
+  photoUrl?: string;
+  notes?: string;
+}
+
+export interface GoalProgressUpdatePayload {
+  completed?: boolean;
+  currentValue?: number;
+  delta?: number;
 }
 
 export const logService = {
-    getLogs: () => {
-        return apiClient<DailyLog[]>('/logs');
-    },
+  getLogs: () => {
+    return apiClient<DailyLog[]>('/logs');
+  },
 
-    updateGoalStatus: (date: string, goalId: string, completed: boolean) => {
-        return apiClient<DailyLog & { challengeStreak?: number; challengePoints?: number }>(`/logs/${date}/goal/${goalId}`, {
-            method: 'PUT',
-            body: JSON.stringify({ completed }),
-        });
-    },
+  updateGoalStatus: (
+    date: string,
+    goalId: string,
+    payload: boolean | GoalProgressUpdatePayload
+  ) => {
+    const body =
+      typeof payload === 'boolean' ? { completed: payload } : payload;
+    return apiClient<
+      DailyLog & { challengeStreak?: number; challengePoints?: number }
+    >(`/logs/${date}/goal/${goalId}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    });
+  },
 
-    updateMetrics: (date: string, metrics: UpdateMetricsData) => {
-        return apiClient<DailyLog>(`/logs/${date}/metrics`, {
-            method: 'PUT',
-            body: JSON.stringify(metrics),
-        });
-    },
+  updatePeriodGoalProgress: (
+    periodGoalId: string,
+    payload: GoalProgressUpdatePayload
+  ) => {
+    return apiClient<
+      PeriodGoalProgress & { challengeStreak?: number; challengePoints?: number }
+    >(`/logs/periods/${periodGoalId}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
 
-    checkDailyReset: (timezoneOffset: number) => {
-        return apiClient<{ message: string; streak: number; currentDay: number; logs: DailyLog[] }>('/logs/check-reset', {
-            method: 'POST',
-            body: JSON.stringify({ timezoneOffset }),
-        });
-    },
+  updateMetrics: (date: string, metrics: UpdateMetricsData) => {
+    return apiClient<DailyLog>(`/logs/${date}/metrics`, {
+      method: 'PUT',
+      body: JSON.stringify(metrics),
+    });
+  },
+
+  checkDailyReset: (timezoneOffset: number) => {
+    return apiClient<{
+      message: string;
+      streak: number;
+      currentDay: number;
+      logs: DailyLog[];
+      periodGoals?: PeriodGoalProgress[];
+    }>('/logs/check-reset', {
+      method: 'POST',
+      body: JSON.stringify({ timezoneOffset }),
+    });
+  },
 };

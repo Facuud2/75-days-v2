@@ -162,6 +162,7 @@ export default function Onboarding() {
   const [difficulty, setDifficulty] = useState<Difficulty>('Medium');
   const [planDirection, setPlanDirection] = useState<1 | -1>(1);
   const [customTasks, setCustomTasks] = useState<CustomTask[]>([]);
+  const [breakStreakOnPeriodFail, setBreakStreakOnPeriodFail] = useState(false);
   const [isCustomEditorOpen, setIsCustomEditorOpen] = useState(false);
   const [isAiPlanSheetOpen, setIsAiPlanSheetOpen] = useState(false);
   const [isCustomModeSheetOpen, setIsCustomModeSheetOpen] = useState(false);
@@ -345,18 +346,29 @@ export default function Onboarding() {
     try {
       const formattedCustomGoals = tasksToPersist
         .filter((t) => t.title.trim())
-        .map(({ title, description, icon }) => ({
-          title: title.trim(),
-          description: description.trim(),
-          icon,
-        }));
+        .map(
+          (
+            { title, description, icon, cadence, measurementType, targetValue, targetUnit },
+            index
+          ) => ({
+            title: title.trim(),
+            description: description.trim(),
+            icon,
+            cadence: cadence || ('daily' as const),
+            measurementType: measurementType || ('boolean' as const),
+            targetValue: targetValue ?? 1,
+            targetUnit: targetUnit?.trim() || null,
+            order: index,
+          })
+        );
 
       // startChallenge debe completar antes que completeOnboarding: si corren en
       // paralelo y completeOnboarding termina primero, AuthGuard redirige a
       // /dashboard antes de que el reto exista en la DB y en el store.
       await startChallenge(
         finalDifficulty,
-        finalDifficulty === 'Custom' ? formattedCustomGoals : undefined
+        finalDifficulty === 'Custom' ? formattedCustomGoals : undefined,
+        finalDifficulty === 'Custom' ? breakStreakOnPeriodFail : undefined
       );
 
       // Persistir todas las misiones secundarias elegidas o diseñadas con IA recién al confirmar
@@ -1767,6 +1779,8 @@ export default function Onboarding() {
         isOpen={isCustomEditorOpen}
         tasks={customTasks}
         onChange={setCustomTasks}
+        breakStreakOnPeriodFail={breakStreakOnPeriodFail}
+        onChangeBreakStreak={setBreakStreakOnPeriodFail}
         onClose={() => {
           setCustomTasks((prev) => prev.filter((t) => t.title.trim() !== ''));
           setIsCustomEditorOpen(false);

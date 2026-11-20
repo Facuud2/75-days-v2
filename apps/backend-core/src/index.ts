@@ -15,8 +15,10 @@ import {
     isDbWarmed,
     warmupDatabaseAndCaches,
 } from './utils/dbLifecycle';
+import { securityHeaders } from './middlewares/securityHeaders';
 
 const app = express();
+app.disable('x-powered-by');
 const port = process.env.PORT || 3001;
 const configuredOrigins = (process.env.FRONTEND_URL || '')
     .split(',')
@@ -31,6 +33,7 @@ const allowedOrigins = configuredOrigins.length > 0
         ...(process.env.NODE_ENV === 'production' ? [] : ['http://localhost:3000']),
     ];
 
+app.use(securityHeaders);
 app.use(cors({
     origin: (origin, callback) => {
         // Requests without an Origin (health checks, curl, service-to-service)
@@ -71,6 +74,16 @@ if (process.env.NODE_ENV !== 'production') {
     const devRoutes = require('./routes/dev').default;
     app.use('/api/dev', devRoutes);
 }
+
+// Global error handler — never expose internal stack traces to clients
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    console.error('[backend-core] Unhandled error:', err);
+    if (!res.headersSent) {
+        const status = typeof err?.status === 'number' ? err.status : 500;
+        const message = status < 500 && err?.message ? err.message : 'Internal server error';
+        res.status(status).json({ error: message });
+    }
+});
 
 const server = app.listen(port, () => {
     console.log(`Server is running on port ${port}`);

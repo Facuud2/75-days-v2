@@ -2,6 +2,10 @@ import { z } from 'zod';
 import { getCorePrisma } from '../../db';
 import { ControllerRequest, ControllerResponse } from '../../http';
 import { reconcileAndGetActiveChallenge } from '../../utils/dailyReset';
+import {
+  computeNextGoalProgress,
+  getPeriodPoints,
+} from '../../utils/periodRules';
 
 export const getLogs = async (req: ControllerRequest, res: ControllerResponse) => {
   try {
@@ -28,9 +32,22 @@ export const getLogs = async (req: ControllerRequest, res: ControllerResponse) =
   }
 };
 
-const goalUpdateSchema = z.object({
-  completed: z.boolean(),
-});
+const DATE_PARAM_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+const goalUpdateSchema = z
+  .object({
+    completed: z.boolean().optional(),
+    currentValue: z.number().min(0).optional(),
+    delta: z.number().optional(),
+  })
+  .strict()
+  .refine(
+    (data) =>
+      data.completed !== undefined ||
+      data.currentValue !== undefined ||
+      data.delta !== undefined,
+    { message: 'Must provide completed, currentValue, or delta' }
+  );
 
 class NotFoundError extends Error {}
 class LockedDayError extends Error {}
@@ -43,7 +60,10 @@ export const updateGoalStatus = async (
     const prisma = getCorePrisma();
     const date = req.params.date as string;
     const goalId = req.params.goalId as string;
-    const { completed } = goalUpdateSchema.parse(req.body);
+    if (!DATE_PARAM_REGEX.test(date)) {
+      return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
+    }
+    const payload = goalUpdateSchema.parse(req.body);
     const userId = req.user!.id;
 
     const goal = await prisma.dailyGoal.findFirst({
@@ -68,7 +88,9 @@ export const updateGoalStatus = async (
     }
 
     if (goal.dailyLog.status === 'fail') {
-      return res.status(400).json({ error: 'Cannot modify goals for a failed day' });
+      return res
+        .status(400)
+        .json({ error: 'Cannot modify goals for a failed day' });
     }
 
     const result = await prisma.$transaction(async (tx) => {
@@ -87,7 +109,8 @@ export const updateGoalStatus = async (
       if (!logWithContext) {
         throw new NotFoundError('Log not found');
       }
-      if (!logWithContext.goals.some((g) => g.id === goalId)) {
+      const targetGoal = logWithContext.goals.find((g) => g.id === goalId);
+      if (!targetGoal) {
         throw new NotFoundError('Goal not found');
       }
       if (logWithContext.status === 'fail') {
@@ -97,8 +120,24 @@ export const updateGoalStatus = async (
         throw new NotFoundError('Challenge not found');
       }
 
+      const nextProgress = computeNextGoalProgress({
+        measurementType: targetGoal.measurementType || 'boolean',
+        targetValue: targetGoal.targetValue || 1,
+        currentValue: targetGoal.currentValue || 0,
+        completed: targetGoal.completed,
+        nextCompleted: payload.completed,
+        nextCurrentValue: payload.currentValue,
+        delta: payload.delta,
+      });
+
       const updatedGoals = logWithContext.goals.map((g) =>
-        g.id === goalId ? { ...g, completed } : g
+        g.id === goalId
+          ? {
+              ...g,
+              completed: nextProgress.completed,
+              currentValue: nextProgress.currentValue,
+            }
+          : g
       );
       const allCompleted =
         updatedGoals.length > 0 && updatedGoals.every((g) => g.completed);
@@ -120,7 +159,10 @@ export const updateGoalStatus = async (
       const writeOps: Promise<any>[] = [
         tx.dailyGoal.update({
           where: { id: goalId },
-          data: { completed },
+          data: {
+            completed: nextProgress.completed,
+            currentValue: nextProgress.currentValue,
+          },
         }),
       ];
 
@@ -164,7 +206,9 @@ export const updateGoalStatus = async (
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return res.status(400).json({ error: 'Validation failed', details: error.issues });
+      return res
+        .status(400)
+        .json({ error: 'Validation failed', details: error.issues });
     }
     if (error instanceof NotFoundError) {
       return res.status(404).json({ error: error.message });
@@ -177,11 +221,129 @@ export const updateGoalStatus = async (
   }
 };
 
+export const updatePeriodGoalProgress = async (
+  req: ControllerRequest,
+  res: ControllerResponse
+) => {
+  try {
+    const prisma = getCorePrisma();
+    const periodGoalId = req.params.periodGoalId as string;
+    const payload = goalUpdateSchema.parse(req.body);
+    const userId = req.user!.id;
+
+    const existing = await prisma.periodGoalProgress.findFirst({
+      where: {
+        id: periodGoalId,
+        challenge: { userId, isActive: true },
+      },
+      select: {
+        id: true,
+        challengeId: true,
+        status: true,
+      },
+    });
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Period goal not found' });
+    }
+
+    if (existing.status === 'fail') {
+      return res
+        .status(400)
+        .json({ error: 'Cannot modify a closed failed period goal' });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(hashtext(${periodGoalId}))) AS lock`;
+
+      const pg = await tx.periodGoalProgress.findUnique({
+        where: { id: periodGoalId },
+        include: {
+          challenge: {
+            select: { id: true, points: true, streak: true },
+          },
+        },
+      });
+
+      if (!pg || !pg.challenge) {
+        throw new NotFoundError('Period goal not found');
+      }
+      if (pg.status === 'fail') {
+        throw new LockedDayError('Cannot modify a closed failed period goal');
+      }
+
+      const nextProgress = computeNextGoalProgress({
+        measurementType: pg.measurementType || 'count',
+        targetValue: pg.targetValue || 1,
+        currentValue: pg.currentValue || 0,
+        completed: pg.status === 'success',
+        nextCompleted: payload.completed,
+        nextCurrentValue: payload.currentValue,
+        delta: payload.delta,
+      });
+
+      const nextStatus = nextProgress.completed ? 'success' : 'pending';
+      const periodPoints = getPeriodPoints(
+        pg.cadence === 'monthly' ? 'monthly' : 'weekly'
+      );
+
+      let points = pg.challenge.points;
+      if (nextStatus === 'success' && pg.status !== 'success') {
+        points += periodPoints;
+      } else if (nextStatus !== 'success' && pg.status === 'success') {
+        points = Math.max(0, points - periodPoints);
+      }
+
+      const [updatedGoal] = await Promise.all([
+        tx.periodGoalProgress.update({
+          where: { id: pg.id },
+          data: {
+            currentValue: nextProgress.currentValue,
+            status: nextStatus,
+          },
+        }),
+        points !== pg.challenge.points
+          ? tx.challenge.update({
+              where: { id: pg.challenge.id },
+              data: { points },
+            })
+          : Promise.resolve(),
+      ]);
+
+      return {
+        updatedGoal,
+        points,
+        streak: pg.challenge.streak,
+      };
+    });
+
+    return res.json({
+      ...result.updatedGoal,
+      challengePoints: result.points,
+      challengeStreak: result.streak,
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res
+        .status(400)
+        .json({ error: 'Validation failed', details: error.issues });
+    }
+    if (error instanceof NotFoundError) {
+      return res.status(404).json({ error: error.message });
+    }
+    if (error instanceof LockedDayError) {
+      return res.status(400).json({ error: error.message });
+    }
+    console.error('[logController.updatePeriodGoalProgress]', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 const metricsSchema = z.object({
-  weight: z.number().optional(),
-  photoUrl: z.string().optional(),
-  notes: z.string().optional(),
-});
+  weight: z.number().positive().max(500).optional(),
+  photoUrl: z.string().max(2_000_000).optional(),
+  notes: z.string().max(2_000).optional(),
+}).strict();
 
 export const updateMetrics = async (
   req: ControllerRequest,
@@ -190,6 +352,9 @@ export const updateMetrics = async (
   try {
     const prisma = getCorePrisma();
     const date = req.params.date as string;
+    if (!DATE_PARAM_REGEX.test(date)) {
+      return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
+    }
     const { weight, photoUrl, notes } = metricsSchema.parse(req.body);
     const userId = req.user!.id;
 
@@ -223,7 +388,9 @@ export const updateMetrics = async (
     return res.json(updatedLog);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return res.status(400).json({ error: 'Validation failed', details: error.issues });
+      return res
+        .status(400)
+        .json({ error: 'Validation failed', details: error.issues });
     }
     console.error('[logController.updateMetrics]', error);
     return res.status(500).json({ error: 'Internal server error' });
@@ -250,6 +417,7 @@ export const checkDailyReset = async (
       streak: challenge.streak,
       currentDay: challenge.currentDay,
       logs: challenge.dailyLogs,
+      periodGoals: challenge.periodGoals,
     });
   } catch (error) {
     console.error('[logController.checkDailyReset]', error);

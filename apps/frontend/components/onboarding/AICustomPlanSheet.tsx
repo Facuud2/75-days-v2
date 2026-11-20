@@ -32,7 +32,7 @@ import {
   SHEET_EXIT_TRANSITION,
   shouldDismissSheet,
 } from '@/lib/motion/sheetPhysics';
-import { getCustomTaskIcon, type CustomTask } from './CustomTaskEditorSheet';
+import { formatTaskBadge, getCustomTaskIcon, type CustomTask } from './CustomTaskEditorSheet';
 import AISideQuestSheet, { getSideQuestIcon } from './AISideQuestSheet';
 import AIThinkingStatus from './AIThinkingStatus';
 
@@ -90,6 +90,10 @@ function toDraftCustomTasks(aiTasks: AiCustomTask[]): DraftCustomTask[] {
     title: t.title,
     description: t.description,
     icon: ALLOWED_ICON_SET.has(t.icon) ? t.icon : 'dumbbell',
+    cadence: t.cadence || 'daily',
+    measurementType: t.measurementType || 'boolean',
+    targetValue: t.targetValue ?? 1,
+    targetUnit: t.targetUnit || '',
     changeType: t.changeType,
   }));
 }
@@ -102,15 +106,23 @@ function toAiTasks(tasks: DraftCustomTask[]): AiCustomTask[] {
       title: t.title.trim(),
       description: t.description.trim() || t.title.trim(),
       icon: (ALLOWED_ICON_SET.has(t.icon) ? t.icon : 'dumbbell') as AiCustomTask['icon'],
+      cadence: t.cadence || 'daily',
+      measurementType: t.measurementType || 'boolean',
+      targetValue: t.targetValue ?? 1,
+      targetUnit: t.targetUnit || '',
     }));
 }
 
 function stripChangeTypes(tasks: DraftCustomTask[]): CustomTask[] {
-  return tasks.map(({ id, title, description, icon }) => ({
+  return tasks.map(({ id, title, description, icon, cadence, measurementType, targetValue, targetUnit }) => ({
     id,
     title,
     description,
     icon,
+    cadence: cadence || 'daily',
+    measurementType: measurementType || 'boolean',
+    targetValue: targetValue ?? 1,
+    targetUnit: targetUnit || '',
   }));
 }
 
@@ -800,6 +812,15 @@ export default function AICustomPlanSheet({
                                     style={{ color: 'var(--text-primary)' }}
                                   >
                                     {task.title}
+                                  </span>
+                                  <span
+                                    className="text-[10px] font-semibold px-1.5 py-0.5 rounded"
+                                    style={{
+                                      backgroundColor: 'var(--surface-card)',
+                                      color: 'var(--text-muted)',
+                                    }}
+                                  >
+                                    {formatTaskBadge(task)}
                                   </span>
                                   {task.changeType === 'added' && (
                                     <span

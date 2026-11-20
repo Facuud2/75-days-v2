@@ -7,6 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import {
   AlertCircle,
   CheckCircle2,
+  Download,
   Eye,
   EyeOff,
   Loader2,
@@ -28,6 +29,8 @@ export function PasswordForm({ onSuccess }: PasswordFormProps) {
 
   const [showPasswords, setShowPasswords] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [serverAlert, setServerAlert] = useState<{
     type: 'success' | 'error';
     message: string;
@@ -48,7 +51,35 @@ export function PasswordForm({ onSuccess }: PasswordFormProps) {
     mode: 'onBlur',
   });
 
-  const handleDeleteGoogleAccount = async () => {
+  const handleExportData = async () => {
+    setServerAlert(null);
+    setIsExporting(true);
+    try {
+      const data = await userService.exportData();
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: 'application/json;charset=utf-8',
+      });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `75days-mis-datos-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      toast.success('Datos exportados en JSON');
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'No pudimos exportar tus datos. Intentá de nuevo.';
+      setServerAlert({ type: 'error', message });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
     setServerAlert(null);
     setIsDeleting(true);
     try {
@@ -58,6 +89,7 @@ export function PasswordForm({ onSuccess }: PasswordFormProps) {
       router.replace('/login');
     } catch (err: unknown) {
       setIsDeleting(false);
+      setConfirmDelete(false);
       const message =
         err instanceof Error
           ? err.message
@@ -85,16 +117,35 @@ export function PasswordForm({ onSuccess }: PasswordFormProps) {
           </h3>
           <p className="text-xs leading-relaxed text-[var(--text-muted)]">
             Iniciaste sesión con Google, por lo que no utilizás contraseña en la
-            aplicación. Si deseás desvincular por completo tu cuenta de Google y
-            borrar tus datos, podés eliminar tu cuenta.
+            aplicación. Podés descargar una copia de tus datos o eliminar tu cuenta y
+            todos tus registros de forma permanente.
           </p>
         </div>
 
-        <div className="pt-1">
+        <div className="flex flex-wrap items-center gap-2.5 pt-1">
+          <button
+            type="button"
+            disabled={isExporting}
+            onClick={handleExportData}
+            className="flex min-h-[46px] w-full items-center justify-center gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-inset)] px-4 py-2.5 text-sm font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-hover)] disabled:opacity-60 sm:w-auto"
+          >
+            {isExporting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Exportando...
+              </>
+            ) : (
+              <>
+                <Download className="h-4 w-4" aria-hidden="true" />
+                Descargar mis datos (JSON)
+              </>
+            )}
+          </button>
+
           <button
             type="button"
             disabled={isDeleting}
-            onClick={handleDeleteGoogleAccount}
+            onClick={handleDeleteAccount}
             className="pv2-destructive flex min-h-[46px] w-full items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold transition-colors cursor-pointer sm:w-auto"
           >
             {isDeleting ? (
@@ -271,6 +322,76 @@ export function PasswordForm({ onSuccess }: PasswordFormProps) {
             'Actualizar contraseña'
           )}
         </button>
+      </div>
+
+      <div className="mt-6 space-y-3 border-t border-[var(--border-subtle)] pt-5">
+        <div className="space-y-1">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
+            Privacidad y tus datos
+          </h3>
+          <p className="text-xs leading-relaxed text-[var(--text-muted)]">
+            Descargá una copia completa de tu progreso en JSON o eliminá tu cuenta y
+            todos tus registros de forma definitiva.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            type="button"
+            disabled={isExporting}
+            onClick={handleExportData}
+            className="flex min-h-[42px] w-full items-center justify-center gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-inset)] px-4 py-2 text-xs font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-hover)] disabled:opacity-60 sm:w-auto"
+          >
+            {isExporting ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Exportando...
+              </>
+            ) : (
+              <>
+                <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                Descargar mis datos (JSON)
+              </>
+            )}
+          </button>
+
+          {!confirmDelete ? (
+            <button
+              type="button"
+              onClick={() => setConfirmDelete(true)}
+              className="pv2-destructive flex min-h-[42px] w-full items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-colors cursor-pointer sm:w-auto"
+            >
+              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+              Eliminar cuenta
+            </button>
+          ) : (
+            <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleDeleteAccount}
+                className="pv2-destructive flex min-h-[42px] items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-colors cursor-pointer"
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Eliminando...
+                  </>
+                ) : (
+                  'Confirmar eliminación'
+                )}
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setConfirmDelete(false)}
+                className="min-h-[42px] rounded-xl px-3 py-2 text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+              >
+                Cancelar
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </form>
   );
