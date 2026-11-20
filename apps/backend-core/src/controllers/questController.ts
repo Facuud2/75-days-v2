@@ -90,8 +90,8 @@ const addQuestSchema = z.object({
         frequency: z.enum(['daily', 'weekly', 'once']).default('daily'),
         targetValue: z.number().int().positive().nullable().optional(),
         targetUnit: z.string().max(40).optional().default(''),
-    })).min(1).max(20).optional(),
-});
+    }).strict()).min(1).max(20).optional(),
+}).strict();
 
 const createRun = async (tx: any, sideQuest: any, runNumber: number, customTasks?: any[]) => {
     const templateTasks = customTasks ?? sideQuest.template?.tasks ?? [];
@@ -100,12 +100,12 @@ const createRun = async (tx: any, sideQuest: any, runNumber: number, customTasks
             sideQuestId: sideQuest.id,
             runNumber,
             tasks: {
-                create: templateTasks.map((task: any) => ({
+                create: templateTasks.map((task: any, index: number) => ({
                     templateTaskId: task.id,
                     title: task.title,
                     description: task.description,
                     icon: task.icon,
-                    order: task.order,
+                    order: task.order ?? index,
                     frequency: task.frequency,
                     targetValue: task.targetValue,
                     targetUnit: task.targetUnit,

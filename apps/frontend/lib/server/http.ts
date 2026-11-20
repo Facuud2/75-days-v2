@@ -1,6 +1,16 @@
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { getServerConfig } from './config';
 import { enforceRateLimit, RateLimitKind } from './rateLimit';
+
+const MAX_BODY_BYTES = 5 * 1024 * 1024; // 5 MB (matches backend-core express.json limit)
+
+function timingSafeStringEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a, 'utf8');
+  const bufB = Buffer.from(b, 'utf8');
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
 
 export interface ControllerRequest {
   body: any;
@@ -91,8 +101,16 @@ export async function handleRoute(
     if (options.internalAuth) {
       const { internalApiKey } = getServerConfig();
       const providedKey = req.headers.get('x-internal-api-key');
-      if (internalApiKey && providedKey !== internalApiKey) {
-        return Response.json({ error: 'Forbidden: Invalid internal API key' }, { status: 403 });
+      // Fail closed: require a non-empty INTERNAL_API_KEY and constant-time match
+      if (
+        !internalApiKey ||
+        !providedKey ||
+        !timingSafeStringEqual(providedKey, internalApiKey)
+      ) {
+        return Response.json(
+          { error: 'Forbidden: Invalid internal API key' },
+          { status: 403 }
+        );
       }
     }
 
@@ -107,7 +125,14 @@ export async function handleRoute(
     let body: any = {};
     const method = req.method.toUpperCase();
     if (method !== 'GET' && method !== 'HEAD') {
+      const contentLength = Number(req.headers.get('content-length') || 0);
+      if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
+        return Response.json({ error: 'Payload too large' }, { status: 413 });
+      }
       const text = await req.text().catch(() => '');
+      if (Buffer.byteLength(text, 'utf8') > MAX_BODY_BYTES) {
+        return Response.json({ error: 'Payload too large' }, { status: 413 });
+      }
       if (text.trim()) {
         try {
           body = JSON.parse(text);
@@ -132,7 +157,9 @@ export async function handleRoute(
     };
 
     let statusCode = 200;
-    const responseHeaders = new Headers();
+    const responseHeaders = new Headers({
+      'X-Content-Type-Options': 'nosniff',
+    });
     let finalResponse: Response | null = null;
 
     const controllerRes: ControllerResponse = {

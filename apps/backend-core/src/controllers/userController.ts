@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { prisma } from '../utils/prisma';
 import { AuthRequest } from '../middlewares/auth';
+import { healthClient } from '../utils/healthClient';
 
 export async function buildUserProfilePayload(userId: string) {
     const user = await prisma.user.findUnique({
@@ -186,7 +187,7 @@ const updateProfileSchema = z.object({
     weight: z.number().positive().optional(),
     targetWeight: z.number().positive().optional(),
     height: z.number().positive().optional(),
-});
+}).strict();
 
 export const updateProfile = async (req: AuthRequest, res: Response) => {
     try {
@@ -254,7 +255,7 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
 const updatePasswordSchema = z.object({
     currentPassword: z.string().min(1),
     newPassword: z.string().min(6),
-});
+}).strict();
 
 export const updatePassword = async (req: AuthRequest, res: Response) => {
     try {
@@ -286,6 +287,82 @@ export const updatePassword = async (req: AuthRequest, res: Response) => {
     }
 };
 
+// --- GET /users/export ---
+export const exportUserData = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user!.id;
+
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: {
+                id: true,
+                name: true,
+                email: true,
+                avatarUrl: true,
+                bannerUrl: true,
+                profileQuote: true,
+                age: true,
+                weight: true,
+                targetWeight: true,
+                height: true,
+                registeredAt: true,
+                onboardingCompleted: true,
+                challenges: {
+                    include: {
+                        customGoalsTemplate: true,
+                        dailyLogs: { include: { goals: true }, orderBy: { date: 'desc' } },
+                    },
+                },
+                sideQuests: {
+                    include: {
+                        runs: { include: { tasks: true }, orderBy: { runNumber: 'desc' } },
+                    },
+                },
+                achievements: true,
+            },
+        });
+
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        let healthData: Record<string, unknown> | null = null;
+        try {
+            healthData = (await healthClient.exportUserHealthData(userId)) as unknown as Record<string, unknown>;
+        } catch (err) {
+            console.warn('[userController.exportUserData] Could not fetch health export:', err);
+            healthData = { error: 'Health service temporarily unavailable' };
+        }
+
+        res.setHeader('Content-Disposition', 'attachment; filename="75days-mis-datos.json"');
+        return res.json({
+            exportedAt: new Date().toISOString(),
+            schemaVersion: '1.0',
+            account: {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                profileQuote: user.profileQuote,
+                age: user.age,
+                weight: user.weight,
+                targetWeight: user.targetWeight,
+                height: user.height,
+                registeredAt: user.registeredAt,
+                onboardingCompleted: user.onboardingCompleted,
+            },
+            core: {
+                challenges: user.challenges,
+                sideQuests: user.sideQuests,
+                achievements: user.achievements,
+            },
+            health: healthData,
+        });
+    } catch (error) {
+        console.error('Error exporting user data:', error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
 // --- DELETE /users/account ---
 export const deleteAccount = async (req: AuthRequest, res: Response) => {
     try {
@@ -294,6 +371,16 @@ export const deleteAccount = async (req: AuthRequest, res: Response) => {
         const user = await prisma.user.findUnique({ where: { id: userId } });
         if (!user) {
             return res.status(404).json({ error: 'User not found' });
+        }
+
+        // Purge health DB first so no orphaned meals/workouts/Strava tokens remain if core succeeds
+        try {
+            await healthClient.deleteUserHealthData(userId);
+        } catch (healthErr) {
+            console.error('[userController.deleteAccount] Failed to purge backend-health data:', healthErr);
+            return res.status(502).json({
+                error: 'No pudimos eliminar tus datos de salud en este momento. Intentá de nuevo en unos minutos.',
+            });
         }
 
         await prisma.$transaction(async (tx) => {

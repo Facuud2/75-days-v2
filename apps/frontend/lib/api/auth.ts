@@ -16,6 +16,7 @@ export interface RegisterData {
     age?: number;
     weight?: number;
     height?: number;
+    acceptTerms?: true;
     difficulty?: 'Soft' | 'Medium' | 'Hard' | 'Custom';
     customGoalsTemplate?: Array<{ title: string; description?: string; icon?: string }>;
 }

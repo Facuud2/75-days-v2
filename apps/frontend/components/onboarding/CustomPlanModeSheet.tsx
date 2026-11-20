@@ -98,7 +98,7 @@ export default function CustomPlanModeSheet({
             }}
             className="relative z-10 w-full max-w-md rounded-t-3xl sm:rounded-3xl border overflow-hidden shadow-2xl"
             style={{
-              backgroundColor: 'var(--surface-elevated)',
+              backgroundColor: 'var(--surface-card)',
               borderColor: 'var(--border-subtle)',
             }}
           >
@@ -109,7 +109,7 @@ export default function CustomPlanModeSheet({
               >
                 <span
                   className="w-10 h-1 rounded-full"
-                  style={{ backgroundColor: 'var(--border-strong)' }}
+                  style={{ backgroundColor: 'var(--border-control)' }}
                 />
               </div>
             )}
@@ -117,12 +117,6 @@ export default function CustomPlanModeSheet({
             <div className="px-5 pt-4 pb-6 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] space-y-5">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p
-                    className="text-[11px] font-bold uppercase tracking-wider mb-1"
-                    style={{ color: 'var(--accent-text)' }}
-                  >
-                    Custom Challenge
-                  </p>
                   <h2
                     id="custom-mode-sheet-title"
                     className="text-lg font-bold leading-snug"
@@ -134,7 +128,7 @@ export default function CustomPlanModeSheet({
                     className="text-xs mt-1 leading-relaxed"
                     style={{ color: 'var(--text-secondary)' }}
                   >
-                    Contale tu idea por voz a la IA para crear tus metas al instante, o configuralas una por una.
+                    Chateá por texto o voz con la IA para diseñar y ajustar cada meta antes de guardar, o configuralas manualmente.
                   </p>
                 </div>
 
@@ -154,7 +148,7 @@ export default function CustomPlanModeSheet({
                 <button
                   type="button"
                   onClick={onSelectAi}
-                  className="w-full min-h-[52px] px-5 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 shadow-lg transition-transform active:scale-[0.98] cursor-pointer"
+                  className="w-full min-h-[52px] px-5 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-transform active:scale-[0.98] cursor-pointer"
                   style={{
                     touchAction: 'manipulation',
                     backgroundColor: 'var(--accent-fill)',

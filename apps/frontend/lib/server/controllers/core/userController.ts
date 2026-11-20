@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
-import { getCorePrisma } from '../../db';
+import { getCorePrisma, getHealthPrisma } from '../../db';
 import { ControllerRequest, ControllerResponse } from '../../http';
 
 export async function buildUserProfilePayload(userId: string) {
@@ -232,7 +232,7 @@ const updateProfileSchema = z.object({
   weight: z.number().positive().optional(),
   targetWeight: z.number().positive().optional(),
   height: z.number().positive().optional(),
-});
+}).strict();
 
 export const updateProfile = async (
   req: ControllerRequest,
@@ -313,7 +313,7 @@ export const updateProfile = async (
 const updatePasswordSchema = z.object({
   currentPassword: z.string().min(1),
   newPassword: z.string().min(6),
-});
+}).strict();
 
 export const updatePassword = async (
   req: ControllerRequest,
@@ -351,12 +351,124 @@ export const updatePassword = async (
   }
 };
 
+export const exportUserData = async (
+  req: ControllerRequest,
+  res: ControllerResponse
+) => {
+  try {
+    const corePrisma = getCorePrisma();
+    const healthPrisma = getHealthPrisma();
+    const userId = req.user!.id;
+
+    const user = await corePrisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        profileQuote: true,
+        age: true,
+        weight: true,
+        targetWeight: true,
+        height: true,
+        registeredAt: true,
+        onboardingCompleted: true,
+        challenges: {
+          include: {
+            customGoalsTemplate: true,
+            dailyLogs: { include: { goals: true }, orderBy: { date: 'desc' } },
+            periodGoals: true,
+          },
+        },
+        sideQuests: {
+          include: {
+            runs: { include: { tasks: true }, orderBy: { runNumber: 'desc' } },
+          },
+        },
+        achievements: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const [healthProfile, meals, workouts, customFoods] = await Promise.all([
+      healthPrisma.userHealthProfile.findUnique({
+        where: { userId },
+        select: {
+          id: true,
+          userId: true,
+          dailyCalorieGoal: true,
+          proteinGoalG: true,
+          carbGoalG: true,
+          fatGoalG: true,
+          weightKg: true,
+          heightCm: true,
+          stravaAthleteId: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      }),
+      healthPrisma.mealEntry.findMany({
+        where: { userId },
+        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+      }),
+      healthPrisma.workoutEntry.findMany({
+        where: { userId },
+        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+      }),
+      healthPrisma.customFood.findMany({
+        where: { userId },
+        include: { ingredients: { include: { ingredient: true } } },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename="75days-mis-datos.json"'
+    );
+    return res.json({
+      exportedAt: new Date().toISOString(),
+      schemaVersion: '1.0',
+      account: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        profileQuote: user.profileQuote,
+        age: user.age,
+        weight: user.weight,
+        targetWeight: user.targetWeight,
+        height: user.height,
+        registeredAt: user.registeredAt,
+        onboardingCompleted: user.onboardingCompleted,
+      },
+      core: {
+        challenges: user.challenges,
+        sideQuests: user.sideQuests,
+        achievements: user.achievements,
+      },
+      health: {
+        profile: healthProfile,
+        meals,
+        workouts,
+        customFoods,
+      },
+    });
+  } catch (error) {
+    console.error('[userController.exportUserData]', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 export const deleteAccount = async (
   req: ControllerRequest,
   res: ControllerResponse
 ) => {
   try {
     const prisma = getCorePrisma();
+    const healthPrisma = getHealthPrisma();
     const userId = req.user!.id;
 
     const user = await prisma.user.findUnique({ where: { id: userId } });
@@ -364,11 +476,25 @@ export const deleteAccount = async (
       return res.status(404).json({ error: 'User not found' });
     }
 
+    // Purge health DB first so no orphaned meals/workouts/Strava tokens remain
+    await healthPrisma.$transaction(async (htx) => {
+      await htx.customFoodIngredient.deleteMany({
+        where: { customFood: { userId } },
+      });
+      await htx.customFood.deleteMany({ where: { userId } });
+      await htx.mealEntry.deleteMany({ where: { userId } });
+      await htx.workoutEntry.deleteMany({ where: { userId } });
+      await htx.userHealthProfile.deleteMany({ where: { userId } });
+    });
+
     await prisma.$transaction(async (tx) => {
       await tx.dailyGoal.deleteMany({
         where: { dailyLog: { challenge: { userId } } },
       });
       await tx.dailyLog.deleteMany({
+        where: { challenge: { userId } },
+      });
+      await tx.periodGoalProgress.deleteMany({
         where: { challenge: { userId } },
       });
       await tx.goalTemplate.deleteMany({

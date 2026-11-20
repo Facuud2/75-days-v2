@@ -1,16 +1,19 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUIStore } from '@/store/useUIStore';
 import { useChallengeStore, Difficulty } from '@/store/useChallengeStore';
 import { useAuthStore } from '@/store/useAuthStore';
+import { useQuestStore } from '@/store/useQuestStore';
+import type { AiSideQuestDraft, AiUserContext } from '@/lib/api/ai';
 import {
   X, Target, Calendar, Utensils, Dumbbell, Droplets, ClipboardList, Star, Pencil, Sparkles,
 } from 'lucide-react';
 import CustomTaskEditorSheet, {
   createEmptyCustomTask,
   DEFAULT_CUSTOM_TASKS,
+  formatTaskBadge,
   getCustomTaskIcon,
   type CustomTask,
 } from '@/components/onboarding/CustomTaskEditorSheet';
@@ -33,11 +36,10 @@ export const PLANS: {
       borderColor: 'border-sky-500',
       glowColor: 'shadow-sky-500/20',
       tasks: [
-        { icon: <Utensils className="w-3.5 h-3.5 text-sky-400" />, label: 'Comer saludable (alcohol social)' },
-        { icon: <Droplets className="w-3.5 h-3.5 text-sky-400" />, label: 'Agua (3L al día)' },
-        { icon: <Dumbbell className="w-3.5 h-3.5 text-sky-400" />, label: 'Ejercicio 45 min (1 día libre)' },
-        { icon: <Star className="w-3.5 h-3.5 text-sky-400" />, label: 'Leer 10 páginas' },
-        { icon: <Star className="w-3.5 h-3.5 text-sky-400" />, label: 'Sin fotos de progreso' },
+        { icon: <Utensils className="w-3.5 h-3.5 text-sky-400" />, label: 'Comer saludable (diaria)' },
+        { icon: <Droplets className="w-3.5 h-3.5 text-sky-400" />, label: 'Agua: 3 L/día' },
+        { icon: <Dumbbell className="w-3.5 h-3.5 text-sky-400" />, label: 'Entrenamiento: 6 sesiones/sem' },
+        { icon: <Star className="w-3.5 h-3.5 text-sky-400" />, label: 'Lectura: 10 págs/día' },
       ],
     },
     {
@@ -49,9 +51,9 @@ export const PLANS: {
       glowColor: 'shadow-rose-500/20',
       tasks: [
         { icon: <Utensils className="w-3.5 h-3.5 text-rose-300" />, label: 'Dieta saludable (Sin alcohol)' },
-        { icon: <Dumbbell className="w-3.5 h-3.5 text-rose-300" />, label: 'Ejercicio 45 min' },
-        { icon: <Star className="w-3.5 h-3.5 text-rose-300" />, label: 'Leer 10 páginas' },
-        { icon: <ClipboardList className="w-3.5 h-3.5 text-rose-300" />, label: '3-4 fotos de progreso/sem' },
+        { icon: <Dumbbell className="w-3.5 h-3.5 text-rose-300" />, label: 'Ejercicio 45 min (diaria)' },
+        { icon: <Star className="w-3.5 h-3.5 text-rose-300" />, label: 'Lectura: 10 págs/día' },
+        { icon: <ClipboardList className="w-3.5 h-3.5 text-rose-300" />, label: 'Fotos de progreso: 4/sem' },
       ],
     },
     {
@@ -95,15 +97,40 @@ export default function PlansModal() {
     isActive,
     difficulty: currentDifficulty,
     customGoalsTemplate,
+    breakStreakOnPeriodFail: currentBreakStreakOnPeriodFail,
   } = useChallengeStore();
   const { user } = useAuthStore();
+  const { quests, createCustomQuest } = useQuestStore();
   const [difficulty, setDifficulty] = useState<Difficulty>(currentDifficulty || 'Hard');
   const [customTasks, setCustomTasks] = useState<CustomTask[]>(DEFAULT_CUSTOM_TASKS);
+  const [breakStreakOnPeriodFail, setBreakStreakOnPeriodFail] = useState<boolean>(
+    Boolean(currentBreakStreakOnPeriodFail)
+  );
+  const [pendingAiSideQuests, setPendingAiSideQuests] = useState<AiSideQuestDraft[]>([]);
   const [isCustomEditorOpen, setIsCustomEditorOpen] = useState(false);
   const [isAiPlanSheetOpen, setIsAiPlanSheetOpen] = useState(false);
   const [showCustomModePicker, setShowCustomModePicker] = useState(false);
   const [showModifyChoiceModal, setShowModifyChoiceModal] = useState(false);
   const [isSavingCustom, setIsSavingCustom] = useState(false);
+
+  const plansModalUserContext = useMemo<AiUserContext>(
+    () => ({
+      age: user?.age ?? null,
+      heightCm: user?.height ?? null,
+      weightKg: user?.weight ?? null,
+      targetWeightKg: user?.targetWeight ?? null,
+      activeSideQuests: (quests || [])
+        .filter((q) => !q.completed)
+        .map((q) => ({
+          title: q.title,
+          difficulty: q.difficulty,
+          durationDays: q.durationDays,
+          description: q.description,
+          tasks: q.currentRun?.tasks?.map((t) => t.title) ?? [],
+        })),
+    }),
+    [user?.age, user?.height, user?.weight, user?.targetWeight, quests]
+  );
 
   const onboardingCompleted = user?.onboardingCompleted === true;
   // Reiniciar con el plan que ya está corriendo no cambia nada para planes fijos;
@@ -120,19 +147,31 @@ export default function PlansModal() {
     setDifficulty(currentDifficulty || 'Hard');
     setShowCustomModePicker(false);
     setShowModifyChoiceModal(false);
+    setPendingAiSideQuests([]);
     if (currentDifficulty === 'Custom' && customGoalsTemplate.length > 0) {
       setCustomTasks(
         customGoalsTemplate.map((g, idx) => ({
-          id: `existing-${idx}-${g.title}`,
+          id: g.id || `existing-${idx}-${g.title}`,
           title: g.title,
           description: g.description || '',
           icon: g.icon || 'dumbbell',
+          cadence: g.cadence || 'daily',
+          measurementType: g.measurementType || 'boolean',
+          targetValue: g.targetValue ?? 1,
+          targetUnit: g.targetUnit || '',
         }))
       );
+      setBreakStreakOnPeriodFail(Boolean(currentBreakStreakOnPeriodFail));
     } else {
       setCustomTasks(DEFAULT_CUSTOM_TASKS);
+      setBreakStreakOnPeriodFail(false);
     }
-  }, [isPlansModalOpen, currentDifficulty, customGoalsTemplate]);
+  }, [
+    isPlansModalOpen,
+    currentDifficulty,
+    customGoalsTemplate,
+    currentBreakStreakOnPeriodFail,
+  ]);
 
   const handleClose = useCallback(() => {
     setIsCustomEditorOpen(false);
@@ -176,12 +215,22 @@ export default function PlansModal() {
 
   const formatCustomGoals = (tasksToFormat: CustomTask[]) =>
     tasksToFormat
-      .filter(task => task.title.trim())
-      .map(({ title, description, icon }) => ({
-        title: title.trim(),
-        description: description.trim(),
-        icon,
-      }));
+      .filter((task) => task.title.trim())
+      .map(
+        (
+          { title, description, icon, cadence, measurementType, targetValue, targetUnit },
+          index
+        ) => ({
+          title: title.trim(),
+          description: description.trim(),
+          icon,
+          cadence: cadence || ('daily' as const),
+          measurementType: measurementType || ('boolean' as const),
+          targetValue: targetValue ?? 1,
+          targetUnit: targetUnit?.trim() || null,
+          order: index,
+        })
+      );
 
   const handleStart = async () => {
     if (isActive) {
@@ -195,9 +244,36 @@ export default function PlansModal() {
       }
     }
     const formattedCustomGoals = formatCustomGoals(customTasks);
-    await startChallenge(difficulty, difficulty === 'Custom' ? formattedCustomGoals : undefined);
+    await startChallenge(
+      difficulty,
+      difficulty === 'Custom' ? formattedCustomGoals : undefined,
+      difficulty === 'Custom' ? breakStreakOnPeriodFail : undefined
+    );
     handleClose();
     router.push('/dashboard');
+  };
+
+  const persistPendingSideQuests = async (sideQuestsToCreate: AiSideQuestDraft[]) => {
+    if (sideQuestsToCreate.length === 0) return;
+    await Promise.all(
+      sideQuestsToCreate.map((quest) =>
+        createCustomQuest({
+          title: quest.title,
+          description: quest.description,
+          icon: quest.icon,
+          difficulty: quest.difficulty,
+          durationDays: quest.durationDays,
+          tasks: quest.tasks.map((t) => ({
+            title: t.title,
+            description: t.description || null,
+            icon: t.icon || 'target',
+            frequency: t.frequency,
+            targetValue: t.targetValue ?? null,
+            targetUnit: t.targetUnit || null,
+          })),
+        })
+      )
+    );
   };
 
   const handleContinueActiveCustom = async () => {
@@ -205,7 +281,9 @@ export default function PlansModal() {
     if (formattedCustomGoals.length === 0) return;
     setIsSavingCustom(true);
     try {
-      await updateCustomGoals(formattedCustomGoals);
+      await updateCustomGoals(formattedCustomGoals, breakStreakOnPeriodFail);
+      await persistPendingSideQuests(pendingAiSideQuests);
+      setPendingAiSideQuests([]);
       handleClose();
       router.push('/dashboard');
     } finally {
@@ -218,7 +296,9 @@ export default function PlansModal() {
     if (formattedCustomGoals.length === 0) return;
     setIsSavingCustom(true);
     try {
-      await startChallenge('Custom', formattedCustomGoals);
+      await startChallenge('Custom', formattedCustomGoals, breakStreakOnPeriodFail);
+      await persistPendingSideQuests(pendingAiSideQuests);
+      setPendingAiSideQuests([]);
       handleClose();
       router.push('/dashboard');
     } finally {
@@ -300,7 +380,7 @@ export default function PlansModal() {
                         const TaskIcon = getCustomTaskIcon(task.icon);
                         return {
                           icon: <TaskIcon className="w-3.5 h-3.5 text-emerald-400" />,
-                          label: task.title,
+                          label: `${task.title} (${formatTaskBadge(task)})`,
                         };
                       })
                     : plan.tasks;
@@ -492,6 +572,8 @@ export default function PlansModal() {
         isOpen={isCustomEditorOpen}
         tasks={customTasks}
         onChange={setCustomTasks}
+        breakStreakOnPeriodFail={breakStreakOnPeriodFail}
+        onChangeBreakStreak={setBreakStreakOnPeriodFail}
         onClose={() => {
           const validTasks = customTasks.filter((t) => t.title.trim() !== '');
           setCustomTasks(validTasks);
@@ -505,12 +587,41 @@ export default function PlansModal() {
       <AICustomPlanSheet
         isOpen={isAiPlanSheetOpen}
         initialTasks={customTasks}
-        onApplyPlan={(tasks) => {
+        userContext={plansModalUserContext}
+        saveButtonLabel={isActiveCustom ? 'Guardar cambios del plan' : 'Guardar todo y comenzar plan'}
+        isSaving={isSavingCustom}
+        onApplyPlan={async (tasks, createdSideQuests = []) => {
           const validTasks = tasks.filter((t) => t.title.trim() !== '');
           setCustomTasks(validTasks);
-          setIsAiPlanSheetOpen(false);
-          if (isActiveCustom && validTasks.length > 0) {
+          if (validTasks.length === 0) {
+            setIsAiPlanSheetOpen(false);
+            return;
+          }
+
+          if (isActiveCustom) {
+            setPendingAiSideQuests(createdSideQuests);
+            setIsAiPlanSheetOpen(false);
             setShowModifyChoiceModal(true);
+            return;
+          }
+
+          if (
+            isActive &&
+            !confirm(
+              'Ya tienes un desafío activo. ¿Estás seguro de que quieres reiniciarlo con este nuevo plan Custom? Perderás tu racha actual.'
+            )
+          ) {
+            return;
+          }
+
+          setIsSavingCustom(true);
+          try {
+            await startChallenge('Custom', formatCustomGoals(validTasks));
+            await persistPendingSideQuests(createdSideQuests);
+            handleClose();
+            router.push('/dashboard');
+          } finally {
+            setIsSavingCustom(false);
           }
         }}
         onEditManually={(tasks) => {

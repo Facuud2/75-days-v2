@@ -6,6 +6,7 @@ import { ControllerRequest, ControllerResponse } from '../../http';
 import { getServerConfig } from '../../config';
 import { DEFAULT_GOALS } from '../../constants/defaultGoals';
 import { localChallengeDate, parseTimezoneOffset } from '../../utils/challengeDate';
+import { normalizeGoalSpec } from '../../utils/periodRules';
 
 export function serializeAuthUser(user: {
   id: string;
@@ -119,6 +120,8 @@ function parseAgeFromBirthdaysList(
   return null;
 }
 
+const EXTERNAL_OAUTH_TIMEOUT_MS = 5_000;
+
 async function fetchGoogleBirthdayAge(accessToken: string): Promise<number | null> {
   const endpoints = [
     'https://people.googleapis.com/v1/people/me?personFields=birthdays&sources=READ_SOURCE_TYPE_PROFILE',
@@ -128,6 +131,7 @@ async function fetchGoogleBirthdayAge(accessToken: string): Promise<number | nul
   for (const url of endpoints) {
     try {
       const res = await fetch(url, {
+        signal: AbortSignal.timeout(EXTERNAL_OAUTH_TIMEOUT_MS),
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       if (!res.ok) continue;
@@ -168,6 +172,7 @@ async function verifyGoogleIdentity(params: {
 
   if (params.accessToken) {
     const userInfoRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      signal: AbortSignal.timeout(EXTERNAL_OAUTH_TIMEOUT_MS),
       headers: { Authorization: `Bearer ${params.accessToken}` },
     });
 
@@ -207,7 +212,8 @@ async function verifyGoogleIdentity(params: {
 
   if (params.idToken) {
     const tokenInfoRes = await fetch(
-      `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(params.idToken)}`
+      `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(params.idToken)}`,
+      { signal: AbortSignal.timeout(EXTERNAL_OAUTH_TIMEOUT_MS) }
     );
 
     if (!tokenInfoRes.ok) {
@@ -251,16 +257,17 @@ const registerSchema = z.object({
   password: z.string().min(6),
   difficulty: z.enum(['Soft', 'Medium', 'Hard', 'Custom']).default('Medium'),
   timezoneOffset: z.number().optional(),
+  acceptTerms: z.literal(true).optional(),
   customGoalsTemplate: z
     .array(
       z.object({
         title: z.string(),
         description: z.string().optional(),
         icon: z.string().optional(),
-      })
+      }).strict()
     )
     .optional(),
-});
+}).strict();
 
 export const register = async (req: ControllerRequest, res: ControllerResponse) => {
   try {
@@ -301,30 +308,43 @@ export const register = async (req: ControllerRequest, res: ControllerResponse) 
       });
 
       const today = localChallengeDate(parseTimezoneOffset(timezoneOffset));
-      const templatesToUse =
+      const rawTemplates =
         difficulty === 'Custom' && customGoalsTemplate
           ? customGoalsTemplate
           : DEFAULT_GOALS[difficulty as keyof typeof DEFAULT_GOALS];
+      const normalized = rawTemplates.map((g, idx) => normalizeGoalSpec(g, idx));
+      const dailyTemplates = normalized.filter((g) => g.cadence === 'daily');
 
       const challenge = await tx.challenge.create({
         data: {
           userId: newUser.id,
           difficulty,
+          breakStreakOnPeriodFail: difficulty === 'Hard',
           customGoalsTemplate: {
-            create: templatesToUse.map((g) => ({
+            create: normalized.map((g) => ({
               title: g.title,
               description: g.description,
               icon: g.icon,
+              cadence: g.cadence,
+              measurementType: g.measurementType,
+              targetValue: g.targetValue,
+              targetUnit: g.targetUnit,
+              order: g.order,
+              isActive: true,
             })),
           },
           dailyLogs: {
             create: {
               date: today,
               goals: {
-                create: templatesToUse.map((g) => ({
+                create: dailyTemplates.map((g) => ({
                   title: g.title,
                   description: g.description,
                   icon: g.icon,
+                  measurementType: g.measurementType,
+                  targetValue: g.targetValue,
+                  targetUnit: g.targetUnit,
+                  currentValue: 0,
                 })),
               },
             },
@@ -333,6 +353,7 @@ export const register = async (req: ControllerRequest, res: ControllerResponse) 
         include: {
           customGoalsTemplate: true,
           dailyLogs: { include: { goals: true } },
+          periodGoals: true,
         },
       });
 
@@ -358,7 +379,7 @@ export const register = async (req: ControllerRequest, res: ControllerResponse) 
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string(),
-});
+}).strict();
 
 export const login = async (req: ControllerRequest, res: ControllerResponse) => {
   try {
@@ -406,6 +427,7 @@ const googleAuthSchema = z
     confirmLink: z.boolean().optional(),
     timezoneOffset: z.number().optional(),
   })
+  .strict()
   .refine((data) => Boolean(data.accessToken || data.idToken), {
     message: 'Google token is required',
   });
@@ -510,27 +532,41 @@ export const googleAuth = async (req: ControllerRequest, res: ControllerResponse
       });
 
       const today = localChallengeDate(parseTimezoneOffset(timezoneOffset));
-      const templatesToUse = DEFAULT_GOALS['Medium'];
+      const normalized = DEFAULT_GOALS['Medium'].map((g, idx) =>
+        normalizeGoalSpec(g, idx)
+      );
+      const dailyTemplates = normalized.filter((g) => g.cadence === 'daily');
 
       const challenge = await tx.challenge.create({
         data: {
           userId: newUser.id,
           difficulty: 'Medium',
+          breakStreakOnPeriodFail: false,
           customGoalsTemplate: {
-            create: templatesToUse.map((g) => ({
+            create: normalized.map((g) => ({
               title: g.title,
               description: g.description,
               icon: g.icon,
+              cadence: g.cadence,
+              measurementType: g.measurementType,
+              targetValue: g.targetValue,
+              targetUnit: g.targetUnit,
+              order: g.order,
+              isActive: true,
             })),
           },
           dailyLogs: {
             create: {
               date: today,
               goals: {
-                create: templatesToUse.map((g) => ({
+                create: dailyTemplates.map((g) => ({
                   title: g.title,
                   description: g.description,
                   icon: g.icon,
+                  measurementType: g.measurementType,
+                  targetValue: g.targetValue,
+                  targetUnit: g.targetUnit,
+                  currentValue: 0,
                 })),
               },
             },
@@ -539,6 +575,7 @@ export const googleAuth = async (req: ControllerRequest, res: ControllerResponse
         include: {
           customGoalsTemplate: true,
           dailyLogs: { include: { goals: true } },
+          periodGoals: true,
         },
       });
 
@@ -613,7 +650,7 @@ const completeOnboardingSchema = z.object({
   avatarUrl: z.string().max(2_000_000).nullable().optional(),
   bannerUrl: z.string().max(2_000_000).nullable().optional(),
   profileQuote: z.string().max(120).nullable().optional(),
-});
+}).strict();
 
 export const completeOnboarding = async (
   req: ControllerRequest,

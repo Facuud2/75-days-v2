@@ -1,11 +1,10 @@
 import { Redis } from '@upstash/redis';
 import { Ratelimit } from '@upstash/ratelimit';
 
-export type RateLimitKind = 'auth' | 'ai';
+export type RateLimitKind = 'auth' | 'ai' | 'sensitive' | 'external';
 
 let redisClient: Redis | null = null;
-let authLimiter: Ratelimit | null = null;
-let aiLimiter: Ratelimit | null = null;
+const limiters: Partial<Record<RateLimitKind, Ratelimit>> = {};
 let upstashDisabledReason: string | null = null;
 
 // Lightweight fallback window tracker when Upstash is not configured or token lacks EVALSHA permission
@@ -13,8 +12,11 @@ const localWindows = new Map<string, { count: number; resetAt: number }>();
 
 function getWindowLimit(kind: RateLimitKind): number {
   const isProd = process.env.NODE_ENV === 'production';
-  if (kind === 'auth') return isProd ? 15 : 500;
-  return isProd ? 40 : 500;
+  if (!isProd) return 500;
+  if (kind === 'auth') return 15;
+  if (kind === 'sensitive') return 20;
+  if (kind === 'external') return 60;
+  return 40;
 }
 
 const WINDOW_MS = 15 * 60 * 1000;
@@ -58,27 +60,14 @@ function getLimiter(kind: RateLimitKind): Ratelimit | null {
   const redis = getRedisClient();
   if (!redis) return null;
 
-  const limit = getWindowLimit(kind);
-
-  if (kind === 'auth') {
-    if (!authLimiter) {
-      authLimiter = new Ratelimit({
-        redis,
-        limiter: Ratelimit.slidingWindow(limit, '15 m'),
-        prefix: 'rl:75days:auth',
-      });
-    }
-    return authLimiter;
-  }
-
-  if (!aiLimiter) {
-    aiLimiter = new Ratelimit({
+  if (!limiters[kind]) {
+    limiters[kind] = new Ratelimit({
       redis,
-      limiter: Ratelimit.slidingWindow(limit, '15 m'),
-      prefix: 'rl:75days:ai',
+      limiter: Ratelimit.slidingWindow(getWindowLimit(kind), '15 m'),
+      prefix: `rl:75days:${kind}`,
     });
   }
-  return aiLimiter;
+  return limiters[kind]!;
 }
 
 export function extractClientIdentifier(req: Request): string {
@@ -130,7 +119,11 @@ export async function enforceRateLimit(
     const errorMsg =
       kind === 'auth'
         ? 'Too many authentication attempts. Try again later.'
-        : 'Demasiadas solicitudes a la IA. Intentá de nuevo en unos minutos.';
+        : kind === 'sensitive'
+          ? 'Demasiadas operaciones sensibles de cuenta. Intentá más tarde.'
+          : kind === 'external'
+            ? 'Demasiadas solicitudes a integraciones externas. Intentá más tarde.'
+            : 'Demasiadas solicitudes a la IA. Intentá de nuevo en unos minutos.';
 
     return Response.json(
       { error: errorMsg },

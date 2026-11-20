@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState, useEffect, useRef, ChangeEvent } from 'react';
+import React, { useState, useEffect, useMemo, useRef, ChangeEvent } from 'react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useChallengeStore, Difficulty } from '@/store/useChallengeStore';
 import { useQuestStore, type SideQuestTemplate } from '@/store/useQuestStore';
 import { useUIStore } from '@/store/useUIStore';
 import { userService } from '@/lib/api/users';
+import type { AiSideQuestDraft, AiUserContext } from '@/lib/api/ai';
 import { setPendingTutorial } from '@/lib/tutorial';
 import { getInitial, getNameHandle } from '@/lib/utils/display';
 import { useRouter } from 'next/navigation';
@@ -22,6 +23,7 @@ import {
   Crop,
   RotateCcw,
   Sparkles,
+  Trash2,
   X,
 } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
@@ -35,6 +37,7 @@ import CustomTaskEditorSheet, {
   type CustomTask,
 } from '@/components/onboarding/CustomTaskEditorSheet';
 import AICustomPlanSheet from '@/components/onboarding/AICustomPlanSheet';
+import AISideQuestSheet from '@/components/onboarding/AISideQuestSheet';
 import CustomPlanModeSheet from '@/components/onboarding/CustomPlanModeSheet';
 import ImageCropperModal from '@/components/profile/ImageCropperModal';
 import { calculateAgeBasedBmi, type BmiCategoryId } from '@/lib/utils/bmi';
@@ -82,7 +85,7 @@ export default function Onboarding() {
   const [direction, setDirection] = useState<1 | -1>(1);
   const [isChallengeLoading, setIsChallengeLoading] = useState(false);
   const { startChallenge } = useChallengeStore();
-  const { availableQuests, fetchAvailableQuests, subscribeToQuest } = useQuestStore();
+  const { availableQuests, fetchAvailableQuests, subscribeToQuest, createCustomQuest } = useQuestStore();
   const router = useRouter();
   const reduceMotion = useReducedMotion();
 
@@ -141,9 +144,11 @@ export default function Onboarding() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, user?.age]);
 
-  // Side Quests
+  // Side Quests (visual-only until user saves and starts the plan)
   const [selectedQuests, setSelectedQuests] = useState<string[]>([]);
+  const [pendingCustomQuests, setPendingCustomQuests] = useState<AiSideQuestDraft[]>([]);
   const [previewQuest, setPreviewQuest] = useState<SideQuestTemplate | null>(null);
+  const [isAiSideQuestSheetOpen, setIsAiSideQuestSheetOpen] = useState(false);
 
   const toggleQuestSelection = (questId: string) => {
     setSelectedQuests((prev) =>
@@ -157,6 +162,7 @@ export default function Onboarding() {
   const [difficulty, setDifficulty] = useState<Difficulty>('Medium');
   const [planDirection, setPlanDirection] = useState<1 | -1>(1);
   const [customTasks, setCustomTasks] = useState<CustomTask[]>([]);
+  const [breakStreakOnPeriodFail, setBreakStreakOnPeriodFail] = useState(false);
   const [isCustomEditorOpen, setIsCustomEditorOpen] = useState(false);
   const [isAiPlanSheetOpen, setIsAiPlanSheetOpen] = useState(false);
   const [isCustomModeSheetOpen, setIsCustomModeSheetOpen] = useState(false);
@@ -181,6 +187,7 @@ export default function Onboarding() {
       }
       if (typeof draft.height === 'number') setHeight(draft.height);
       if (Array.isArray(draft.selectedQuests)) setSelectedQuests(draft.selectedQuests);
+      if (Array.isArray(draft.pendingCustomQuests)) setPendingCustomQuests(draft.pendingCustomQuests);
       if (draft.difficulty) setDifficulty(draft.difficulty);
       if (Array.isArray(draft.customTasks)) setCustomTasks(draft.customTasks);
       if (typeof draft.isAiPlanSheetOpen === 'boolean') {
@@ -203,6 +210,7 @@ export default function Onboarding() {
           targetWeight,
           height,
           selectedQuests,
+          pendingCustomQuests,
           difficulty,
           customTasks,
           isAiPlanSheetOpen,
@@ -219,10 +227,40 @@ export default function Onboarding() {
     targetWeight,
     height,
     selectedQuests,
+    pendingCustomQuests,
     difficulty,
     customTasks,
     isAiPlanSheetOpen,
   ]);
+
+  const onboardingAiUserContext = useMemo<AiUserContext>(() => {
+    const selectedTemplateSummaries = selectedQuests
+      .map((qId) => availableQuests.find((aq) => aq.id === qId))
+      .filter((q): q is SideQuestTemplate => Boolean(q))
+      .map((q) => ({
+        title: q.title,
+        difficulty: q.difficulty,
+        durationDays: q.durationDays,
+        description: q.description,
+        tasks: q.tasks?.map((t) => t.title) ?? [],
+      }));
+
+    const pendingSummaries = pendingCustomQuests.map((q) => ({
+      title: q.title,
+      difficulty: q.difficulty,
+      durationDays: q.durationDays,
+      description: q.description,
+      tasks: q.tasks.map((t) => t.title),
+    }));
+
+    return {
+      age,
+      heightCm: height,
+      weightKg: weight,
+      targetWeightKg: targetWeight,
+      activeSideQuests: [...selectedTemplateSummaries, ...pendingSummaries],
+    };
+  }, [age, height, weight, targetWeight, selectedQuests, availableQuests, pendingCustomQuests]);
 
   const validCustomTasks = customTasks.filter((t) => t.title.trim() !== '');
   const hasCustomTasks = validCustomTasks.length > 0;
@@ -299,6 +337,82 @@ export default function Onboarding() {
     setCropSrc(source);
   };
 
+  const persistAndCompleteOnboarding = async (
+    finalDifficulty: Difficulty,
+    tasksToPersist: CustomTask[],
+    extraCustomQuests: AiSideQuestDraft[] = []
+  ) => {
+    setIsChallengeLoading(true);
+    try {
+      const formattedCustomGoals = tasksToPersist
+        .filter((t) => t.title.trim())
+        .map(
+          (
+            { title, description, icon, cadence, measurementType, targetValue, targetUnit },
+            index
+          ) => ({
+            title: title.trim(),
+            description: description.trim(),
+            icon,
+            cadence: cadence || ('daily' as const),
+            measurementType: measurementType || ('boolean' as const),
+            targetValue: targetValue ?? 1,
+            targetUnit: targetUnit?.trim() || null,
+            order: index,
+          })
+        );
+
+      // startChallenge debe completar antes que completeOnboarding: si corren en
+      // paralelo y completeOnboarding termina primero, AuthGuard redirige a
+      // /dashboard antes de que el reto exista en la DB y en el store.
+      await startChallenge(
+        finalDifficulty,
+        finalDifficulty === 'Custom' ? formattedCustomGoals : undefined,
+        finalDifficulty === 'Custom' ? breakStreakOnPeriodFail : undefined
+      );
+
+      // Persistir todas las misiones secundarias elegidas o diseñadas con IA recién al confirmar
+      const allCustomQuests = [...pendingCustomQuests, ...extraCustomQuests];
+      await Promise.all([
+        ...selectedQuests.map((qId) => {
+          const q = availableQuests.find((aq) => aq.id === qId);
+          return q
+            ? subscribeToQuest(q.title, q.difficulty, q.durationDays)
+            : Promise.resolve();
+        }),
+        ...allCustomQuests.map((quest) =>
+          createCustomQuest({
+            title: quest.title,
+            description: quest.description,
+            icon: quest.icon,
+            difficulty: quest.difficulty,
+            durationDays: quest.durationDays,
+            tasks: quest.tasks.map((t) => ({
+              title: t.title,
+              description: t.description || null,
+              icon: t.icon || 'target',
+              frequency: t.frequency,
+              targetValue: t.targetValue ?? null,
+              targetUnit: t.targetUnit || null,
+            })),
+          })
+        ),
+      ]);
+
+      await completeOnboarding();
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem(draftStorageKey);
+      }
+      const completedUserId = useAuthStore.getState().user?.id;
+      setPendingTutorial(completedUserId);
+      useUIStore.getState().openTutorial();
+      setIsAiPlanSheetOpen(false);
+      router.push('/dashboard');
+    } catch {
+      setIsChallengeLoading(false);
+    }
+  };
+
   const handleNext = async () => {
     if (!canProceed()) return;
 
@@ -335,46 +449,13 @@ export default function Onboarding() {
     }
 
     if (currentStepId === 'quests') {
-      void Promise.all(
-        selectedQuests.map((qId) => {
-          const q = availableQuests.find((aq) => aq.id === qId);
-          return q
-            ? subscribeToQuest(q.title, q.difficulty, q.durationDays)
-            : Promise.resolve();
-        })
-      );
+      // Mantenemos las selecciones en memoria hasta el guardado final del plan
       goToStep(step + 1);
       return;
     }
 
     if (currentStepId === 'plan') {
-      setIsChallengeLoading(true);
-      try {
-        const formattedCustomGoals = customTasks
-          .filter((t) => t.title.trim())
-          .map(({ title, description, icon }) => ({
-            title: title.trim(),
-            description: description.trim(),
-            icon,
-          }));
-        // startChallenge debe completar antes que completeOnboarding: si corren en
-        // paralelo y completeOnboarding termina primero, AuthGuard redirige a
-        // /dashboard antes de que el reto exista en la DB y en el store.
-        await startChallenge(
-          difficulty,
-          difficulty === 'Custom' ? formattedCustomGoals : undefined
-        );
-        await completeOnboarding();
-        if (typeof window !== 'undefined') {
-          sessionStorage.removeItem(draftStorageKey);
-        }
-        const completedUserId = useAuthStore.getState().user?.id;
-        setPendingTutorial(completedUserId);
-        useUIStore.getState().openTutorial();
-        router.push('/dashboard');
-      } catch {
-        setIsChallengeLoading(false);
-      }
+      await persistAndCompleteOnboarding(difficulty, customTasks);
       return;
     }
 
@@ -1189,6 +1270,98 @@ export default function Onboarding() {
             {/* Step Actividades dinámicas */}
             {currentStepId === 'quests' && (
               <div className="h-full min-h-0 overflow-y-auto overscroll-contain space-y-2.5 pr-0.5 py-1">
+                {/* Opción para crear misión secundaria propia con IA */}
+                <button
+                  type="button"
+                  onClick={() => setIsAiSideQuestSheetOpen(true)}
+                  className="w-full p-3.5 text-left rounded-2xl border border-dashed transition-transform active:scale-[0.985] cursor-pointer flex items-center justify-between gap-3"
+                  style={{
+                    touchAction: 'manipulation',
+                    backgroundColor: 'var(--surface-card)',
+                    borderColor: 'var(--border-control)',
+                  }}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span
+                      className="w-9 h-9 rounded-xl border flex items-center justify-center shrink-0"
+                      style={{
+                        backgroundColor: 'var(--surface-inset)',
+                        borderColor: 'var(--border-subtle)',
+                        color: 'var(--accent-text)',
+                      }}
+                    >
+                      <Sparkles size={16} />
+                    </span>
+                    <div className="min-w-0">
+                      <h3
+                        className="font-semibold text-sm leading-snug"
+                        style={{ color: 'var(--text-primary)' }}
+                      >
+                        Crear misión secundaria con IA
+                      </h3>
+                      <p
+                        className="text-xs mt-0.5 truncate"
+                        style={{ color: 'var(--text-muted)' }}
+                      >
+                        Diseñá tu propia misión paralela mediante chat y voz
+                      </p>
+                    </div>
+                  </div>
+                  <ChevronRight size={16} className="shrink-0" style={{ color: 'var(--text-muted)' }} />
+                </button>
+
+                {/* Misiones personalizadas diseñadas con IA en este onboarding */}
+                {pendingCustomQuests.map((quest, qIdx) => (
+                  <div
+                    key={`${quest.title}-${qIdx}`}
+                    className="w-full p-3.5 rounded-2xl border flex items-center justify-between gap-2"
+                    style={{
+                      backgroundColor: 'var(--surface-raised)',
+                      borderColor: 'var(--accent-fill)',
+                    }}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <h3
+                          className="font-semibold text-sm truncate"
+                          style={{ color: 'var(--text-primary)' }}
+                        >
+                          {quest.title}
+                        </h3>
+                        <span
+                          className="text-[11px] font-medium px-2 py-0.5 rounded-md shrink-0"
+                          style={{
+                            backgroundColor: 'var(--surface-inset)',
+                            color: 'var(--accent-text)',
+                          }}
+                        >
+                          IA · {quest.difficulty}
+                        </span>
+                      </div>
+                      <p
+                        className="text-xs mt-0.5 flex items-center gap-1.5"
+                        style={{ color: 'var(--text-muted)' }}
+                      >
+                        <span>{quest.durationDays} días</span>
+                        <span aria-hidden="true">·</span>
+                        <span>{quest.tasks.length} tareas</span>
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      aria-label={`Quitar ${quest.title}`}
+                      onClick={() =>
+                        setPendingCustomQuests((prev) => prev.filter((_, idx) => idx !== qIdx))
+                      }
+                      className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 cursor-pointer"
+                      style={{ color: 'var(--status-danger)' }}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ))}
+
                 {fetchQuestsStatus === 'loading' ? (
                   Array.from({ length: 4 }).map((_, i) => (
                     <div
@@ -1519,7 +1692,9 @@ export default function Onboarding() {
           </button>
         ) : null}
 
-        {currentStepId === 'quests' && selectedQuests.length === 0 ? (
+        {currentStepId === 'quests' &&
+        selectedQuests.length === 0 &&
+        pendingCustomQuests.length === 0 ? (
           <button
             type="button"
             onClick={handleSkipOptional}
@@ -1604,6 +1779,8 @@ export default function Onboarding() {
         isOpen={isCustomEditorOpen}
         tasks={customTasks}
         onChange={setCustomTasks}
+        breakStreakOnPeriodFail={breakStreakOnPeriodFail}
+        onChangeBreakStreak={setBreakStreakOnPeriodFail}
         onClose={() => {
           setCustomTasks((prev) => prev.filter((t) => t.title.trim() !== ''));
           setIsCustomEditorOpen(false);
@@ -1613,9 +1790,12 @@ export default function Onboarding() {
       <AICustomPlanSheet
         isOpen={isAiPlanSheetOpen}
         initialTasks={customTasks}
-        onApplyPlan={(tasks) => {
+        userContext={onboardingAiUserContext}
+        saveButtonLabel="Guardar todo y comenzar plan"
+        isSaving={isChallengeLoading}
+        onApplyPlan={async (tasks, createdSideQuests = []) => {
           setCustomTasks(tasks);
-          setIsAiPlanSheetOpen(false);
+          await persistAndCompleteOnboarding('Custom', tasks, createdSideQuests);
         }}
         onEditManually={(tasks) => {
           setCustomTasks(tasks);
@@ -1623,6 +1803,17 @@ export default function Onboarding() {
           setIsCustomEditorOpen(true);
         }}
         onClose={() => setIsAiPlanSheetOpen(false)}
+      />
+
+      <AISideQuestSheet
+        isOpen={isAiSideQuestSheetOpen}
+        userContext={onboardingAiUserContext}
+        saveButtonLabel="Sumar misión al onboarding"
+        onApplyQuest={(quest) => {
+          setPendingCustomQuests((prev) => [...prev, quest]);
+          setIsAiSideQuestSheetOpen(false);
+        }}
+        onClose={() => setIsAiSideQuestSheetOpen(false)}
       />
 
       <ImageCropperModal

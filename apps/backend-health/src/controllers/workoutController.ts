@@ -16,7 +16,7 @@ const WorkoutSchema = z.object({
     distanceKm: z.number().positive().max(500).optional(),
     loadVolumeKg: z.number().positive().max(500000).optional(),
     notes: z.string().max(500).optional(),
-});
+}).strict();
 
 // ── Controllers ───────────────────────────────────────────────────────────────
 

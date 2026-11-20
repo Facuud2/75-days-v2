@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { authenticate } from '../middlewares/auth';
+import { externalApiRateLimit } from '../middlewares/rateLimit';
+import { asyncHandler } from '../utils/asyncHandler';
 import {
     connectStrava,
     stravaCallback,
@@ -10,16 +12,13 @@ import {
 const router = Router();
 
 // OAuth flow
-// This one generates the URL, doesn't necessarily need auth if done simply, but better to protect it
-// Wait, connectStrava doesn't do anything with the user session yet as currently written, but usually we pass the user ID in the state. So we should authenticate the user BEFORE they redirect.
-// We will call this from the frontend with the user's token.
-router.get('/auth', authenticate, connectStrava);
+router.get('/auth', authenticate, externalApiRateLimit, connectStrava);
 
-// The callback comes from Strava, so it cannot have our JWT `authenticate` middleware
-router.get('/callback', stravaCallback);
+// The callback comes from Strava, verified via signed OAuth state token
+router.get('/callback', externalApiRateLimit, asyncHandler(stravaCallback));
 
 // Protected routes
-router.get('/status', authenticate, getStravaStatus);
-router.post('/sync', authenticate, syncStravaWorkouts);
+router.get('/status', authenticate, asyncHandler(getStravaStatus));
+router.post('/sync', authenticate, externalApiRateLimit, asyncHandler(syncStravaWorkouts));
 
 export default router;

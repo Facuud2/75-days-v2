@@ -69,6 +69,9 @@ export const userService = {
             body: JSON.stringify(payload),
         });
     },
+    exportData: () => {
+        return apiClient<Record<string, unknown>>('/users/export');
+    },
     deleteAccount: () => {
         return apiClient<{ message: string }>('/users/account', {
             method: 'DELETE',

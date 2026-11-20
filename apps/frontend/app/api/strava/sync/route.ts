@@ -3,7 +3,10 @@ import { syncStravaWorkouts } from '@/lib/server/controllers/health/stravaContro
 
 export async function POST(req: Request, context: any) {
   try {
-    return await handleRoute(req, context, syncStravaWorkouts, { auth: true });
+    return await handleRoute(req, context, syncStravaWorkouts, {
+      auth: true,
+      rateLimit: 'external',
+    });
   } catch (error) {
     console.error('[/api/strava/sync]', error);
     return Response.json({ error: 'Internal server error' }, { status: 500 });

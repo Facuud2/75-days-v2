@@ -74,6 +74,7 @@ export default function RegisterForm() {
         name: `${data.firstName} ${data.lastName}`.trim(),
         email: data.email.trim(),
         password: data.password,
+        acceptTerms: true,
       });
       router.push('/onboarding');
     } catch {
@@ -242,17 +243,18 @@ export default function RegisterForm() {
           </span>
           <span>
             Acepto los{' '}
-            <a
-              href="#"
+            <Link
+              href="/legal"
+              target="_blank"
+              rel="noopener noreferrer"
               className="auth-terms-link"
               onClick={(event) => {
-                event.preventDefault();
                 event.stopPropagation();
               }}
             >
-              Términos y Condiciones
-            </a>{' '}
-            de uso de la aplicación.
+              Términos y Condiciones y la Política de Privacidad
+            </Link>
+            .
           </span>
         </label>
 

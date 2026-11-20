@@ -121,6 +121,8 @@ function parseAgeFromBirthdaysList(birthdays: GooglePeopleBirthday[] | undefined
     return null;
 }
 
+const EXTERNAL_OAUTH_TIMEOUT_MS = 5_000;
+
 async function fetchGoogleBirthdayAge(accessToken: string): Promise<number | null> {
     const endpoints = [
         'https://people.googleapis.com/v1/people/me?personFields=birthdays&sources=READ_SOURCE_TYPE_PROFILE',
@@ -130,6 +132,7 @@ async function fetchGoogleBirthdayAge(accessToken: string): Promise<number | nul
     for (const url of endpoints) {
         try {
             const res = await fetch(url, {
+                signal: AbortSignal.timeout(EXTERNAL_OAUTH_TIMEOUT_MS),
                 headers: { Authorization: `Bearer ${accessToken}` },
             });
             if (!res.ok) {
@@ -177,6 +180,7 @@ async function verifyGoogleIdentity(params: {
 
     if (params.accessToken) {
         const userInfoRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+            signal: AbortSignal.timeout(EXTERNAL_OAUTH_TIMEOUT_MS),
             headers: { Authorization: `Bearer ${params.accessToken}` },
         });
 
@@ -216,7 +220,8 @@ async function verifyGoogleIdentity(params: {
 
     if (params.idToken) {
         const tokenInfoRes = await fetch(
-            `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(params.idToken)}`
+            `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(params.idToken)}`,
+            { signal: AbortSignal.timeout(EXTERNAL_OAUTH_TIMEOUT_MS) }
         );
 
         if (!tokenInfoRes.ok) {
@@ -260,12 +265,13 @@ const registerSchema = z.object({
     difficulty: z.enum(['Soft', 'Medium', 'Hard', 'Custom']).default('Medium'),
     // Minutos de `getTimezoneOffset()` del navegador. Ausente = servidor en UTC.
     timezoneOffset: z.number().optional(),
+    acceptTerms: z.literal(true).optional(),
     customGoalsTemplate: z.array(z.object({
         title: z.string(),
         description: z.string().optional(),
         icon: z.string().optional()
-    })).optional()
-});
+    }).strict()).optional()
+}).strict();
 
 export const register = async (req: Request, res: Response) => {
     try {
@@ -355,7 +361,7 @@ export const register = async (req: Request, res: Response) => {
 const loginSchema = z.object({
     email: z.string().email(),
     password: z.string()
-});
+}).strict();
 
 export const login = async (req: Request, res: Response) => {
     try {
@@ -399,7 +405,7 @@ const googleAuthSchema = z.object({
     idToken: z.string().optional(),
     confirmLink: z.boolean().optional(),
     timezoneOffset: z.number().optional(),
-}).refine((data) => Boolean(data.accessToken || data.idToken), {
+}).strict().refine((data) => Boolean(data.accessToken || data.idToken), {
     message: 'Google token is required',
 });
 
@@ -597,7 +603,7 @@ const completeOnboardingSchema = z.object({
     avatarUrl: z.string().max(2_000_000).nullable().optional(),
     bannerUrl: z.string().max(2_000_000).nullable().optional(),
     profileQuote: z.string().max(120).nullable().optional(),
-});
+}).strict();
 
 export const completeOnboarding = async (req: AuthRequest, res: Response) => {
     try {

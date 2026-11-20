@@ -3,19 +3,52 @@ import { persist } from 'zustand/middleware';
 import { differenceInCalendarDays, format } from 'date-fns';
 import { parseLocalDate } from '@/lib/utils/date';
 import { challengeService } from '../lib/api/challenges';
-import { logService, UpdateMetricsData } from '../lib/api/logs';
+import {
+  logService,
+  type GoalProgressUpdatePayload,
+  type UpdateMetricsData,
+} from '../lib/api/logs';
 
 export type Difficulty = 'Soft' | 'Medium' | 'Hard' | 'Custom';
+export type GoalCadence = 'daily' | 'weekly' | 'monthly';
+export type GoalMeasurementType = 'boolean' | 'count' | 'numeric';
 
 export interface GoalTemplate {
+  id?: string;
   title: string;
   description?: string;
   icon?: string;
+  cadence?: GoalCadence;
+  measurementType?: GoalMeasurementType;
+  targetValue?: number;
+  targetUnit?: string | null;
+  order?: number;
 }
 
 export interface Goal extends GoalTemplate {
   id: string;
+  templateId?: string | null;
   completed: boolean;
+  currentValue?: number;
+}
+
+export interface PeriodGoalProgress {
+  id: string;
+  challengeId: string;
+  templateId?: string | null;
+  title: string;
+  description?: string | null;
+  icon?: string | null;
+  cadence: 'weekly' | 'monthly';
+  measurementType: GoalMeasurementType;
+  targetValue: number;
+  targetUnit?: string | null;
+  currentValue: number;
+  periodNumber: number;
+  periodKey: string;
+  startDate: string; // YYYY-MM-DD
+  endDate: string; // YYYY-MM-DD
+  status: 'pending' | 'success' | 'fail';
 }
 
 export interface DailyLog {
@@ -34,6 +67,8 @@ export interface ChallengeState {
   currentDay: number;
   streak: number;
   logs: Record<string, DailyLog>;
+  periodGoals: PeriodGoalProgress[];
+  breakStreakOnPeriodFail: boolean;
   points: number;
   achievements: string[];
   bestWeight: number | null;
@@ -46,11 +81,31 @@ export interface ChallengeState {
 
   // Actions
   fetchCurrentChallenge: () => Promise<void>;
-  startChallenge: (difficulty: Difficulty, customGoalsTemplate?: GoalTemplate[]) => Promise<void>;
-  updateCustomGoals: (customGoalsTemplate: GoalTemplate[]) => Promise<void>;
+  startChallenge: (
+    difficulty: Difficulty,
+    customGoalsTemplate?: GoalTemplate[],
+    breakStreakOnPeriodFail?: boolean
+  ) => Promise<void>;
+  updateCustomGoals: (
+    customGoalsTemplate: GoalTemplate[],
+    breakStreakOnPeriodFail?: boolean
+  ) => Promise<void>;
   abandonChallenge: () => Promise<void>;
 
-  logDailyGoal: (date: string, goalId: string, completed: boolean) => Promise<void>;
+  logDailyGoal: (
+    date: string,
+    goalId: string,
+    completed: boolean
+  ) => Promise<void>;
+  logDailyGoalProgress: (
+    date: string,
+    goalId: string,
+    payload: GoalProgressUpdatePayload
+  ) => Promise<void>;
+  logPeriodGoalProgress: (
+    periodGoalId: string,
+    payload: GoalProgressUpdatePayload
+  ) => Promise<void>;
   logDailyMetrics: (date: string, metrics: UpdateMetricsData) => Promise<void>;
 
   checkDailyReset: () => Promise<void>;
@@ -68,8 +123,9 @@ let inFlightChallengePromise: Promise<void> | null = null;
 let lastReconciledDate: string | null = null;
 
 interface GoalSyncEntry {
-  latestDesired: boolean;
+  latestPayload: boolean | GoalProgressUpdatePayload;
   baselineCompleted: boolean;
+  baselineCurrentValue: number;
   seq: number;
   waiters: Array<{ resolve: () => void; reject: (err: unknown) => void }>;
 }
@@ -77,15 +133,62 @@ interface GoalSyncEntry {
 const goalSyncQueue = new Map<string, GoalSyncEntry>();
 let goalSyncSeqCounter = 0;
 
-function applyGoalCompletionToLog(
+function roundMetric(val: number): number {
+  return Math.round(val * 100) / 100;
+}
+
+function computeOptimisticProgress(
+  measurementType: string | undefined,
+  targetValue: number | undefined,
+  currentValue: number | undefined,
+  completed: boolean | undefined,
+  payload: GoalProgressUpdatePayload
+): { currentValue: number; completed: boolean } {
+  const safeTarget =
+    typeof targetValue === 'number' && targetValue > 0 ? targetValue : 1;
+  const safeCurrent =
+    typeof currentValue === 'number' && currentValue >= 0
+      ? currentValue
+      : completed
+        ? safeTarget
+        : 0;
+
+  let nextVal = safeCurrent;
+  if (typeof payload.delta === 'number' && Number.isFinite(payload.delta)) {
+    nextVal = Math.max(0, roundMetric(safeCurrent + payload.delta));
+  } else if (
+    typeof payload.currentValue === 'number' &&
+    Number.isFinite(payload.currentValue)
+  ) {
+    nextVal = Math.max(0, roundMetric(payload.currentValue));
+  } else if (typeof payload.completed === 'boolean') {
+    nextVal = payload.completed ? safeTarget : 0;
+  }
+
+  if ((measurementType || 'boolean') === 'boolean') {
+    const done = nextVal >= 1;
+    return { currentValue: done ? 1 : 0, completed: done };
+  }
+  if (measurementType === 'count') {
+    const rounded = Math.max(0, Math.round(nextVal));
+    return { currentValue: rounded, completed: rounded >= safeTarget };
+  }
+  const rounded = Math.max(0, roundMetric(nextVal));
+  return { currentValue: rounded, completed: rounded + 1e-9 >= safeTarget };
+}
+
+function applyGoalProgressToLog(
   log: DailyLog,
   goalId: string,
-  completed: boolean,
+  nextCompleted: boolean,
+  nextCurrentValue: number,
   currentStreak: number,
   currentPoints: number
 ) {
   const updatedGoals = log.goals.map((g: any) =>
-    g.id === goalId ? { ...g, completed } : g
+    g.id === goalId
+      ? { ...g, completed: nextCompleted, currentValue: nextCurrentValue }
+      : g
   );
   const allCompleted =
     updatedGoals.length > 0 && updatedGoals.every((g: any) => g.completed);
@@ -118,6 +221,8 @@ const INITIAL_CHALLENGE_STATE = {
   currentDay: 0,
   streak: 0,
   logs: {} as Record<string, DailyLog>,
+  periodGoals: [] as PeriodGoalProgress[],
+  breakStreakOnPeriodFail: false,
   points: 0,
   achievements: [] as string[],
   bestWeight: null as number | null,
@@ -132,7 +237,8 @@ const INITIAL_CHALLENGE_STATE = {
 function normalizeLogs(dailyLogs: unknown): Record<string, DailyLog> {
   if (!Array.isArray(dailyLogs)) return {};
   return dailyLogs.reduce((acc: Record<string, DailyLog>, log: any) => {
-    const dateKey = typeof log.date === 'string' ? log.date.slice(0, 10) : log.date;
+    const dateKey =
+      typeof log.date === 'string' ? log.date.slice(0, 10) : log.date;
     acc[dateKey] = { ...log, date: dateKey, goals: log.goals ?? [] };
     return acc;
   }, {});
@@ -164,10 +270,13 @@ export const useChallengeStore = create<ChallengeState>()(
         });
         const run = async () => {
           try {
-            const { dailyLogs, ...restData } = (await challengeService.getCurrentChallenge()) as any;
+            const { dailyLogs, periodGoals, ...restData } =
+              (await challengeService.getCurrentChallenge()) as any;
             if (seq !== challengeSyncSeq) return;
             if (restData && Object.keys(restData).length > 0) {
-              const parsedLogs = Array.isArray(dailyLogs) ? normalizeLogs(dailyLogs) : get().logs;
+              const parsedLogs = Array.isArray(dailyLogs)
+                ? normalizeLogs(dailyLogs)
+                : get().logs;
               const safeCurrentDay = restData.startDate
                 ? calculateCurrentDay(restData.startDate)
                 : restData.currentDay ?? 1;
@@ -179,6 +288,12 @@ export const useChallengeStore = create<ChallengeState>()(
               set({
                 ...restData,
                 logs: parsedLogs,
+                periodGoals: Array.isArray(periodGoals)
+                  ? periodGoals
+                  : get().periodGoals,
+                breakStreakOnPeriodFail: Boolean(
+                  restData.breakStreakOnPeriodFail
+                ),
                 currentDay: safeCurrentDay,
                 isActive: true,
                 isLoading: false,
@@ -189,8 +304,6 @@ export const useChallengeStore = create<ChallengeState>()(
             }
           } catch (error: any) {
             if (seq !== challengeSyncSeq) return;
-            // 404 = no hay reto activo. No es un error de la app: limpiamos el
-            // estado persistido para que el dashboard no muestre datos viejos.
             if (error?.status === 404) {
               set({ ...INITIAL_CHALLENGE_STATE });
               return;
@@ -209,31 +322,44 @@ export const useChallengeStore = create<ChallengeState>()(
         return inFlightChallengePromise;
       },
 
-      startChallenge: async (difficulty, customGoalsTemplate) => {
+      startChallenge: async (
+        difficulty,
+        customGoalsTemplate,
+        breakStreakOnPeriodFail
+      ) => {
         const seq = ++challengeSyncSeq;
         set({ isLoading: true, error: null });
         try {
-          const response = (await challengeService.startChallenge({ difficulty, customGoalsTemplate })) as any;
+          const response = (await challengeService.startChallenge({
+            difficulty,
+            customGoalsTemplate,
+            breakStreakOnPeriodFail,
+          })) as any;
           if (seq !== challengeSyncSeq) return;
-          // El backend devuelve `unchanged` cuando se pide reiniciar con el plan
-          // que ya está activo: no hay reto nuevo, así que conservamos el estado
-          // en pantalla en vez de pintar un progreso en cero.
           if (response?.unchanged) {
             set({ isLoading: false, isValidating: false });
             return;
           }
-          const { dailyLogs, ...restData } = response;
-          const parsedLogs = Array.isArray(dailyLogs) ? normalizeLogs(dailyLogs) : get().logs;
+          const { dailyLogs, periodGoals, ...restData } = response;
+          const parsedLogs = Array.isArray(dailyLogs)
+            ? normalizeLogs(dailyLogs)
+            : get().logs;
           set({
             ...restData,
             logs: parsedLogs,
+            periodGoals: Array.isArray(periodGoals) ? periodGoals : [],
+            breakStreakOnPeriodFail: Boolean(restData.breakStreakOnPeriodFail),
             isActive: true,
             isLoading: false,
             isValidating: false,
           });
         } catch (error: any) {
           if (seq === challengeSyncSeq) {
-            set({ error: error.message || 'Failed to start challenge', isLoading: false, isValidating: false });
+            set({
+              error: error.message || 'Failed to start challenge',
+              isLoading: false,
+              isValidating: false,
+            });
           }
           throw error;
         }
@@ -246,22 +372,36 @@ export const useChallengeStore = create<ChallengeState>()(
           await challengeService.abandonChallenge();
           set({ ...INITIAL_CHALLENGE_STATE });
         } catch (error: any) {
-          set({ error: error.message || 'Failed to abandon challenge', isLoading: false, isValidating: false });
+          set({
+            error: error.message || 'Failed to abandon challenge',
+            isLoading: false,
+            isValidating: false,
+          });
           throw error;
         }
       },
 
-      updateCustomGoals: async (customGoalsTemplate) => {
+      updateCustomGoals: async (
+        customGoalsTemplate,
+        breakStreakOnPeriodFail
+      ) => {
         const seq = ++challengeSyncSeq;
         set({ isLoading: true, error: null });
         try {
-          const response = (await challengeService.updateCustomGoals(customGoalsTemplate)) as any;
+          const response = (await challengeService.updateCustomGoals(
+            customGoalsTemplate,
+            breakStreakOnPeriodFail
+          )) as any;
           if (seq !== challengeSyncSeq) return;
-          const { dailyLogs, ...restData } = response;
-          const parsedLogs = Array.isArray(dailyLogs) ? normalizeLogs(dailyLogs) : get().logs;
+          const { dailyLogs, periodGoals, ...restData } = response;
+          const parsedLogs = Array.isArray(dailyLogs)
+            ? normalizeLogs(dailyLogs)
+            : get().logs;
           set({
             ...restData,
             logs: parsedLogs,
+            periodGoals: Array.isArray(periodGoals) ? periodGoals : [],
+            breakStreakOnPeriodFail: Boolean(restData.breakStreakOnPeriodFail),
             isActive: true,
             isLoading: false,
             isValidating: false,
@@ -279,24 +419,58 @@ export const useChallengeStore = create<ChallengeState>()(
       },
 
       logDailyGoal: async (date, goalId, completed) => {
-        // Invalida lecturas en vuelo más viejas para que no pisen el estado optimista
+        return get().logDailyGoalProgress(date, goalId, { completed });
+      },
+
+      logDailyGoalProgress: async (date, goalId, payload) => {
         ++challengeSyncSeq;
         const syncKey = `${date}:${goalId}`;
         const existingLog = get().logs[date];
-        const existingGoal = existingLog?.goals?.find((g: any) => g.id === goalId);
+        const existingGoal = existingLog?.goals?.find(
+          (g: any) => g.id === goalId
+        );
         const currentCompleted = Boolean(existingGoal?.completed);
+        const currentVal =
+          typeof existingGoal?.currentValue === 'number'
+            ? existingGoal.currentValue
+            : currentCompleted
+              ? existingGoal?.targetValue ?? 1
+              : 0;
 
-        // Optimistic update completo en Frame 0 (0ms): metas, status del día, racha y puntos
+        const nextOptimistic = computeOptimisticProgress(
+          existingGoal?.measurementType,
+          existingGoal?.targetValue,
+          currentVal,
+          currentCompleted,
+          payload
+        );
+
+        // Keep boolean-only toggles backward-compatible with spies & callers
+        const isBooleanGoal =
+          !existingGoal?.measurementType ||
+          existingGoal.measurementType === 'boolean';
+        const normalizedPayload: boolean | GoalProgressUpdatePayload =
+          isBooleanGoal &&
+          payload.delta === undefined &&
+          payload.currentValue === undefined
+            ? nextOptimistic.completed
+            : {
+                currentValue: nextOptimistic.currentValue,
+                completed: nextOptimistic.completed,
+              };
+
         set((state) => {
           const log = state.logs[date];
           if (!log || !Array.isArray(log.goals)) return state;
-          const { updatedGoals, nextStatus, nextStreak, nextPoints } = applyGoalCompletionToLog(
-            log,
-            goalId,
-            completed,
-            state.streak,
-            state.points
-          );
+          const { updatedGoals, nextStatus, nextStreak, nextPoints } =
+            applyGoalProgressToLog(
+              log,
+              goalId,
+              nextOptimistic.completed,
+              nextOptimistic.currentValue,
+              state.streak,
+              state.points
+            );
 
           return {
             logs: {
@@ -310,7 +484,7 @@ export const useChallengeStore = create<ChallengeState>()(
 
         const existingEntry = goalSyncQueue.get(syncKey);
         if (existingEntry) {
-          existingEntry.latestDesired = completed;
+          existingEntry.latestPayload = normalizedPayload;
           existingEntry.seq = ++goalSyncSeqCounter;
           return new Promise<void>((resolve, reject) => {
             existingEntry.waiters.push({ resolve, reject });
@@ -318,8 +492,9 @@ export const useChallengeStore = create<ChallengeState>()(
         }
 
         const entry: GoalSyncEntry = {
-          latestDesired: completed,
+          latestPayload: normalizedPayload,
           baselineCompleted: currentCompleted,
+          baselineCurrentValue: currentVal,
           seq: ++goalSyncSeqCounter,
           waiters: [],
         };
@@ -327,20 +502,34 @@ export const useChallengeStore = create<ChallengeState>()(
 
         try {
           while (true) {
-            const targetCompleted = entry.latestDesired;
+            const targetPayload = entry.latestPayload;
             const targetSeq = entry.seq;
 
-            const response = await logService.updateGoalStatus(date, goalId, targetCompleted);
-            entry.baselineCompleted = targetCompleted;
+            const response = await logService.updateGoalStatus(
+              date,
+              goalId,
+              targetPayload
+            );
+            const resolvedCompleted =
+              typeof targetPayload === 'boolean'
+                ? targetPayload
+                : Boolean(targetPayload.completed);
+            entry.baselineCompleted = resolvedCompleted;
+            entry.baselineCurrentValue =
+              typeof targetPayload === 'boolean'
+                ? resolvedCompleted
+                  ? 1
+                  : 0
+                : targetPayload.currentValue ?? entry.baselineCurrentValue;
 
-            // Si hubo un clic más reciente mientras el PUT estaba en vuelo, enviamos
-            // el último estado deseado sin aplicar todavía los totales intermedios.
-            if (entry.seq !== targetSeq && entry.latestDesired !== targetCompleted) {
+            if (
+              entry.seq !== targetSeq &&
+              JSON.stringify(entry.latestPayload) !==
+                JSON.stringify(targetPayload)
+            ) {
               continue;
             }
 
-            // Sincroniza status/racha/puntos autoritativos solo cuando no quedan otras
-            // metas sincronizándose en paralelo que quedarían desactualizadas.
             if (goalSyncQueue.size <= 1) {
               set((state) => {
                 const log = state.logs[date];
@@ -348,7 +537,10 @@ export const useChallengeStore = create<ChallengeState>()(
                 return {
                   logs: {
                     ...state.logs,
-                    [date]: { ...log, status: (response as any).status ?? log.status },
+                    [date]: {
+                      ...log,
+                      status: (response as any).status ?? log.status,
+                    },
                   },
                   streak: (response as any).challengeStreak ?? state.streak,
                   points: (response as any).challengePoints ?? state.points,
@@ -363,19 +555,20 @@ export const useChallengeStore = create<ChallengeState>()(
             waiter.resolve();
           }
         } catch (error: any) {
-          // Rollback al último estado confirmado por el servidor para esta meta
           set((state) => {
             const log = state.logs[date];
             if (!log || !Array.isArray(log.goals)) {
               return { error: error.message || 'Failed to update goal' };
             }
-            const { updatedGoals, nextStatus, nextStreak, nextPoints } = applyGoalCompletionToLog(
-              log,
-              goalId,
-              entry.baselineCompleted,
-              state.streak,
-              state.points
-            );
+            const { updatedGoals, nextStatus, nextStreak, nextPoints } =
+              applyGoalProgressToLog(
+                log,
+                goalId,
+                entry.baselineCompleted,
+                entry.baselineCurrentValue,
+                state.streak,
+                state.points
+              );
             return {
               logs: {
                 ...state.logs,
@@ -394,12 +587,83 @@ export const useChallengeStore = create<ChallengeState>()(
         }
       },
 
+      logPeriodGoalProgress: async (periodGoalId, payload) => {
+        ++challengeSyncSeq;
+        const previousPeriodGoals = get().periodGoals;
+        const previousPoints = get().points;
+        const target = previousPeriodGoals.find((pg) => pg.id === periodGoalId);
+        if (!target || target.status === 'fail') return;
+
+        const nextOptimistic = computeOptimisticProgress(
+          target.measurementType,
+          target.targetValue,
+          target.currentValue,
+          target.status === 'success',
+          payload
+        );
+        const nextStatus: 'pending' | 'success' = nextOptimistic.completed
+          ? 'success'
+          : 'pending';
+        const periodPts = target.cadence === 'monthly' ? 50 : 25;
+
+        set((state) => {
+          let nextPoints = state.points;
+          if (nextStatus === 'success' && target.status !== 'success') {
+            nextPoints += periodPts;
+          } else if (nextStatus !== 'success' && target.status === 'success') {
+            nextPoints = Math.max(0, nextPoints - periodPts);
+          }
+          return {
+            periodGoals: state.periodGoals.map((pg) =>
+              pg.id === periodGoalId
+                ? {
+                    ...pg,
+                    currentValue: nextOptimistic.currentValue,
+                    status: nextStatus,
+                  }
+                : pg
+            ),
+            points: nextPoints,
+            error: null,
+          };
+        });
+
+        try {
+          const response = await logService.updatePeriodGoalProgress(
+            periodGoalId,
+            {
+              currentValue: nextOptimistic.currentValue,
+              completed: nextOptimistic.completed,
+            }
+          );
+          set((state) => ({
+            periodGoals: state.periodGoals.map((pg) =>
+              pg.id === periodGoalId
+                ? {
+                    ...pg,
+                    currentValue: response.currentValue,
+                    status: response.status,
+                  }
+                : pg
+            ),
+            points: response.challengePoints ?? state.points,
+            streak: response.challengeStreak ?? state.streak,
+          }));
+        } catch (error: any) {
+          set({
+            periodGoals: previousPeriodGoals,
+            points: previousPoints,
+            error: error.message || 'Failed to update period goal',
+          });
+          throw error;
+        }
+      },
+
       logDailyMetrics: async (date, metrics) => {
         ++challengeSyncSeq;
         const previousLogs = get().logs;
         const previousBestWeight = get().bestWeight;
 
-        // Optimistic update en Frame 0 (0ms) sin activar isLoading global
         set((state) => {
           const existing = state.logs[date] ?? {
             date,
@@ -407,7 +671,8 @@ export const useChallengeStore = create<ChallengeState>()(
             status: 'pending' as const,
           };
           const nextBestWeight =
-            metrics.weight && (state.bestWeight === null || metrics.weight < state.bestWeight)
+            metrics.weight &&
+            (state.bestWeight === null || metrics.weight < state.bestWeight)
               ? metrics.weight
               : state.bestWeight;
 
@@ -417,7 +682,9 @@ export const useChallengeStore = create<ChallengeState>()(
               [date]: {
                 ...existing,
                 ...(metrics.weight !== undefined && { weight: metrics.weight }),
-                ...(metrics.photoUrl !== undefined && { photoUrl: metrics.photoUrl }),
+                ...(metrics.photoUrl !== undefined && {
+                  photoUrl: metrics.photoUrl,
+                }),
                 ...(metrics.notes !== undefined && { notes: metrics.notes }),
               },
             },
@@ -427,14 +694,20 @@ export const useChallengeStore = create<ChallengeState>()(
         });
 
         try {
-          const updatedLog = (await logService.updateMetrics(date, metrics)) as any;
+          const updatedLog = (await logService.updateMetrics(
+            date,
+            metrics
+          )) as any;
           const formattedDate =
-            typeof updatedLog.date === 'string' ? updatedLog.date.slice(0, 10) : updatedLog.date;
+            typeof updatedLog.date === 'string'
+              ? updatedLog.date.slice(0, 10)
+              : updatedLog.date;
           updatedLog.date = formattedDate;
 
           set((state) => {
             const bestWeight =
-              metrics.weight && (state.bestWeight === null || metrics.weight < state.bestWeight)
+              metrics.weight &&
+              (state.bestWeight === null || metrics.weight < state.bestWeight)
                 ? metrics.weight
                 : state.bestWeight;
 
@@ -458,8 +731,6 @@ export const useChallengeStore = create<ChallengeState>()(
           await inFlightChallengePromise;
         }
         const todayKey = format(new Date(), 'yyyy-MM-dd');
-        // Fase 2: si GET /challenges/current (o /api/sync) ya reconcilió el día de hoy
-        // en el servidor y entregó el DailyLog de hoy, evitamos el POST redundante.
         if (lastReconciledDate === todayKey && Boolean(get().logs[todayKey])) {
           return;
         }
@@ -475,8 +746,6 @@ export const useChallengeStore = create<ChallengeState>()(
           const timezoneOffset = new Date().getTimezoneOffset();
           const response = await logService.checkDailyReset(timezoneOffset);
           if (seq !== challengeSyncSeq) return;
-          // El backend responde `{ message }` sin `logs` cuando no hay reto
-          // activo (F-46). Antes esto reventaba en `logs.reduce`.
           if (!Array.isArray(response.logs)) {
             set({ isActive: false, isLoading: false, isValidating: false });
             return;
@@ -489,6 +758,9 @@ export const useChallengeStore = create<ChallengeState>()(
           set((state) => ({
             streak: response.streak ?? state.streak,
             logs: { ...state.logs, ...logsRecord },
+            periodGoals: Array.isArray(response.periodGoals)
+              ? response.periodGoals
+              : state.periodGoals,
             currentDay: response.currentDay ?? state.currentDay,
             isLoading: false,
             isValidating: false,
@@ -509,8 +781,10 @@ export const useChallengeStore = create<ChallengeState>()(
           set({ ...INITIAL_CHALLENGE_STATE });
           return;
         }
-        const { dailyLogs, ...restData } = challengeData;
-        const parsedLogs = Array.isArray(dailyLogs) ? normalizeLogs(dailyLogs) : get().logs;
+        const { dailyLogs, periodGoals, ...restData } = challengeData;
+        const parsedLogs = Array.isArray(dailyLogs)
+          ? normalizeLogs(dailyLogs)
+          : get().logs;
         const safeCurrentDay = restData.startDate
           ? calculateCurrentDay(restData.startDate)
           : restData.currentDay ?? 1;
@@ -521,6 +795,10 @@ export const useChallengeStore = create<ChallengeState>()(
         set({
           ...restData,
           logs: parsedLogs,
+          periodGoals: Array.isArray(periodGoals)
+            ? periodGoals
+            : get().periodGoals,
+          breakStreakOnPeriodFail: Boolean(restData.breakStreakOnPeriodFail),
           currentDay: safeCurrentDay,
           isActive: true,
           isLoading: false,
@@ -539,16 +817,15 @@ export const useChallengeStore = create<ChallengeState>()(
     }),
     {
       name: 'challenge-storage',
-      // Persistimos el ancla del reto y también los logs diarios (omitiendo data-URLs
-      // gigantes >100KB en localStorage para no exceder la cuota) para que Dashboard,
-      // Calendario y Perfil rendericen en 0ms sin esqueletos bloqueantes.
       partialize: (state) => {
         const compactLogs: Record<string, DailyLog> = {};
         for (const [key, log] of Object.entries(state.logs || {})) {
           compactLogs[key] = {
             ...log,
             photoUrl:
-              log.photoUrl && log.photoUrl.length > 100_000 ? undefined : log.photoUrl,
+              log.photoUrl && log.photoUrl.length > 100_000
+                ? undefined
+                : log.photoUrl,
           };
         }
         return {
@@ -562,6 +839,8 @@ export const useChallengeStore = create<ChallengeState>()(
           bestWeight: state.bestWeight,
           challengesCompleted: state.challengesCompleted,
           customGoalsTemplate: state.customGoalsTemplate,
+          periodGoals: state.periodGoals,
+          breakStreakOnPeriodFail: state.breakStreakOnPeriodFail,
           logs: compactLogs,
         };
       },

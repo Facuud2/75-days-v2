@@ -29,9 +29,11 @@ export const getLogs = async (req: AuthRequest, res: Response) => {
     }
 };
 
+const DATE_PARAM_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
 const goalUpdateSchema = z.object({
     completed: z.boolean()
-});
+}).strict();
 
 class NotFoundError extends Error {}
 class LockedDayError extends Error {}
@@ -40,6 +42,9 @@ export const updateGoalStatus = async (req: AuthRequest, res: Response) => {
     try {
         const date = req.params.date as string;
         const goalId = req.params.goalId as string;
+        if (!DATE_PARAM_REGEX.test(date)) {
+            return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
+        }
         const { completed } = goalUpdateSchema.parse(req.body);
         const userId = req.user!.id;
 
@@ -182,14 +187,17 @@ export const updateGoalStatus = async (req: AuthRequest, res: Response) => {
 };
 
 const metricsSchema = z.object({
-    weight: z.number().optional(),
-    photoUrl: z.string().optional(),
-    notes: z.string().optional()
-});
+    weight: z.number().positive().max(500).optional(),
+    photoUrl: z.string().max(2_000_000).optional(),
+    notes: z.string().max(2_000).optional()
+}).strict();
 
 export const updateMetrics = async (req: AuthRequest, res: Response) => {
     try {
         const date = req.params.date as string;
+        if (!DATE_PARAM_REGEX.test(date)) {
+            return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
+        }
         const { weight, photoUrl, notes } = metricsSchema.parse(req.body);
         const userId = req.user!.id;
 

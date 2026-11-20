@@ -49,3 +49,80 @@ export const getInternalSummary = async (req: Request, res: Response) => {
         },
     });
 };
+
+/**
+ * DELETE /internal/users/:userId
+ *
+ * Purges all health-domain records for a user when their account is deleted
+ * in backend-core (multi-DB GDPR erasure compliance).
+ */
+export const deleteInternalUserData = async (req: Request, res: Response) => {
+    const userId = String(req.params.userId || '').trim();
+    if (!userId) {
+        return res.status(400).json({ error: 'Invalid userId' });
+    }
+
+    await prisma.$transaction(async (tx) => {
+        await tx.customFoodIngredient.deleteMany({
+            where: { customFood: { userId } },
+        });
+        await tx.customFood.deleteMany({ where: { userId } });
+        await tx.mealEntry.deleteMany({ where: { userId } });
+        await tx.workoutEntry.deleteMany({ where: { userId } });
+        await tx.userHealthProfile.deleteMany({ where: { userId } });
+    });
+
+    return res.json({ deleted: true, userId });
+};
+
+/**
+ * GET /internal/users/:userId/export
+ *
+ * Returns all health-domain data belonging to the user for GDPR data portability,
+ * strictly excluding third-party OAuth secrets (Strava tokens).
+ */
+export const exportInternalUserData = async (req: Request, res: Response) => {
+    const userId = String(req.params.userId || '').trim();
+    if (!userId) {
+        return res.status(400).json({ error: 'Invalid userId' });
+    }
+
+    const [profile, meals, workouts, customFoods] = await Promise.all([
+        prisma.userHealthProfile.findUnique({
+            where: { userId },
+            select: {
+                id: true,
+                userId: true,
+                dailyCalorieGoal: true,
+                proteinGoalG: true,
+                carbGoalG: true,
+                fatGoalG: true,
+                weightKg: true,
+                heightCm: true,
+                stravaAthleteId: true,
+                createdAt: true,
+                updatedAt: true,
+            },
+        }),
+        prisma.mealEntry.findMany({
+            where: { userId },
+            orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+        }),
+        prisma.workoutEntry.findMany({
+            where: { userId },
+            orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+        }),
+        prisma.customFood.findMany({
+            where: { userId },
+            include: { ingredients: { include: { ingredient: true } } },
+            orderBy: { createdAt: 'desc' },
+        }),
+    ]);
+
+    return res.json({
+        profile,
+        meals,
+        workouts,
+        customFoods,
+    });
+};

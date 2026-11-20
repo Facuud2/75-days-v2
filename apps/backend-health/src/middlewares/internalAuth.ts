@@ -1,5 +1,13 @@
+import crypto from 'crypto';
 import { Request, Response, NextFunction } from 'express';
 import { config } from '../config';
+
+function timingSafeStringEqual(a: string, b: string): boolean {
+    const bufA = Buffer.from(a, 'utf8');
+    const bufB = Buffer.from(b, 'utf8');
+    if (bufA.length !== bufB.length) return false;
+    return crypto.timingSafeEqual(bufA, bufB);
+}
 
 /**
  * Middleware that protects internal-only routes.
@@ -8,8 +16,14 @@ import { config } from '../config';
  */
 export const internalAuth = (req: Request, res: Response, next: NextFunction) => {
     const providedKey = req.headers['x-internal-api-key'];
+    const expectedKey = config.internalApiKey;
 
-    if (!providedKey || providedKey !== config.internalApiKey) {
+    if (
+        typeof providedKey !== 'string' ||
+        !providedKey ||
+        !expectedKey ||
+        !timingSafeStringEqual(providedKey, expectedKey)
+    ) {
         return res.status(403).json({ error: 'Forbidden: Invalid internal API key' });
     }
 
