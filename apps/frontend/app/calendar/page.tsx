@@ -240,12 +240,8 @@ function AgendaView({
   const isCurrentWeek = activeIndex === currentWeekIndex;
   const goToWeek = (target: number) => setWeekIndex(Math.max(0, Math.min(weeks.length - 1, target)));
 
-  const weekGoals = useMemo(
-    () =>
-      (periodGoals || []).filter(
-        (pg) => pg.cadence === 'weekly' && pg.periodNumber === activeWeekNumber
-      ),
-    [periodGoals, activeWeekNumber]
+  const weekGoals = (periodGoals || []).filter(
+    (pg) => pg.cadence === 'weekly' && pg.periodNumber === activeWeekNumber
   );
 
   return (

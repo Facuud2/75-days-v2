@@ -555,20 +555,12 @@ export default function Dashboard() {
   const currentWeekNumber = Math.floor((Math.max(1, currentDay) - 1) / 7) + 1;
   const currentMonthNumber = Math.floor((Math.max(1, currentDay) - 1) / 30) + 1;
 
-  const currentWeeklyGoals = useMemo(
-    () =>
-      (periodGoals || []).filter(
-        (pg) => pg.cadence === 'weekly' && pg.periodNumber === currentWeekNumber
-      ),
-    [periodGoals, currentWeekNumber]
+  const currentWeeklyGoals = (periodGoals || []).filter(
+    (pg) => pg.cadence === 'weekly' && pg.periodNumber === currentWeekNumber
   );
 
-  const currentMonthlyGoals = useMemo(
-    () =>
-      (periodGoals || []).filter(
-        (pg) => pg.cadence === 'monthly' && pg.periodNumber === currentMonthNumber
-      ),
-    [periodGoals, currentMonthNumber]
+  const currentMonthlyGoals = (periodGoals || []).filter(
+    (pg) => pg.cadence === 'monthly' && pg.periodNumber === currentMonthNumber
   );
 
   const completedWeeklyCount = currentWeeklyGoals.filter((g) => g.status === 'success').length;
