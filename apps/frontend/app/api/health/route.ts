@@ -1,4 +1,15 @@
-import { getCorePrisma, getHealthPrisma } from '@/lib/server/db';
+import {
+  getCorePrisma,
+  getHealthPrisma,
+  resolveCoreDatabaseUrl,
+  resolveHealthDatabaseUrl,
+} from '@/lib/server/db';
+
+function sanitizeErrorForDiagnostics(err: unknown): string {
+  const raw = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+  // Redact any credentials if present in URLs
+  return raw.replace(/\/\/[^@/\s]+@/g, '//***@').slice(0, 500);
+}
 
 export async function GET(req: Request) {
   try {
@@ -24,8 +35,19 @@ export async function GET(req: Request) {
     });
   } catch (error) {
     console.error('[/api/health] Healthcheck failed:', error);
+    const coreUrlConfigured = Boolean(resolveCoreDatabaseUrl());
+    const healthUrlConfigured = Boolean(resolveHealthDatabaseUrl());
     return Response.json(
-      { service: '75-days-unified-vercel-api', status: 'degraded', dbWarmed: false },
+      {
+        service: '75-days-unified-vercel-api',
+        status: 'degraded',
+        dbWarmed: false,
+        diagnostics: {
+          coreUrlConfigured,
+          healthUrlConfigured,
+          reason: sanitizeErrorForDiagnostics(error),
+        },
+      },
       { status: 503 }
     );
   }

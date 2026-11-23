@@ -23,6 +23,12 @@ const nextConfig: NextConfig = {
     ],
   },
   output: 'standalone',
+  serverExternalPackages: [
+    'ws',
+    '@neondatabase/serverless',
+    '@prisma/adapter-neon',
+    '@prisma/client',
+  ],
   outputFileTracingIncludes: {
     '/api/**/*': [
       './lib/generated/prisma-core/**/*',

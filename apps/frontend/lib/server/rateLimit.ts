@@ -48,8 +48,8 @@ function checkLocalFallbackLimit(
 function getRedisClient(): Redis | null {
   if (upstashDisabledReason) return null;
   if (redisClient) return redisClient;
-  const url = process.env.UPSTASH_REDIS_REST_URL?.trim();
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
+  const url = process.env.UPSTASH_REDIS_REST_URL?.trim().replace(/^["']+|["']+$/g, '');
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN?.trim().replace(/^["']+|["']+$/g, '');
   if (!url || !token) return null;
 
   redisClient = new Redis({ url, token });

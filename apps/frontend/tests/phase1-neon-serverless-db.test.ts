@@ -32,17 +32,20 @@ function loadEnvLocal(): Record<string, string> {
 }
 
 describe('Phase 1 — Neon Serverless Driver + Dual Prisma Clients', () => {
-  it('correctly identifies Neon connection strings and resolves Core / Health URLs', () => {
+  it('correctly identifies Neon connection strings and resolves Core / Health URLs (including stripping quotes and channel_binding)', () => {
     const neonDefault =
-      'postgresql://neondb_owner:secret@ep-wandering-recipe-pooler.us-east-1.aws.neon.tech/neondb?sslmode=require';
+      '"postgresql://neondb_owner:secret@ep-wandering-recipe-pooler.us-east-1.aws.neon.tech/neondb?channel_binding=require&sslmode=require"';
     expect(isNeonConnectionString(neonDefault)).toBe(true);
     expect(isNeonConnectionString('postgresql://dev:dev@localhost:5432/75days')).toBe(false);
 
     const coreUrl = resolveCoreDatabaseUrl({ DATABASE_URL: neonDefault });
     expect(coreUrl).toContain('/neondb?sslmode=require');
+    expect(coreUrl).not.toContain('channel_binding');
+    expect(coreUrl.startsWith('"')).toBe(false);
 
     const healthUrl = resolveHealthDatabaseUrl({ DATABASE_URL: neonDefault });
     expect(healthUrl).toContain('/75days_health?sslmode=require');
+    expect(healthUrl).not.toContain('channel_binding');
   });
 
   it('connects to both Neon databases (75days & 75days_health) via @neondatabase/serverless', async () => {

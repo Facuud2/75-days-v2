@@ -4,12 +4,8 @@ import ws from 'ws';
 import { PrismaClient as CorePrismaClient } from '../generated/prisma-core';
 import { PrismaClient as HealthPrismaClient } from '../generated/prisma-health';
 
-// Enable WebSocket transport in Node.js runtimes so Prisma interactive transactions work seamlessly
-if (typeof WebSocket === 'undefined') {
-  neonConfig.webSocketConstructor = ws;
-} else {
-  neonConfig.webSocketConstructor = ws as unknown as typeof WebSocket;
-}
+// Always provide the Node.js `ws` constructor so @neondatabase/serverless Pool works reliably in Vercel Node runtimes
+neonConfig.webSocketConstructor = ws as unknown as typeof WebSocket;
 
 declare global {
   var __corePrisma: CorePrismaClient | undefined;
@@ -17,16 +13,43 @@ declare global {
 }
 
 /**
+ * Strips accidental surrounding quotes ("..." or '...') when env vars are pasted into dashboards.
+ */
+export function cleanEnvString(val?: string | null): string {
+  if (!val) return '';
+  return val.trim().replace(/^["']+|["']+$/g, '').trim();
+}
+
+/**
  * Checks whether a Postgres connection string points to a Neon host
  * (supports @neondatabase/serverless WebSocket/HTTP driver).
  */
 export function isNeonConnectionString(url: string): boolean {
-  if (!url) return false;
+  const cleaned = cleanEnvString(url);
+  if (!cleaned) return false;
   try {
-    const parsed = new URL(url);
+    const parsed = new URL(cleaned);
     return parsed.hostname.endsWith('.neon.tech');
   } catch {
-    return url.includes('.neon.tech');
+    return cleaned.includes('.neon.tech');
+  }
+}
+
+/**
+ * Normalizes a Neon connection string for @neondatabase/serverless WebSocket Pool
+ * by removing `channel_binding` (which can conflict with WS proxy TLS termination).
+ */
+export function normalizeNeonUrl(url: string): string {
+  const cleaned = cleanEnvString(url);
+  if (!cleaned) return '';
+  try {
+    const parsed = new URL(cleaned);
+    if (parsed.hostname.endsWith('.neon.tech')) {
+      parsed.searchParams.delete('channel_binding');
+    }
+    return parsed.toString();
+  } catch {
+    return cleaned;
   }
 }
 
@@ -37,10 +60,10 @@ export function isNeonConnectionString(url: string): boolean {
 export function resolveCoreDatabaseUrl(
   env: Record<string, string | undefined> = process.env
 ): string {
-  const explicitCore = env.CORE_DATABASE_URL?.trim();
-  if (explicitCore) return explicitCore;
+  const explicitCore = cleanEnvString(env.CORE_DATABASE_URL);
+  if (explicitCore) return normalizeNeonUrl(explicitCore);
 
-  return env.DATABASE_URL?.trim() || '';
+  return normalizeNeonUrl(cleanEnvString(env.DATABASE_URL));
 }
 
 /**
@@ -50,15 +73,18 @@ export function resolveCoreDatabaseUrl(
 export function resolveHealthDatabaseUrl(
   env: Record<string, string | undefined> = process.env
 ): string {
-  const explicitHealth = env.HEALTH_DATABASE_URL?.trim();
-  if (explicitHealth) return explicitHealth;
+  const explicitHealth = cleanEnvString(env.HEALTH_DATABASE_URL);
+  if (explicitHealth) return normalizeNeonUrl(explicitHealth);
 
-  const baseUrl = env.DATABASE_URL?.trim() || '';
+  const baseUrl = cleanEnvString(env.DATABASE_URL);
   if (!baseUrl) return '';
 
   try {
     const parsed = new URL(baseUrl);
     parsed.pathname = '/75days_health';
+    if (parsed.hostname.endsWith('.neon.tech')) {
+      parsed.searchParams.delete('channel_binding');
+    }
     return parsed.toString();
   } catch {
     return baseUrl;
