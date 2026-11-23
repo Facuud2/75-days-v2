@@ -394,11 +394,13 @@ export function useVoiceRecorder() {
     updateStatus('idle');
   }, [updateStatus]);
 
+  const getAudioLevel = useCallback(() => latestLevelRef.current, []);
+
   return {
     status,
     isSpeaking,
     elapsedSeconds,
-    audioLevel: latestLevelRef.current,
+    getAudioLevel,
     errorMessage,
     subscribeAudioMetrics,
     startRecording,

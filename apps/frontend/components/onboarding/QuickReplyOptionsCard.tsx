@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { ArrowUp, Pencil } from 'lucide-react';
 import type { QuickReplySelectionMode } from '@/lib/api/ai';
 
@@ -19,26 +19,30 @@ export default function QuickReplyOptionsCard({
   onSendSelected,
   onInsertIntoComposer,
 }: QuickReplyOptionsCardProps) {
-  const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
-
-  // Reset selection if options list changes
-  useEffect(() => {
-    setSelectedIndices([]);
-  }, [options]);
+  const optionsKey = (options ?? []).join('\u0000');
+  const [selection, setSelection] = useState<{ key: string; indices: number[] }>({
+    key: optionsKey,
+    indices: [],
+  });
 
   if (!options || options.length === 0) return null;
 
+  const selectedIndices = selection.key === optionsKey ? selection.indices : [];
   const isMultiple = mode === 'multiple' && options.length > 1;
 
   const toggleOption = (idx: number) => {
     if (disabled) return;
-    if (isMultiple) {
-      setSelectedIndices((prev) =>
-        prev.includes(idx) ? prev.filter((i) => i !== idx) : [...prev, idx]
-      );
-    } else {
-      setSelectedIndices((prev) => (prev[0] === idx ? [] : [idx]));
-    }
+    setSelection((prev) => {
+      const current = prev.key === optionsKey ? prev.indices : [];
+      const nextIndices = isMultiple
+        ? current.includes(idx)
+          ? current.filter((i) => i !== idx)
+          : [...current, idx]
+        : current[0] === idx
+          ? []
+          : [idx];
+      return { key: optionsKey, indices: nextIndices };
+    });
   };
 
   const buildCombinedReply = () => {

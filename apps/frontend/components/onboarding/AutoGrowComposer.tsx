@@ -48,7 +48,16 @@ export default function AutoGrowComposer({
   onSendVoiceDirect,
 }: AutoGrowComposerProps) {
   const internalRef = useRef<HTMLTextAreaElement | null>(null);
-  const resolvedRef = externalRef ?? internalRef;
+
+  const setTextareaNode = useCallback(
+    (node: HTMLTextAreaElement | null) => {
+      internalRef.current = node;
+      if (externalRef) {
+        externalRef.current = node;
+      }
+    },
+    [externalRef]
+  );
 
   const isVoiceModeActive =
     voiceStatus === 'recording' ||
@@ -56,13 +65,13 @@ export default function AutoGrowComposer({
     voiceStatus === 'transcribing';
 
   const syncHeight = useCallback(() => {
-    const el = resolvedRef.current;
+    const el = internalRef.current;
     if (!el) return;
     el.style.height = 'auto';
     const nextHeight = Math.min(MAX_HEIGHT_PX, Math.max(MIN_HEIGHT_PX, el.scrollHeight));
     el.style.height = `${nextHeight}px`;
     el.style.overflowY = el.scrollHeight > MAX_HEIGHT_PX ? 'auto' : 'hidden';
-  }, [resolvedRef]);
+  }, []);
 
   useLayoutEffect(() => {
     if (!isVoiceModeActive) {
@@ -124,7 +133,7 @@ export default function AutoGrowComposer({
       }}
     >
       <textarea
-        ref={resolvedRef}
+        ref={setTextareaNode}
         rows={1}
         value={value}
         onChange={(e) => onChange(e.target.value)}
