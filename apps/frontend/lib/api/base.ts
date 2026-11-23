@@ -3,8 +3,16 @@
  * Centralizes auth token retrieval, error handling, and request logic.
  */
 
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
-export const HEALTH_API_BASE_URL = process.env.NEXT_PUBLIC_HEALTH_API_URL || '/api';
+function resolveSameOriginApiUrl(rawUrl?: string): string {
+  const trimmed = rawUrl?.trim();
+  if (!trimmed || trimmed.includes('onrender.com')) {
+    return '/api';
+  }
+  return trimmed;
+}
+
+export const API_BASE_URL = resolveSameOriginApiUrl(process.env.NEXT_PUBLIC_API_URL);
+export const HEALTH_API_BASE_URL = resolveSameOriginApiUrl(process.env.NEXT_PUBLIC_HEALTH_API_URL);
 
 /**
  * Retrieves the auth token from localStorage.

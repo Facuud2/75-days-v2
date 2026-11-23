@@ -52,7 +52,7 @@ import AuthGuard from '@/components/AuthGuard';
 import StackedToaster from '@/components/StackedToaster';
 
 function extractOrigin(url: string | undefined): string | null {
-  if (!url) return null;
+  if (!url || url.includes('onrender.com')) return null;
   try {
     return new URL(url).origin;
   } catch {
