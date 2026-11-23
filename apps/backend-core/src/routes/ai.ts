@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { authenticate } from '../middlewares/auth';
 import { aiRateLimit } from '../middlewares/rateLimit';
-import { generateCustomPlan, generateSideQuest } from '../controllers/aiController';
+import { generateCustomPlan, generateSideQuest, transcribeAudio } from '../controllers/aiController';
 
 const router = Router();
 
@@ -10,5 +10,6 @@ router.use(aiRateLimit);
 
 router.post('/custom-plan', generateCustomPlan);
 router.post('/side-quest', generateSideQuest);
+router.post('/transcribe', transcribeAudio);
 
 export default router;

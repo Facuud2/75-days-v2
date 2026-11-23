@@ -95,6 +95,8 @@ export interface AiCustomPlanRequest {
   askedQuestionsCount?: number;
 }
 
+export type QuickReplySelectionMode = 'single' | 'multiple';
+
 export interface AiCustomPlanResponse {
   status: 'needs_clarification' | 'ready';
   userTranscript: string;
@@ -102,6 +104,7 @@ export interface AiCustomPlanResponse {
   openQuestions?: string[];
   understoodFacts?: string[];
   suggestedQuickReplies?: string[];
+  quickReplySelectionMode?: QuickReplySelectionMode;
   sideQuestSuggestion?: AiSideQuestSuggestion | null;
   tasks: AiCustomTask[];
 }
@@ -125,7 +128,13 @@ export interface AiSideQuestResponse {
   openQuestions?: string[];
   understoodFacts?: string[];
   suggestedQuickReplies?: string[];
+  quickReplySelectionMode?: QuickReplySelectionMode;
   quest?: AiSideQuestDraft | null;
+}
+
+export interface AiTranscribeResponse {
+  transcript: string;
+  hasSpeech: boolean;
 }
 
 export async function blobToBase64(blob: Blob): Promise<string> {
@@ -154,6 +163,13 @@ export const aiService = {
       method: 'POST',
       body: JSON.stringify(payload),
       timeoutMs: 45_000,
+    });
+  },
+  transcribeAudio: (payload: { audioBase64: string; mimeType?: string }) => {
+    return apiClient<AiTranscribeResponse>('/ai/transcribe', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      timeoutMs: 30_000,
     });
   },
 };

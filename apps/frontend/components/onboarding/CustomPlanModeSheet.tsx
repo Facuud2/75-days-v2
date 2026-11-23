@@ -2,11 +2,21 @@
 
 import React, { useEffect } from 'react';
 import { Pencil, Sparkles, X } from 'lucide-react';
-import { AnimatePresence, motion, useDragControls, useReducedMotion } from 'motion/react';
+import {
+  AnimatePresence,
+  animate,
+  motion,
+  useDragControls,
+  useMotionValue,
+  useReducedMotion,
+  useTransform,
+} from 'motion/react';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import {
   REDUCED_MOTION_TRANSITION,
   SHEET_ENTER_SPRING,
+  SHEET_EXIT_TRANSITION,
+  SHEET_SNAP_SPRING,
   shouldDismissSheet,
 } from '@/lib/motion/sheetPhysics';
 
@@ -27,14 +37,18 @@ export default function CustomPlanModeSheet({
   const dragControls = useDragControls();
   const isDesktop = useMediaQuery('(min-width: 640px)');
 
+  const sheetY = useMotionValue(0);
+  const backdropOpacity = useTransform(sheetY, [0, 260], [1, 0]);
+
   useEffect(() => {
     if (!isOpen) return;
+    sheetY.set(0);
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, sheetY]);
 
   return (
     <AnimatePresence>
@@ -53,11 +67,24 @@ export default function CustomPlanModeSheet({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.18, ease: 'easeOut' }}
-            className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
+            transition={{ duration: 0.16, ease: 'easeOut' }}
+            style={isDesktop ? undefined : { opacity: backdropOpacity }}
+            className="absolute inset-0 bg-black/65 backdrop-blur-[2px]"
           />
 
           <motion.div
+            style={
+              isDesktop
+                ? {
+                    backgroundColor: 'var(--surface-card)',
+                    borderColor: 'var(--border-subtle)',
+                  }
+                : {
+                    y: sheetY,
+                    backgroundColor: 'var(--surface-card)',
+                    borderColor: 'var(--border-subtle)',
+                  }
+            }
             initial={
               reduceMotion
                 ? { opacity: 0 }
@@ -76,8 +103,8 @@ export default function CustomPlanModeSheet({
               reduceMotion
                 ? { opacity: 0 }
                 : isDesktop
-                ? { opacity: 0, scale: 0.97, y: 6 }
-                : { y: '100%' }
+                ? { opacity: 0, scale: 0.97, y: 6, transition: SHEET_EXIT_TRANSITION }
+                : { y: '100%', transition: SHEET_EXIT_TRANSITION }
             }
             transition={
               reduceMotion
@@ -90,17 +117,19 @@ export default function CustomPlanModeSheet({
             dragControls={dragControls}
             dragListener={false}
             dragConstraints={{ top: 0 }}
-            dragElastic={{ top: 0, bottom: 0.35 }}
+            dragElastic={{ top: 0, bottom: 0.25 }}
+            dragMomentum={false}
             onDragEnd={(_, info) => {
               if (shouldDismissSheet(info.offset.y, info.velocity.y)) {
                 onClose();
+              } else {
+                animate(sheetY, 0, {
+                  ...SHEET_SNAP_SPRING,
+                  velocity: info.velocity.y,
+                });
               }
             }}
             className="relative z-10 w-full max-w-md rounded-t-3xl sm:rounded-3xl border overflow-hidden shadow-2xl"
-            style={{
-              backgroundColor: 'var(--surface-card)',
-              borderColor: 'var(--border-subtle)',
-            }}
           >
             {!isDesktop && (
               <div
@@ -114,12 +143,12 @@ export default function CustomPlanModeSheet({
               </div>
             )}
 
-            <div className="px-5 pt-4 pb-6 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] space-y-5">
+            <div className="px-5 pt-3.5 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] flex flex-col gap-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h2
                     id="custom-mode-sheet-title"
-                    className="text-lg font-bold leading-snug"
+                    className="text-base font-bold leading-snug"
                     style={{ color: 'var(--text-primary)' }}
                   >
                     ¿Cómo querés armar tu plan?
@@ -128,7 +157,8 @@ export default function CustomPlanModeSheet({
                     className="text-xs mt-1 leading-relaxed"
                     style={{ color: 'var(--text-secondary)' }}
                   >
-                    Chateá por texto o voz con la IA para diseñar y ajustar cada meta antes de guardar, o configuralas manualmente.
+                    Chateá por texto o voz con la IA para diseñar cada meta y revisar la
+                    transcripción, o configuralas manualmente.
                   </p>
                 </div>
 
@@ -136,43 +166,45 @@ export default function CustomPlanModeSheet({
                   type="button"
                   onClick={onClose}
                   aria-label="Cerrar"
-                  className="p-2 rounded-xl transition-colors hover:bg-white/10 cursor-pointer shrink-0"
-                  style={{ color: 'var(--text-secondary)' }}
+                  className="size-9 rounded-full flex items-center justify-center cursor-pointer active:scale-95 transition-transform duration-150 ease-out shrink-0"
+                  style={{
+                    touchAction: 'manipulation',
+                    backgroundColor: 'var(--surface-inset)',
+                    color: 'var(--text-secondary)',
+                  }}
                 >
-                  <X className="w-5 h-5" />
+                  <X className="size-4" />
                 </button>
               </div>
 
               <div className="flex flex-col gap-2.5">
-                {/* Botón principal con color de acento */}
                 <button
                   type="button"
                   onClick={onSelectAi}
-                  className="w-full min-h-[52px] px-5 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-transform active:scale-[0.98] cursor-pointer"
+                  className="w-full min-h-[48px] px-5 rounded-2xl font-semibold text-sm flex items-center justify-center gap-2 transition-transform duration-150 ease-out active:scale-[0.98] cursor-pointer"
                   style={{
                     touchAction: 'manipulation',
                     backgroundColor: 'var(--accent-fill)',
                     color: 'var(--on-accent)',
                   }}
                 >
-                  <Sparkles className="w-4 h-4" />
-                  Armar con IA
+                  <Sparkles className="size-4" />
+                  <span>Armar con IA</span>
                 </button>
 
-                {/* Botón secundario */}
                 <button
                   type="button"
                   onClick={onSelectManual}
-                  className="w-full min-h-[48px] px-5 rounded-2xl font-semibold text-sm flex items-center justify-center gap-2 border transition-transform active:scale-[0.98] cursor-pointer"
+                  className="w-full min-h-[46px] px-5 rounded-2xl font-semibold text-sm flex items-center justify-center gap-2 border transition-transform duration-150 ease-out active:scale-[0.98] cursor-pointer"
                   style={{
                     touchAction: 'manipulation',
-                    backgroundColor: 'var(--surface-card)',
+                    backgroundColor: 'var(--surface-inset)',
                     borderColor: 'var(--border-subtle)',
                     color: 'var(--text-primary)',
                   }}
                 >
-                  <Pencil className="w-4 h-4" />
-                  Editar manualmente
+                  <Pencil className="size-4" />
+                  <span>Editar manualmente</span>
                 </button>
               </div>
             </div>

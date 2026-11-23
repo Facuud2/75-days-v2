@@ -76,6 +76,7 @@ export const aiPlanResponseSchema = z.object({
   openQuestions: boundedStringList(400, 10),
   understoodFacts: boundedStringList(260, 20),
   suggestedQuickReplies: boundedStringList(280, 4),
+  quickReplySelectionMode: z.enum(['single', 'multiple']).optional().default('single'),
   sideQuestSuggestion: aiSideQuestSuggestionSchema.nullable().optional(),
   tasks: z.array(aiTaskSchema).transform((arr) => arr.slice(0, 12)),
 });
@@ -119,7 +120,13 @@ export const aiSideQuestResponseSchema = z.object({
   openQuestions: boundedStringList(400, 10),
   understoodFacts: boundedStringList(260, 20),
   suggestedQuickReplies: boundedStringList(280, 4),
+  quickReplySelectionMode: z.enum(['single', 'multiple']).optional().default('single'),
   quest: aiSideQuestDraftSchema.nullable().optional(),
+});
+
+export const aiTranscribeResponseSchema = z.object({
+  transcript: optionalBoundedString(2500),
+  hasSpeech: z.boolean().optional().default(true),
 });
 
 export const aiUserContextSchema = z.object({
@@ -222,8 +229,14 @@ const CUSTOM_PLAN_JSON_SCHEMA = {
     suggestedQuickReplies: {
       type: 'array',
       description:
-        'De 0 a 3 respuestas rápidas o ejemplos útiles para ayudar al usuario a responder más rápido.',
+        'De 0 a 4 respuestas rápidas concisas (idealmente menos de 75 caracteres cada una) para ayudar al usuario a responder en móvil.',
       items: { type: 'string' },
+    },
+    quickReplySelectionMode: {
+      type: 'string',
+      enum: ['single', 'multiple'],
+      description:
+        'Usa "single" cuando las opciones en suggestedQuickReplies son alternativas excluyentes entre sí (solo una tiene sentido). Usa "multiple" cuando el usuario puede elegir varias opciones a la vez manteniendo coherencia con tu pregunta.',
     },
     sideQuestSuggestion: {
       type: 'object',
@@ -314,8 +327,15 @@ const SIDE_QUEST_JSON_SCHEMA = {
     },
     suggestedQuickReplies: {
       type: 'array',
-      description: 'De 0 a 3 respuestas rápidas útiles para el siguiente paso.',
+      description:
+        'De 0 a 4 respuestas rápidas concisas (idealmente menos de 75 caracteres cada una) útiles para el siguiente paso en móvil.',
       items: { type: 'string' },
+    },
+    quickReplySelectionMode: {
+      type: 'string',
+      enum: ['single', 'multiple'],
+      description:
+        'Usa "single" cuando solo una respuesta rápida puede elegirse de forma coherente (opciones mutuamente excluyentes). Usa "multiple" cuando varias opciones pueden combinarse entre sí.',
     },
     quest: {
       type: 'object',
@@ -476,8 +496,9 @@ PRINCIPIOS CLAVE DE CONVERSACIÓN Y DISEÑO:
    - "heart": bienestar general, sueño, descanso, salud
 7. **Planes base de referencia**: Si el usuario pide tomar como base Soft, Medium o Hard, usá estas definiciones y aplicá solo sus cambios:
 ${defaultsContext}
-8. **Transcripción y tono**:
+8. **Transcripción, opciones rápidas y tono**:
    - Llená siempre \`userTranscript\` con lo que dijo el usuario (transcripción real y literal si hubo audio, o texto limpio si escribió). Si el audio está en silencio, vacío o inentendible, NO inventes una frase: poné \`"Audio sin voz detectable"\` en \`userTranscript\`, devolvé \`status: "needs_clarification"\` y pedile amablemente que repita el mensaje o lo escriba.
+   - Si incluís \`suggestedQuickReplies\`, hacelas breves para móvil (máx ~70 caracteres por opción) y definí \`quickReplySelectionMode\`: \`"single"\` si son alternativas excluyentes donde solo aplica una, o \`"multiple"\` si el usuario puede marcar varias opciones juntas con coherencia.
    - Idioma: español rioplatense/neutro natural, claro, directo y cercano. Sin clichés vacíos.`;
 }
 
@@ -503,8 +524,9 @@ PRINCIPIOS CLAVE:
    - Si existe \`Misión actual en revisión\`, cada tarea aparece numerada (#1, #2, ...) con su \`id\` y las seleccionadas figuran como \`[SELECCIONADA PARA MODIFICAR]\`.
    - En un mismo mensaje el usuario puede pedir editar tareas, eliminar tareas, agregar nuevas tareas, reordenarlas y/o cambiar el título, descripción, duración o dificultad de la misión.
    - Preservá intactas (\`changeType: "kept"\`) las tareas no seleccionadas ni mencionadas.
-5. **Transcripción y tono**:
+5. **Transcripción, opciones rápidas y tono**:
    - Llená siempre \`userTranscript\` con la transcripción literal del audio o el texto enviado. Si el audio está en silencio, vacío o inentendible, NO inventes contenido: poné \`"Audio sin voz detectable"\` en \`userTranscript\`, devolvé \`status: "needs_clarification"\` y pedile amablemente que vuelva a hablar o escribir.
+   - Si ofrecés \`suggestedQuickReplies\`, mantenelas breves y definí \`quickReplySelectionMode\`: \`"single"\` cuando las opciones son mutuamente excluyentes, o \`"multiple"\` cuando pueden seleccionarse varias juntas.
    - Español natural, directo y motivador sin relleno.`;
 }
 
@@ -745,4 +767,70 @@ export async function processSideQuestTurn(
   }
 
   return aiSideQuestResponseSchema.parse(parsedJson);
+}
+
+const TRANSCRIBE_JSON_SCHEMA = {
+  type: 'object',
+  properties: {
+    hasSpeech: {
+      type: 'boolean',
+      description: 'true si se escucha voz humana inteligible en el audio; false si hay solo silencio o ruido.',
+    },
+    transcript: {
+      type: 'string',
+      description:
+        'Transcripción limpia y fiel en español de lo dicho por el usuario (con puntuación natural, sin agregar comentarios ni etiquetas). Cadena vacía si hasSpeech es false.',
+    },
+  },
+  required: ['hasSpeech', 'transcript'],
+  additionalProperties: false,
+};
+
+export async function transcribeUserAudio(
+  input: { audioBase64: string; mimeType?: string },
+  clientOverride?: GeminiClientLike
+): Promise<{ transcript: string; hasSpeech: boolean }> {
+  const ai = getGeminiClient(clientOverride);
+  const cleanMimeType =
+    (input.mimeType || 'audio/webm').split(';')[0].trim() || 'audio/webm';
+
+  const interaction = await ai.interactions.create({
+    model: 'gemini-4-hydrogen',
+    system_instruction:
+      'Sos un transcriptor de voz exacto en español para la app "75 Days". Transcribí fielmente lo que dice el usuario con puntuación limpia. Si el audio solo contiene silencio o ruido sin palabras inteligibles, devolvé hasSpeech: false y transcript: "". Nunca inventes texto.',
+    input: [
+      {
+        type: 'user_input',
+        content: [
+          {
+            type: 'text',
+            text: 'Transcribí el audio adjunto al objeto JSON solicitado.',
+          },
+          {
+            type: 'audio',
+            data: input.audioBase64,
+            mime_type: cleanMimeType,
+          },
+        ],
+      },
+    ],
+    response_format: {
+      type: 'text',
+      mime_type: 'application/json',
+      schema: TRANSCRIBE_JSON_SCHEMA,
+    },
+    store: false,
+  });
+
+  const rawText = interaction.output_text?.trim();
+  if (!rawText) {
+    throw new Error('Gemini devolvió una transcripción vacía.');
+  }
+
+  const parsed = aiTranscribeResponseSchema.parse(JSON.parse(rawText));
+  const cleaned = parsed.transcript.trim();
+  return {
+    transcript: parsed.hasSpeech ? cleaned : '',
+    hasSpeech: Boolean(parsed.hasSpeech && cleaned.length > 0),
+  };
 }

@@ -1,20 +1,22 @@
+'use client';
+
 import React, { useMemo, useState } from 'react';
 import {
-  X,
-  Trophy,
-  Target,
+  Apple,
+  Book,
+  ChevronLeft,
+  Clock,
   Droplet,
   Dumbbell,
-  Book,
-  Sun,
-  Moon,
-  Apple,
   Footprints,
-  Clock,
+  Moon,
   Plus,
-  Trash2,
-  ChevronLeft,
   Sparkles,
+  Sun,
+  Target,
+  Trash2,
+  Trophy,
+  X,
 } from 'lucide-react';
 import { useQuestStore, SideQuestTemplate, CreateQuestInput } from '@/store/useQuestStore';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -26,7 +28,7 @@ interface SideQuestsModalProps {
   onClose: () => void;
 }
 
-const iconMap: Record<string, any> = {
+const iconMap: Record<string, React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>> = {
   droplet: Droplet,
   dumbbell: Dumbbell,
   book: Book,
@@ -53,7 +55,7 @@ export default function SideQuestsModal({ onClose }: SideQuestsModalProps) {
     description: '',
     icon: 'target',
     difficulty: 'Medium',
-    durationDays: 7,
+    durationDays: 14,
     tasks: [
       {
         title: '',
@@ -89,9 +91,7 @@ export default function SideQuestsModal({ onClose }: SideQuestsModalProps) {
     [user?.age, user?.height, user?.weight, user?.targetWeight, quests, customGoalsTemplate]
   );
 
-  // Filter out quests the user is already subscribed to (and not completed)
   const activeQuestTitles = (quests || []).filter((q) => !q.completed).map((q) => q.title);
-
   const availableToSubscribe = (availableQuests || []).filter(
     (q) => !activeQuestTitles.includes(q.title)
   );
@@ -154,347 +154,539 @@ export default function SideQuestsModal({ onClose }: SideQuestsModalProps) {
 
   return (
     <>
-      <div className="mobile-sheet-root fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      {!isAiSideQuestOpen && (
+        <div
+          className="mobile-sheet-root fixed inset-0 z-[100] flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="side-quests-modal-title"
+        >
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-[3px]" onClick={onClose} />
 
-        <div className="side-quests-modal mobile-sheet-panel relative bg-[#1a0b12] border border-rose-950/50 rounded-3xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
-          {/* Header */}
-          <div className="p-6 border-b border-rose-950/50 flex justify-between items-center bg-rose-950/10 backdrop-blur-md">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-rose-500/20 flex items-center justify-center">
-                <Trophy className="text-rose-500" size={20} />
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-white">Misiones Secundarias</h2>
-                <p className="text-sm text-white/50">
-                  Actividades dinámicas para potenciar tu progreso
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={onClose}
-              aria-label="Cerrar misiones secundarias"
-              className="p-2 text-white/50 hover:text-white bg-white/5 hover:bg-white/10 rounded-full transition-colors cursor-pointer"
+          <div
+            className="mobile-sheet-panel relative border rounded-3xl w-full max-w-2xl max-h-[92dvh] sm:max-h-[86dvh] overflow-hidden flex flex-col shadow-2xl"
+            style={{
+              backgroundColor: 'var(--surface-card)',
+              borderColor: 'var(--border-subtle)',
+              color: 'var(--text-primary)',
+            }}
+          >
+            {/* Header */}
+            <div
+              className="px-4 py-3.5 sm:px-6 sm:py-4 border-b flex justify-between items-center gap-3 shrink-0"
+              style={{ borderColor: 'var(--divider)' }}
             >
-              <X size={20} />
-            </button>
-          </div>
-
-          {/* Content */}
-          <div className="p-6 overflow-y-auto custom-scrollbar">
-            {creating ? (
-              <form onSubmit={handleCreate} className="space-y-5">
-                <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5 min-w-0">
+                {creating ? (
                   <button
                     type="button"
                     onClick={() => setCreating(false)}
-                    className="flex items-center gap-1 text-sm text-white/50 hover:text-white cursor-pointer"
+                    aria-label="Volver al catálogo de misiones"
+                    className="size-9 rounded-xl border flex items-center justify-center shrink-0 cursor-pointer active:scale-95 transition-transform duration-150 ease-out"
+                    style={{
+                      touchAction: 'manipulation',
+                      backgroundColor: 'var(--surface-inset)',
+                      borderColor: 'var(--border-subtle)',
+                      color: 'var(--text-primary)',
+                    }}
                   >
-                    <ChevronLeft size={16} /> Volver a misiones disponibles
+                    <ChevronLeft size={18} />
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsAiSideQuestOpen(true)}
-                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-300 hover:text-rose-200 cursor-pointer"
+                ) : (
+                  <div
+                    className="size-9 rounded-xl border flex items-center justify-center shrink-0"
+                    style={{
+                      backgroundColor: 'var(--surface-inset)',
+                      borderColor: 'var(--border-subtle)',
+                      color: 'var(--accent-text)',
+                    }}
                   >
-                    <Sparkles size={14} /> Diseñar con IA
-                  </button>
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-white">Crear misión personalizada</h3>
-                  <p className="mt-1 text-sm text-white/50">
-                    Define una misión solo para ti y sus condiciones exactas.
-                  </p>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <label className="md:col-span-2 text-sm text-white/70">
-                    Nombre
-                    <input
-                      required
-                      maxLength={100}
-                      value={customQuest.title}
-                      onChange={(e) => setCustomQuest({ ...customQuest, title: e.target.value })}
-                      placeholder="Ej. Leer 20 páginas"
-                      className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-white outline-none focus:border-rose-400"
-                    />
-                  </label>
-                  <label className="md:col-span-2 text-sm text-white/70">
-                    Descripción
-                    <textarea
-                      maxLength={2000}
-                      value={customQuest.description}
-                      onChange={(e) =>
-                        setCustomQuest({ ...customQuest, description: e.target.value })
-                      }
-                      placeholder="Qué quieres conseguir y cuáles son las reglas"
-                      rows={3}
-                      className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-white outline-none focus:border-rose-400"
-                    />
-                  </label>
-                  <label className="text-sm text-white/70">
-                    Dificultad
-                    <select
-                      value={customQuest.difficulty}
-                      onChange={(e) =>
-                        setCustomQuest({ ...customQuest, difficulty: e.target.value })
-                      }
-                      className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-white outline-none"
-                    >
-                      <option value="Easy">Fácil</option>
-                      <option value="Medium">Media</option>
-                      <option value="Hard">Difícil</option>
-                    </select>
-                  </label>
-                  <label className="text-sm text-white/70">
-                    Duración (días)
-                    <input
-                      required
-                      type="number"
-                      min={1}
-                      max={3650}
-                      value={customQuest.durationDays}
-                      onChange={(e) =>
-                        setCustomQuest({ ...customQuest, durationDays: Number(e.target.value) })
-                      }
-                      className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-white outline-none focus:border-rose-400"
-                    />
-                  </label>
-                </div>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-bold text-white">Tareas de la misión</h4>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setCustomQuest({
-                          ...customQuest,
-                          tasks: [
-                            ...customQuest.tasks,
-                            {
-                              title: '',
-                              description: '',
-                              icon: 'target',
-                              frequency: 'daily',
-                              targetValue: null,
-                              targetUnit: '',
-                            },
-                          ],
-                        })
-                      }
-                      className="flex items-center gap-1 text-sm text-rose-400 hover:text-rose-300 cursor-pointer"
-                    >
-                      <Plus size={16} /> Añadir tarea
-                    </button>
+                    <Trophy size={18} />
                   </div>
-                  {customQuest.tasks.map((task, index) => (
-                    <div
-                      key={index}
-                      className="rounded-2xl border border-white/10 bg-white/[.03] p-4 space-y-3"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold uppercase tracking-wider text-white/40">
-                          Tarea {index + 1}
-                        </span>
-                        {customQuest.tasks.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setCustomQuest({
-                                ...customQuest,
-                                tasks: customQuest.tasks.filter(
-                                  (_, taskIndex) => taskIndex !== index
-                                ),
-                              })
-                            }
-                            aria-label="Eliminar tarea"
-                            className="text-white/40 hover:text-red-400 cursor-pointer"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        )}
-                      </div>
-                      <input
-                        required
-                        maxLength={200}
-                        value={task.title}
-                        onChange={(e) => updateTask(index, { title: e.target.value })}
-                        placeholder="Qué debes hacer"
-                        className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-white outline-none focus:border-rose-400"
-                      />
-                      <input
-                        maxLength={1000}
-                        value={task.description ?? ''}
-                        onChange={(e) => updateTask(index, { description: e.target.value })}
-                        placeholder="Detalle o criterio de cumplimiento (opcional)"
-                        className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-white outline-none focus:border-rose-400"
-                      />
-                      <div className="grid grid-cols-2 gap-3">
-                        <select
-                          value={task.frequency}
-                          onChange={(e) =>
-                            updateTask(index, {
-                              frequency: e.target.value as 'daily' | 'weekly' | 'once',
-                            })
-                          }
-                          className="rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-white outline-none"
-                        >
-                          <option value="daily">Cada día</option>
-                          <option value="weekly">Cada semana</option>
-                          <option value="once">Una vez</option>
-                        </select>
-                        <input
-                          type="number"
-                          min={1}
-                          value={task.targetValue ?? ''}
-                          onChange={(e) =>
-                            updateTask(index, {
-                              targetValue: e.target.value ? Number(e.target.value) : null,
-                            })
-                          }
-                          placeholder="Objetivo numérico"
-                          className="rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-white outline-none focus:border-rose-400"
-                        />
-                      </div>
-                      <input
-                        maxLength={40}
-                        value={task.targetUnit ?? ''}
-                        onChange={(e) => updateTask(index, { targetUnit: e.target.value })}
-                        placeholder="Unidad del objetivo (páginas, minutos...)"
-                        className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-white outline-none focus:border-rose-400"
-                      />
-                    </div>
-                  ))}
-                </div>
-                {error && (
-                  <p role="alert" className="text-sm text-red-400">
-                    {error}
-                  </p>
                 )}
-                <button
-                  disabled={isLoading}
-                  className="w-full rounded-xl bg-rose-400 py-3 font-bold text-zinc-950 hover:bg-rose-300 disabled:opacity-50 cursor-pointer"
-                >
-                  {isLoading ? 'Creando…' : 'Crear y empezar misión'}
-                </button>
-              </form>
-            ) : availableToSubscribe.length === 0 ? (
-              <div className="text-center py-10 space-y-3">
-                <Trophy className="w-14 h-14 text-rose-500/25 mx-auto" />
-                <h3 className="text-lg font-bold text-white">¡Increíble!</h3>
-                <p className="text-white/50 text-sm max-w-sm mx-auto">
-                  Ya estás suscrito a todas las misiones del catálogo. Creá una propia con IA o de
-                  forma manual.
-                </p>
-                <div className="flex flex-col sm:flex-row gap-2.5 pt-2 max-w-md mx-auto">
+
+                <div className="min-w-0">
+                  <h2
+                    id="side-quests-modal-title"
+                    className="text-base sm:text-lg font-bold leading-tight truncate"
+                    style={{ color: 'var(--text-primary)' }}
+                  >
+                    {creating ? 'Crear misión manual' : 'Misiones Secundarias'}
+                  </h2>
+                  <p className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>
+                    {creating
+                      ? 'Definí condiciones y frecuencia a medida'
+                      : 'Mini-desafíos paralelos para potenciar tu reto'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5 shrink-0">
+                {creating && (
                   <button
                     type="button"
                     onClick={() => setIsAiSideQuestOpen(true)}
-                    className="flex-1 px-5 py-3 bg-rose-400 text-zinc-950 rounded-xl hover:bg-rose-300 transition-colors font-bold flex items-center justify-center gap-2 cursor-pointer"
+                    className="min-h-[36px] px-2.5 rounded-xl border text-xs font-semibold inline-flex items-center gap-1 cursor-pointer active:scale-95 transition-transform duration-150 ease-out"
+                    style={{
+                      touchAction: 'manipulation',
+                      backgroundColor: 'var(--surface-inset)',
+                      borderColor: 'var(--border-control)',
+                      color: 'var(--accent-text)',
+                    }}
                   >
-                    <Sparkles size={17} /> Crear con IA
+                    <Sparkles size={13} />
+                    <span>Con IA</span>
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setCreating(true)}
-                    className="flex-1 px-5 py-3 bg-white/5 text-white rounded-xl hover:bg-white/10 transition-colors font-semibold border border-white/10 flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <Plus size={17} /> Crear manual
-                  </button>
-                </div>
+                )}
+
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-6 py-2 bg-rose-500/10 text-rose-400 rounded-xl hover:bg-rose-500/20 transition-colors text-sm font-medium border border-rose-500/20 cursor-pointer"
+                  aria-label="Cerrar misiones secundarias"
+                  className="size-9 rounded-full flex items-center justify-center shrink-0 cursor-pointer active:scale-95 transition-transform duration-150 ease-out"
+                  style={{
+                    touchAction: 'manipulation',
+                    backgroundColor: 'var(--surface-inset)',
+                    color: 'var(--text-secondary)',
+                  }}
                 >
-                  Volver al Dashboard
+                  <X size={18} />
                 </button>
               </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="min-h-[240px] rounded-2xl border border-dashed border-rose-400/40 bg-rose-500/5 p-5 flex flex-col justify-between gap-4">
-                  <div>
-                    <div className="w-11 h-11 rounded-xl bg-rose-500/15 text-rose-400 flex items-center justify-center mb-3">
-                      <Sparkles size={22} />
+            </div>
+
+            {/* Body */}
+            {creating ? (
+              <form onSubmit={handleCreate} className="flex-1 min-h-0 flex flex-col overflow-hidden">
+                <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-6 flex flex-col gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <label
+                      className="sm:col-span-2 text-xs font-semibold flex flex-col gap-1.5"
+                      style={{ color: 'var(--text-secondary)' }}
+                    >
+                      Nombre de la misión
+                      <input
+                        required
+                        maxLength={100}
+                        value={customQuest.title}
+                        onChange={(e) => setCustomQuest({ ...customQuest, title: e.target.value })}
+                        placeholder="Ej. 21 días sin azúcar"
+                        className="w-full min-h-[44px] rounded-xl border px-3 py-2.5 text-base sm:text-sm outline-none"
+                        style={{
+                          backgroundColor: 'var(--surface-inset)',
+                          borderColor: 'var(--border-subtle)',
+                          color: 'var(--text-primary)',
+                        }}
+                      />
+                    </label>
+
+                    <label
+                      className="sm:col-span-2 text-xs font-semibold flex flex-col gap-1.5"
+                      style={{ color: 'var(--text-secondary)' }}
+                    >
+                      Descripción
+                      <textarea
+                        maxLength={2000}
+                        value={customQuest.description}
+                        onChange={(e) =>
+                          setCustomQuest({ ...customQuest, description: e.target.value })
+                        }
+                        placeholder="Propósito y reglas clave de la misión"
+                        rows={2}
+                        className="w-full rounded-xl border px-3 py-2.5 text-base sm:text-sm outline-none resize-none"
+                        style={{
+                          backgroundColor: 'var(--surface-inset)',
+                          borderColor: 'var(--border-subtle)',
+                          color: 'var(--text-primary)',
+                        }}
+                      />
+                    </label>
+
+                    <label
+                      className="text-xs font-semibold flex flex-col gap-1.5"
+                      style={{ color: 'var(--text-secondary)' }}
+                    >
+                      Dificultad
+                      <select
+                        value={customQuest.difficulty}
+                        onChange={(e) =>
+                          setCustomQuest({ ...customQuest, difficulty: e.target.value })
+                        }
+                        className="w-full min-h-[44px] rounded-xl border px-3 py-2.5 text-base sm:text-sm outline-none"
+                        style={{
+                          backgroundColor: 'var(--surface-inset)',
+                          borderColor: 'var(--border-subtle)',
+                          color: 'var(--text-primary)',
+                        }}
+                      >
+                        <option value="Easy">Fácil</option>
+                        <option value="Medium">Media</option>
+                        <option value="Hard">Difícil</option>
+                      </select>
+                    </label>
+
+                    <label
+                      className="text-xs font-semibold flex flex-col gap-1.5"
+                      style={{ color: 'var(--text-secondary)' }}
+                    >
+                      Duración (días)
+                      <input
+                        required
+                        type="number"
+                        inputMode="numeric"
+                        min={1}
+                        max={365}
+                        value={customQuest.durationDays}
+                        onChange={(e) =>
+                          setCustomQuest({
+                            ...customQuest,
+                            durationDays: Number(e.target.value),
+                          })
+                        }
+                        className="w-full min-h-[44px] rounded-xl border px-3 py-2.5 text-base sm:text-sm outline-none tabular-nums"
+                        style={{
+                          backgroundColor: 'var(--surface-inset)',
+                          borderColor: 'var(--border-subtle)',
+                          color: 'var(--text-primary)',
+                        }}
+                      />
+                    </label>
+                  </div>
+
+                  <div className="flex flex-col gap-2.5">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+                        Tareas ({customQuest.tasks.length})
+                      </h4>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setCustomQuest({
+                            ...customQuest,
+                            tasks: [
+                              ...customQuest.tasks,
+                              {
+                                title: '',
+                                description: '',
+                                icon: 'target',
+                                frequency: 'daily',
+                                targetValue: null,
+                                targetUnit: '',
+                              },
+                            ],
+                          })
+                        }
+                        className="inline-flex items-center gap-1 text-xs font-semibold cursor-pointer"
+                        style={{ color: 'var(--accent-text)' }}
+                      >
+                        <Plus size={14} /> Añadir tarea
+                      </button>
                     </div>
-                    <h3 className="text-lg font-bold text-white">Crear misión personalizada</h3>
-                    <p className="mt-1.5 text-sm text-white/55 leading-relaxed">
-                      Diseñala conversando con la IA (complementaria a tu plan) o cargala a mano.
+
+                    {customQuest.tasks.map((task, index) => (
+                      <div
+                        key={index}
+                        className="rounded-2xl border p-3.5 flex flex-col gap-2.5"
+                        style={{
+                          backgroundColor: 'var(--surface-inset)',
+                          borderColor: 'var(--border-subtle)',
+                        }}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span
+                            className="text-[11px] font-bold uppercase tracking-wider"
+                            style={{ color: 'var(--text-muted)' }}
+                          >
+                            Tarea {index + 1}
+                          </span>
+                          {customQuest.tasks.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setCustomQuest({
+                                  ...customQuest,
+                                  tasks: customQuest.tasks.filter(
+                                    (_, taskIndex) => taskIndex !== index
+                                  ),
+                                })
+                              }
+                              aria-label="Eliminar tarea"
+                              className="size-8 rounded-lg flex items-center justify-center cursor-pointer"
+                              style={{ color: 'var(--status-danger)' }}
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          )}
+                        </div>
+
+                        <input
+                          required
+                          maxLength={200}
+                          value={task.title}
+                          onChange={(e) => updateTask(index, { title: e.target.value })}
+                          placeholder="Qué debés hacer"
+                          className="w-full min-h-[42px] rounded-xl border px-3 py-2 text-base sm:text-sm outline-none"
+                          style={{
+                            backgroundColor: 'var(--surface-card)',
+                            borderColor: 'var(--border-subtle)',
+                            color: 'var(--text-primary)',
+                          }}
+                        />
+
+                        <input
+                          maxLength={1000}
+                          value={task.description ?? ''}
+                          onChange={(e) => updateTask(index, { description: e.target.value })}
+                          placeholder="Detalle o criterio (opcional)"
+                          className="w-full min-h-[42px] rounded-xl border px-3 py-2 text-base sm:text-sm outline-none"
+                          style={{
+                            backgroundColor: 'var(--surface-card)',
+                            borderColor: 'var(--border-subtle)',
+                            color: 'var(--text-primary)',
+                          }}
+                        />
+
+                        <div className="grid grid-cols-2 gap-2.5">
+                          <select
+                            value={task.frequency}
+                            onChange={(e) =>
+                              updateTask(index, {
+                                frequency: e.target.value as 'daily' | 'weekly' | 'once',
+                              })
+                            }
+                            className="min-h-[42px] rounded-xl border px-3 py-2 text-base sm:text-sm outline-none"
+                            style={{
+                              backgroundColor: 'var(--surface-card)',
+                              borderColor: 'var(--border-subtle)',
+                              color: 'var(--text-primary)',
+                            }}
+                          >
+                            <option value="daily">Cada día</option>
+                            <option value="weekly">Cada semana</option>
+                            <option value="once">Una vez</option>
+                          </select>
+
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            min={1}
+                            value={task.targetValue ?? ''}
+                            onChange={(e) =>
+                              updateTask(index, {
+                                targetValue: e.target.value ? Number(e.target.value) : null,
+                              })
+                            }
+                            placeholder="Meta numérica"
+                            className="min-h-[42px] rounded-xl border px-3 py-2 text-base sm:text-sm outline-none tabular-nums"
+                            style={{
+                              backgroundColor: 'var(--surface-card)',
+                              borderColor: 'var(--border-subtle)',
+                              color: 'var(--text-primary)',
+                            }}
+                          />
+                        </div>
+
+                        <input
+                          maxLength={40}
+                          value={task.targetUnit ?? ''}
+                          onChange={(e) => updateTask(index, { targetUnit: e.target.value })}
+                          placeholder="Unidad (ej. pasos, páginas, minutos)"
+                          className="w-full min-h-[42px] rounded-xl border px-3 py-2 text-base sm:text-sm outline-none"
+                          style={{
+                            backgroundColor: 'var(--surface-card)',
+                            borderColor: 'var(--border-subtle)',
+                            color: 'var(--text-primary)',
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  {error && (
+                    <p role="alert" className="text-xs font-medium" style={{ color: 'var(--status-danger)' }}>
+                      {error}
+                    </p>
+                  )}
+                </div>
+
+                {/* Sticky Thumb-Zone Footer for Manual Form */}
+                <div
+                  className="shrink-0 border-t px-4 sm:px-6 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]"
+                  style={{
+                    backgroundColor: 'var(--surface-card)',
+                    borderColor: 'var(--divider)',
+                  }}
+                >
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full min-h-[46px] rounded-xl font-semibold text-sm cursor-pointer active:scale-[0.98] transition-transform duration-150 ease-out disabled:opacity-50"
+                    style={{
+                      touchAction: 'manipulation',
+                      backgroundColor: 'var(--accent-fill)',
+                      color: 'var(--on-accent)',
+                    }}
+                  >
+                    {isLoading ? 'Creando misión...' : 'Crear y empezar misión'}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-6 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] flex flex-col gap-4">
+                {/* Compact Custom/AI Creation Banner at Top */}
+                <div
+                  className="rounded-2xl border p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  style={{
+                    backgroundColor: 'var(--surface-inset)',
+                    borderColor: 'var(--border-subtle)',
+                  }}
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="size-4 shrink-0" style={{ color: 'var(--accent-text)' }} />
+                      <h3 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
+                        Misión a tu medida
+                      </h3>
+                    </div>
+                    <p className="text-xs mt-0.5 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                      Diseñala por voz o chat con IA (100% complementaria a tu plan) o cargala manual.
                     </p>
                   </div>
-                  <div className="flex flex-col gap-2">
+
+                  <div className="flex items-center gap-2 shrink-0">
                     <button
                       type="button"
                       onClick={() => setIsAiSideQuestOpen(true)}
-                      className="w-full py-2.5 px-4 rounded-xl bg-rose-400 text-zinc-950 hover:bg-rose-300 transition-colors text-sm font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+                      className="flex-1 sm:flex-none min-h-[42px] px-3.5 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-transform duration-150 ease-out"
+                      style={{
+                        touchAction: 'manipulation',
+                        backgroundColor: 'var(--accent-fill)',
+                        color: 'var(--on-accent)',
+                      }}
                     >
-                      <Sparkles size={15} /> Diseñar con IA
+                      <Sparkles size={14} />
+                      <span>Diseñar con IA</span>
                     </button>
+
                     <button
                       type="button"
                       onClick={() => setCreating(true)}
-                      className="w-full py-2.5 px-4 rounded-xl border border-white/15 text-white hover:bg-white/5 transition-colors text-sm font-semibold flex items-center justify-center gap-1.5 cursor-pointer"
+                      className="min-h-[42px] px-3.5 rounded-xl border text-xs font-semibold inline-flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-transform duration-150 ease-out"
+                      style={{
+                        touchAction: 'manipulation',
+                        backgroundColor: 'var(--surface-card)',
+                        borderColor: 'var(--border-subtle)',
+                        color: 'var(--text-primary)',
+                      }}
                     >
-                      <Plus size={15} /> Crear manualmente
+                      <Plus size={14} />
+                      <span>Manual</span>
                     </button>
                   </div>
                 </div>
 
-                {availableToSubscribe.map((quest) => {
-                  const IconComponent =
-                    quest.icon && iconMap[quest.icon] ? iconMap[quest.icon] : Trophy;
-                  return (
-                    <div
-                      key={quest.title}
-                      className="bg-zinc-900/40 border border-white/5 rounded-2xl p-5 hover:border-rose-500/30 hover:bg-rose-950/20 transition-all group flex flex-col"
-                    >
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="w-12 h-12 rounded-xl bg-rose-950/40 flex items-center justify-center text-rose-500 group-hover:bg-rose-500 group-hover:text-white transition-colors">
-                          <IconComponent size={24} strokeWidth={1.5} />
-                        </div>
-                        <div className="flex flex-col items-end gap-2">
-                          <span
-                            className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md ${
-                              quest.difficulty === 'Easy'
-                                ? 'bg-emerald-500/10 text-emerald-500'
-                                : quest.difficulty === 'Medium'
-                                ? 'bg-amber-500/10 text-amber-500'
-                                : 'bg-red-500/10 text-red-500'
-                            }`}
+                {availableToSubscribe.length === 0 ? (
+                  <div className="text-center py-8 flex flex-col items-center gap-2.5">
+                    <Trophy className="size-11" style={{ color: 'var(--text-muted)' }} />
+                    <h3 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>
+                      ¡Catálogo completo!
+                    </h3>
+                    <p className="text-xs max-w-xs" style={{ color: 'var(--text-muted)' }}>
+                      Ya estás suscrito a todas las misiones predefinidas. Podés crear una nueva arriba con IA o manualmente.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {availableToSubscribe.map((quest) => {
+                      const IconComponent =
+                        quest.icon && iconMap[quest.icon] ? iconMap[quest.icon] : Trophy;
+                      const diffColor =
+                        quest.difficulty === 'Easy'
+                          ? 'var(--status-success)'
+                          : quest.difficulty === 'Medium'
+                          ? 'var(--status-warning)'
+                          : 'var(--status-danger)';
+
+                      return (
+                        <div
+                          key={quest.title}
+                          className="rounded-2xl border p-4 flex flex-col justify-between gap-3.5"
+                          style={{
+                            backgroundColor: 'var(--surface-inset)',
+                            borderColor: 'var(--border-subtle)',
+                          }}
+                        >
+                          <div>
+                            <div className="flex items-start justify-between gap-2 mb-2.5">
+                              <div
+                                className="size-10 rounded-xl border flex items-center justify-center shrink-0"
+                                style={{
+                                  backgroundColor: 'var(--surface-card)',
+                                  borderColor: 'var(--border-subtle)',
+                                  color: 'var(--accent-text)',
+                                }}
+                              >
+                                <IconComponent size={20} strokeWidth={1.75} />
+                              </div>
+
+                              <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                                <span
+                                  className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md"
+                                  style={{
+                                    backgroundColor: `color-mix(in srgb, ${diffColor} 15%, transparent)`,
+                                    color: diffColor,
+                                  }}
+                                >
+                                  {quest.difficulty === 'Easy'
+                                    ? 'Fácil'
+                                    : quest.difficulty === 'Medium'
+                                    ? 'Media'
+                                    : 'Difícil'}
+                                </span>
+                                <span className="pv2-chip text-[11px] tabular-nums">
+                                  {quest.durationDays} días
+                                </span>
+                              </div>
+                            </div>
+
+                            <h4
+                              className="text-sm font-bold leading-snug mb-1"
+                              style={{ color: 'var(--text-primary)' }}
+                            >
+                              {quest.title}
+                            </h4>
+                            <p
+                              className="text-xs leading-relaxed"
+                              style={{ color: 'var(--text-secondary)' }}
+                            >
+                              {quest.description}
+                            </p>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleSubscribe(quest)}
+                            disabled={subscribingTo !== null}
+                            className="w-full min-h-[42px] rounded-xl font-semibold text-xs border cursor-pointer active:scale-[0.98] transition-transform duration-150 ease-out disabled:opacity-50"
+                            style={{
+                              touchAction: 'manipulation',
+                              backgroundColor: 'var(--surface-card)',
+                              borderColor: 'var(--border-control)',
+                              color: 'var(--text-primary)',
+                            }}
                           >
-                            {quest.difficulty === 'Easy'
-                              ? 'Fácil'
-                              : quest.difficulty === 'Medium'
-                              ? 'Media'
-                              : 'Difícil'}
-                          </span>
-                          <span className="text-xs font-semibold text-white/50 bg-white/5 px-2 py-1 rounded-md">
-                            {quest.durationDays} Días
-                          </span>
+                            {subscribingTo === quest.title ? 'Suscribiendo...' : 'Suscribirse'}
+                          </button>
                         </div>
-                      </div>
-
-                      <h3 className="text-lg font-bold text-white mb-2">{quest.title}</h3>
-                      <p className="text-sm text-white/50 mb-6 flex-1">{quest.description}</p>
-
-                      <button
-                        onClick={() => handleSubscribe(quest)}
-                        disabled={subscribingTo !== null}
-                        className="w-full py-3 rounded-xl font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-rose-400 bg-rose-400 text-zinc-950 hover:bg-rose-300 hover:border-rose-300 shadow-[0_0_20px_-5px_var(--color-rose-500)] flex items-center justify-center gap-2 cursor-pointer"
-                      >
-                        {subscribingTo === quest.title ? (
-                          <div className="w-5 h-5 rounded-full border-2 border-white/20 border-t-white animate-spin" />
-                        ) : (
-                          'Suscribirse'
-                        )}
-                      </button>
-                    </div>
-                  );
-                })}
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </div>
         </div>
-      </div>
+      )}
 
       <AISideQuestSheet
         isOpen={isAiSideQuestOpen}

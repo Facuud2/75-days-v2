@@ -7,6 +7,7 @@ import {
   aiUserContextSchema,
   processCustomPlanTurn,
   processSideQuestTurn,
+  transcribeUserAudio,
 } from '../services/geminiService';
 
 const historyItemSchema = z.object({
@@ -96,6 +97,32 @@ export const generateSideQuest = async (req: AuthRequest, res: Response) => {
     return res.status(502).json({
       error:
         'No pudimos procesar la misión secundaria con la IA en este momento. Intentá de nuevo.',
+    });
+  }
+};
+
+const transcribeRequestSchema = z
+  .object({
+    audioBase64: z.string().min(8).max(4_500_000),
+    mimeType: z.string().max(80).optional(),
+  })
+  .strict();
+
+export const transcribeAudio = async (req: AuthRequest, res: Response) => {
+  try {
+    const payload = transcribeRequestSchema.parse(req.body);
+    const result = await transcribeUserAudio(payload);
+    return res.json(result);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        error: 'Audio inválido para transcribir.',
+        details: error.issues,
+      });
+    }
+    console.error('[aiController] Error transcribing audio:', error);
+    return res.status(502).json({
+      error: 'No pudimos transcribir el audio en este momento. Intentá de nuevo.',
     });
   }
 };

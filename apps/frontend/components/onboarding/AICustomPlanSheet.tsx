@@ -1,20 +1,30 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ArrowDown,
   Check,
+  ChevronRight,
+  ListChecks,
+  MessageSquare,
   Mic,
   Pencil,
   Plus,
   RefreshCw,
-  Send,
   Sparkles,
-  Square,
   Trash2,
   Trophy,
   X,
 } from 'lucide-react';
-import { AnimatePresence, motion, useDragControls, useReducedMotion } from 'motion/react';
+import {
+  AnimatePresence,
+  animate,
+  motion,
+  useDragControls,
+  useMotionValue,
+  useReducedMotion,
+  useTransform,
+} from 'motion/react';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useVoiceRecorder } from '@/hooks/useVoiceRecorder';
 import {
@@ -25,20 +35,31 @@ import {
   type AiSideQuestDraft,
   type AiSideQuestSuggestion,
   type AiUserContext,
+  type QuickReplySelectionMode,
 } from '@/lib/api/ai';
 import {
   REDUCED_MOTION_TRANSITION,
   SHEET_ENTER_SPRING,
   SHEET_EXIT_TRANSITION,
+  SHEET_SNAP_SPRING,
   shouldDismissSheet,
 } from '@/lib/motion/sheetPhysics';
-import { formatTaskBadge, getCustomTaskIcon, type CustomTask } from './CustomTaskEditorSheet';
+import { getCustomTaskIcon, type CustomTask } from './CustomTaskEditorSheet';
 import AISideQuestSheet, { getSideQuestIcon } from './AISideQuestSheet';
 import AIThinkingStatus from './AIThinkingStatus';
+import AutoGrowComposer from './AutoGrowComposer';
+import QuickReplyOptionsCard from './QuickReplyOptionsCard';
 
 type DraftCustomTask = CustomTask & {
   changeType?: 'kept' | 'modified' | 'added';
 };
+
+interface PlanProposalSummary {
+  totalCount: number;
+  addedCount: number;
+  modifiedCount: number;
+  previewTitles: string[];
+}
 
 interface ChatMessageItem {
   id: string;
@@ -47,6 +68,8 @@ interface ChatMessageItem {
   viaVoice?: boolean;
   openQuestions?: string[];
   suggestedQuickReplies?: string[];
+  quickReplySelectionMode?: QuickReplySelectionMode;
+  proposalSummary?: PlanProposalSummary;
 }
 
 export type AICustomPlanSheetProps = {
@@ -55,7 +78,10 @@ export type AICustomPlanSheetProps = {
   userContext?: AiUserContext;
   saveButtonLabel?: string;
   isSaving?: boolean;
-  onApplyPlan: (tasks: CustomTask[], createdSideQuests?: AiSideQuestDraft[]) => void | Promise<void>;
+  onApplyPlan: (
+    tasks: CustomTask[],
+    createdSideQuests?: AiSideQuestDraft[]
+  ) => void | Promise<void>;
   onEditManually: (tasks: CustomTask[]) => void;
   onClose: () => void;
 };
@@ -90,10 +116,6 @@ function toDraftCustomTasks(aiTasks: AiCustomTask[]): DraftCustomTask[] {
     title: t.title,
     description: t.description,
     icon: ALLOWED_ICON_SET.has(t.icon) ? t.icon : 'dumbbell',
-    cadence: t.cadence || 'daily',
-    measurementType: t.measurementType || 'boolean',
-    targetValue: t.targetValue ?? 1,
-    targetUnit: t.targetUnit || '',
     changeType: t.changeType,
   }));
 }
@@ -106,23 +128,15 @@ function toAiTasks(tasks: DraftCustomTask[]): AiCustomTask[] {
       title: t.title.trim(),
       description: t.description.trim() || t.title.trim(),
       icon: (ALLOWED_ICON_SET.has(t.icon) ? t.icon : 'dumbbell') as AiCustomTask['icon'],
-      cadence: t.cadence || 'daily',
-      measurementType: t.measurementType || 'boolean',
-      targetValue: t.targetValue ?? 1,
-      targetUnit: t.targetUnit || '',
     }));
 }
 
 function stripChangeTypes(tasks: DraftCustomTask[]): CustomTask[] {
-  return tasks.map(({ id, title, description, icon, cadence, measurementType, targetValue, targetUnit }) => ({
+  return tasks.map(({ id, title, description, icon }) => ({
     id,
     title,
     description,
     icon,
-    cadence: cadence || 'daily',
-    measurementType: measurementType || 'boolean',
-    targetValue: targetValue ?? 1,
-    targetUnit: targetUnit || '',
   }));
 }
 
@@ -147,7 +161,7 @@ export default function AICustomPlanSheet({
   isOpen,
   initialTasks = [],
   userContext,
-  saveButtonLabel = 'Guardar todo y comenzar plan',
+  saveButtonLabel = 'Guardar plan',
   isSaving = false,
   onApplyPlan,
   onEditManually,
@@ -157,31 +171,47 @@ export default function AICustomPlanSheet({
   const dragControls = useDragControls();
   const isDesktop = useMediaQuery('(min-width: 640px)');
 
+  const sheetY = useMotionValue(0);
+  const backdropOpacity = useTransform(sheetY, [0, 360], [1, 0]);
+
   const {
     status: recStatus,
-    audioLevel,
+    isSpeaking,
+    elapsedSeconds,
     errorMessage: recError,
+    subscribeAudioMetrics,
     startRecording,
+    pauseRecording,
+    resumeRecording,
     stopRecording,
+    cancelRecording,
+    setTranscribing,
     setProcessing,
     resetStatus,
   } = useVoiceRecorder();
 
+  const [subView, setSubView] = useState<'plan' | 'side-quest'>('plan');
+  const [activeTab, setActiveTab] = useState<'chat' | 'draft'>('chat');
   const [messages, setMessages] = useState<ChatMessageItem[]>([]);
   const [history, setHistory] = useState<AiConversationTurn[]>([]);
   const [understoodFacts, setUnderstoodFacts] = useState<string[]>([]);
   const [generatedTasks, setGeneratedTasks] = useState<DraftCustomTask[]>([]);
+  const [hasAiProposalReady, setHasAiProposalReady] = useState(false);
+  const [hasUnreadDraftChanges, setHasUnreadDraftChanges] = useState(false);
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
-  const [sideQuestSuggestion, setSideQuestSuggestion] = useState<AiSideQuestSuggestion | null>(null);
+  const [sideQuestSuggestion, setSideQuestSuggestion] = useState<AiSideQuestSuggestion | null>(
+    null
+  );
   const [dismissedSideQuestOffer, setDismissedSideQuestOffer] = useState(false);
   const [sessionSideQuests, setSessionSideQuests] = useState<AiSideQuestDraft[]>([]);
-  const [isSideQuestSheetOpen, setIsSideQuestSheetOpen] = useState(false);
   const [sideQuestInitialPrompt, setSideQuestInitialPrompt] = useState('');
   const [apiError, setApiError] = useState<string | null>(null);
   const [textInput, setTextInput] = useState('');
+  const [showScrollBottom, setShowScrollBottom] = useState(false);
 
-  const chatEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+  const lastMsgRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const selectedTaskSet = useMemo(() => new Set(selectedTaskIds), [selectedTaskIds]);
   const contextChips = useMemo(() => summarizeContextChips(userContext), [userContext]);
@@ -211,14 +241,18 @@ export default function AICustomPlanSheet({
   // Reset conversation state when sheet opens
   useEffect(() => {
     if (!isOpen) return;
+    sheetY.set(0);
+    setSubView('plan');
+    setActiveTab('chat');
     setApiError(null);
     setHistory([]);
     setUnderstoodFacts([]);
     setSelectedTaskIds([]);
+    setHasAiProposalReady(false);
+    setHasUnreadDraftChanges(false);
     setSideQuestSuggestion(null);
     setDismissedSideQuestOffer(false);
     setSessionSideQuests([]);
-    setIsSideQuestSheetOpen(false);
     setSideQuestInitialPrompt('');
     setTextInput('');
     resetStatus();
@@ -234,10 +268,10 @@ export default function AICustomPlanSheet({
 
     const welcomeMessage =
       validInitial.length > 0
-        ? 'Ya cargué tus metas actuales acá abajo. Marcá las tareas que quieras ajustar y contame en un solo mensaje qué querés editar, eliminar, sumar o cambiar de orden.'
+        ? 'Contame acá abajo (por texto o voz) cómo querés armar o modificar tu plan. Si querés editar tareas puntuales de tu base actual, podés tocarlas en la pestaña "Metas".'
         : hasContext
-        ? 'Contame tu idea para el reto de 75 días (por texto o voz). Ya tengo en cuenta tus datos y misiones secundarias para no preguntarte lo obvio: si queda algo abierto, te agrupo todas las dudas en un solo mensaje.'
-        : 'Contame tu idea para tu plan de 75 días, con mucho o poco detalle (por texto o voz). Voy a evaluar lo que me digas y te voy a agrupar en un solo mensaje las dudas que queden abiertas antes de sugerirte las tareas.';
+        ? 'Contame tu idea para el reto de 75 días (por texto o voz). Ya tengo en cuenta tus datos y misiones activas para no preguntarte lo obvio.'
+        : 'Contame tu idea para tu plan de 75 días (por texto o voz). Te agrupo cualquier duda abierta en un solo mensaje antes de armar tus metas.';
 
     setMessages([
       {
@@ -246,34 +280,63 @@ export default function AICustomPlanSheet({
         text: welcomeMessage,
       },
     ]);
-  }, [isOpen, initialTasks, userContext, resetStatus]);
+  }, [isOpen, initialTasks, userContext, resetStatus, sheetY]);
 
   useEffect(() => {
     if (!isOpen) return;
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !isSideQuestSheetOpen) {
-        onClose();
+      if (e.key !== 'Escape') return;
+      if (subView === 'side-quest') {
+        e.stopPropagation();
+        setSubView('plan');
+        return;
       }
+      onClose();
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [isOpen, isSideQuestSheetOpen, onClose]);
+  }, [isOpen, subView, onClose]);
+
+  const scrollToLatestMessage = useCallback(
+    (behavior: ScrollBehavior = reduceMotion ? 'auto' : 'smooth') => {
+      const container = chatScrollRef.current;
+      const target = lastMsgRef.current;
+      if (!container) return;
+      if (target) {
+        // Anchor near the start of the latest message so open questions + options stay readable from line 1
+        const targetTop = target.offsetTop - 12;
+        const maxScroll = container.scrollHeight - container.clientHeight;
+        container.scrollTo({
+          top: Math.max(0, Math.min(targetTop, maxScroll)),
+          behavior,
+        });
+      } else {
+        container.scrollTo({ top: container.scrollHeight, behavior });
+      }
+    },
+    [reduceMotion]
+  );
 
   useEffect(() => {
-    if (!isOpen) return;
-    chatEndRef.current?.scrollIntoView({
-      behavior: reduceMotion ? 'auto' : 'smooth',
-      block: 'end',
-    });
-  }, [messages, generatedTasks, sessionSideQuests, recStatus, isOpen, reduceMotion]);
+    if (!isOpen || subView !== 'plan' || activeTab !== 'chat') return;
+    const raf = requestAnimationFrame(() => scrollToLatestMessage());
+    return () => cancelAnimationFrame(raf);
+  }, [messages.length, recStatus, activeTab, subView, isOpen, scrollToLatestMessage]);
+
+  const handleChatScroll = () => {
+    const el = chatScrollRef.current;
+    if (!el) return;
+    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setShowScrollBottom(distFromBottom > 140);
+  };
 
   const micBlocked =
     recStatus === 'permission-denied' ||
     recStatus === 'unsupported' ||
     recStatus === 'error';
 
-  const isProcessing = recStatus === 'processing';
-  const isRecording = recStatus === 'recording';
+  const isBusy = recStatus === 'processing' || recStatus === 'transcribing' || isSaving;
+  const isAiThinking = recStatus === 'processing';
 
   const toggleTaskSelection = (taskId: string) => {
     setSelectedTaskIds((prev) =>
@@ -288,13 +351,14 @@ export default function AICustomPlanSheet({
     forceProposal?: boolean;
   }) => {
     setApiError(null);
+    setActiveTab('chat');
     setProcessing(true);
 
     const optimisticMsgId = `plan-user-${Date.now()}`;
     const isVoice = Boolean(opts.audioBase64);
     const optimisticText = opts.forceProposal
       ? 'Armá la propuesta de tareas con lo que hablamos.'
-      : opts.text?.trim() || 'Transcribiendo audio...';
+      : opts.text?.trim() || 'Procesando tu mensaje de voz...';
 
     setMessages((prev) => [
       ...prev,
@@ -347,6 +411,27 @@ export default function AICustomPlanSheet({
               .join('\n')}`
           : res.assistantMessage;
 
+      let proposalSummary: PlanProposalSummary | undefined;
+      if (res.tasks && res.tasks.length > 0) {
+        const nextDraft = toDraftCustomTasks(res.tasks);
+        setGeneratedTasks(nextDraft);
+        setSelectedTaskIds([]);
+        if (res.status === 'ready') {
+          setHasAiProposalReady(true);
+          setHasUnreadDraftChanges(true);
+          proposalSummary = {
+            totalCount: nextDraft.length,
+            addedCount: nextDraft.filter((t) => t.changeType === 'added').length,
+            modifiedCount: nextDraft.filter((t) => t.changeType === 'modified').length,
+            previewTitles: nextDraft.slice(0, 3).map((t) => t.title),
+          };
+        }
+      }
+
+      if (res.status === 'ready' && res.sideQuestSuggestion) {
+        setSideQuestSuggestion(res.sideQuestSuggestion);
+      }
+
       setMessages((prev) => [
         ...prev.map((m) =>
           m.id === optimisticMsgId ? { ...m, text: resolvedUserText } : m
@@ -357,6 +442,8 @@ export default function AICustomPlanSheet({
           text: res.assistantMessage,
           openQuestions: res.openQuestions ?? [],
           suggestedQuickReplies: res.suggestedQuickReplies ?? [],
+          quickReplySelectionMode: res.quickReplySelectionMode ?? 'single',
+          proposalSummary,
         },
       ]);
 
@@ -369,401 +456,801 @@ export default function AICustomPlanSheet({
       if (res.understoodFacts && res.understoodFacts.length > 0) {
         setUnderstoodFacts(res.understoodFacts);
       }
-
-      if (res.tasks && res.tasks.length > 0) {
-        setGeneratedTasks(toDraftCustomTasks(res.tasks));
-        setSelectedTaskIds([]);
-      }
-
-      if (res.status === 'ready' && res.sideQuestSuggestion) {
-        setSideQuestSuggestion(res.sideQuestSuggestion);
-      }
     } catch (err: any) {
       setMessages((prev) => prev.filter((m) => m.id !== optimisticMsgId));
       setApiError(
-        err?.message || 'No pudimos comunicarnos con la IA. Intentá de nuevo.'
+        err?.message ||
+          'No pudimos comunicarnos con la IA en este momento. Tu borrador sigue intacto.'
       );
     } finally {
       setProcessing(false);
     }
   };
 
-  const handleMicToggle = async () => {
-    if (isProcessing || isSaving) return;
-    if (isRecording) {
-      const result = await stopRecording();
-      if (!result || result.blob.size === 0) return;
-      const base64 = await blobToBase64(result.blob);
-      await sendToAi({ audioBase64: base64, mimeType: result.mimeType });
+  const handleStopAndTranscribe = async () => {
+    const result = await stopRecording();
+    if (!result || result.blob.size === 0) {
+      resetStatus();
       return;
     }
-    await startRecording();
+    setApiError(null);
+    setTranscribing(true);
+    try {
+      const base64 = await blobToBase64(result.blob);
+      const res = await aiService.transcribeAudio({
+        audioBase64: base64,
+        mimeType: result.mimeType,
+      });
+      setTranscribing(false);
+      if (!res.hasSpeech || !res.transcript.trim()) {
+        setApiError('No detectamos voz clara en el audio. Probá hablar más cerca del micrófono.');
+        return;
+      }
+      setTextInput((prev) =>
+        prev.trim() ? `${prev.trim()} ${res.transcript.trim()}` : res.transcript.trim()
+      );
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus();
+      });
+    } catch (err: any) {
+      setTranscribing(false);
+      setApiError(err?.message || 'No pudimos transcribir el audio. Intentá de nuevo.');
+    }
   };
 
-  const handleTextSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSendVoiceDirect = async () => {
+    const result = await stopRecording();
+    if (!result || result.blob.size === 0) {
+      resetStatus();
+      return;
+    }
+    const base64 = await blobToBase64(result.blob);
+    await sendToAi({ audioBase64: base64, mimeType: result.mimeType });
+  };
+
+  const handleTextSubmit = async () => {
     const trimmed = textInput.trim();
-    if (!trimmed || isProcessing || isSaving) return;
+    if (!trimmed || isBusy) return;
     setTextInput('');
     await sendToAi({ text: trimmed });
   };
 
-  const handleQuickReply = (reply: string) => {
-    setTextInput((prev) => (prev.trim() ? `${prev.trim()}. ${reply}` : reply));
-    inputRef.current?.focus();
-  };
-
   const handleOpenSideQuestDesigner = (ideaPrompt?: string) => {
     setSideQuestInitialPrompt(ideaPrompt ?? '');
-    setIsSideQuestSheetOpen(true);
+    setSubView('side-quest');
   };
 
   const handleAddSessionSideQuest = (quest: AiSideQuestDraft) => {
     setSessionSideQuests((prev) => [...prev, quest]);
-    setIsSideQuestSheetOpen(false);
+    setSubView('plan');
+    setActiveTab('chat');
     setMessages((prev) => [
       ...prev,
       {
         id: `plan-sq-added-${Date.now()}`,
         role: 'assistant',
-        text: `Sumé la misión secundaria "${quest.title}" (${quest.durationDays} días) a tu borrador visual. Se guardará junto con tu plan cuando pulses "${saveButtonLabel}".`,
+        text: `Sumé la misión secundaria "${quest.title}" (${quest.durationDays} días) a tu borrador. Se activará junto con tu plan al guardar.`,
       },
     ]);
   };
 
   const hasReadyTasks = generatedTasks.length > 0;
+  const canQuickSaveFromHeader =
+    hasReadyTasks && (hasAiProposalReady || sessionSideQuests.length > 0);
   const lastAssistantId = [...messages].reverse().find((m) => m.role === 'assistant')?.id;
 
   return (
-    <>
-      <AnimatePresence>
-        {isOpen && (
-          <div
-            className="fixed inset-0 z-[125] flex items-end sm:items-center justify-center sm:p-4"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="ai-plan-sheet-title"
-            onClick={(e) => e.stopPropagation()}
+    <AnimatePresence>
+      {isOpen && (
+        <div
+          className="fixed inset-0 z-[125] flex items-end sm:items-center justify-center sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={subView === 'side-quest' ? 'ai-side-quest-title' : 'ai-plan-sheet-title'}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <motion.button
+            type="button"
+            aria-label="Cerrar asistente de IA"
+            onClick={onClose}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.16, ease: 'easeOut' }}
+            style={isDesktop ? undefined : { opacity: backdropOpacity }}
+            className="absolute inset-0 bg-black/68 backdrop-blur-[3px]"
+          />
+
+          <motion.div
+            style={
+              isDesktop
+                ? {
+                    backgroundColor: 'var(--surface-card)',
+                    borderColor: 'var(--border-subtle)',
+                    color: 'var(--text-primary)',
+                  }
+                : {
+                    y: sheetY,
+                    backgroundColor: 'var(--surface-card)',
+                    borderColor: 'var(--border-subtle)',
+                    color: 'var(--text-primary)',
+                  }
+            }
+            initial={
+              reduceMotion
+                ? { opacity: 0 }
+                : isDesktop
+                ? { opacity: 0, scale: 0.96, y: 8 }
+                : { y: '100%' }
+            }
+            animate={
+              reduceMotion
+                ? { opacity: 1 }
+                : isDesktop
+                ? { opacity: 1, scale: 1, y: 0 }
+                : { y: 0 }
+            }
+            exit={
+              reduceMotion
+                ? { opacity: 0 }
+                : isDesktop
+                ? { opacity: 0, scale: 0.97, y: 6, transition: SHEET_EXIT_TRANSITION }
+                : { y: '100%', transition: SHEET_EXIT_TRANSITION }
+            }
+            transition={
+              reduceMotion
+                ? REDUCED_MOTION_TRANSITION
+                : isDesktop
+                ? { duration: 0.22, ease: [0.22, 1, 0.36, 1] }
+                : SHEET_ENTER_SPRING
+            }
+            drag={!isDesktop && !reduceMotion ? 'y' : false}
+            dragControls={dragControls}
+            dragListener={false}
+            dragConstraints={{ top: 0 }}
+            dragElastic={{ top: 0, bottom: 0.25 }}
+            dragMomentum={false}
+            onDragEnd={(_, info) => {
+              if (shouldDismissSheet(info.offset.y, info.velocity.y)) {
+                onClose();
+              } else {
+                animate(sheetY, 0, {
+                  ...SHEET_SNAP_SPRING,
+                  velocity: info.velocity.y,
+                });
+              }
+            }}
+            className="relative z-10 w-full max-w-xl h-[95dvh] sm:h-[88dvh] max-h-[840px] rounded-t-3xl sm:rounded-3xl border flex flex-col overflow-hidden shadow-2xl"
           >
-            <motion.button
-              type="button"
-              aria-label="Cerrar asistente de IA"
-              onClick={onClose}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.15, ease: 'easeOut' }}
-              className="absolute inset-0 bg-black/65 backdrop-blur-[3px]"
-            />
-
-            <motion.div
-              initial={
-                reduceMotion ? { opacity: 0 } : isDesktop ? { opacity: 0, scale: 0.96, y: 8 } : { y: '100%' }
-              }
-              animate={
-                reduceMotion ? { opacity: 1 } : isDesktop ? { opacity: 1, scale: 1, y: 0 } : { y: 0 }
-              }
-              exit={
-                reduceMotion
-                  ? { opacity: 0 }
-                  : isDesktop
-                  ? { opacity: 0, scale: 0.97, y: 6, transition: SHEET_EXIT_TRANSITION }
-                  : { y: '100%', transition: SHEET_EXIT_TRANSITION }
-              }
-              transition={
-                reduceMotion
-                  ? REDUCED_MOTION_TRANSITION
-                  : isDesktop
-                  ? { duration: 0.25, ease: [0.22, 1, 0.36, 1] }
-                  : SHEET_ENTER_SPRING
-              }
-              drag={!isDesktop && !reduceMotion ? 'y' : false}
-              dragControls={dragControls}
-              dragListener={false}
-              dragConstraints={{ top: 0 }}
-              dragElastic={{ top: 0, bottom: 0.35 }}
-              onDragEnd={(_, info) => {
-                if (shouldDismissSheet(info.offset.y, info.velocity.y)) {
-                  onClose();
-                }
-              }}
-              className="relative z-10 w-full max-w-xl h-[92dvh] sm:h-[86dvh] max-h-[800px] rounded-t-3xl sm:rounded-3xl border flex flex-col overflow-hidden shadow-2xl"
-              style={{
-                backgroundColor: 'var(--surface-card)',
-                borderColor: 'var(--border-subtle)',
-                color: 'var(--text-primary)',
-              }}
-            >
-              {/* Drag handle mobile */}
-              {!isDesktop && (
-                <div
-                  onPointerDown={(e) => dragControls.start(e)}
-                  className="flex justify-center pt-2.5 pb-1 cursor-grab active:cursor-grabbing touch-none shrink-0"
-                >
-                  <span
-                    className="w-10 h-1 rounded-full"
-                    style={{ backgroundColor: 'var(--border-control)' }}
-                  />
-                </div>
-              )}
-
-              {/* Header */}
-              <header
-                className="flex items-center justify-between gap-3 px-5 py-3.5 border-b shrink-0"
-                style={{ borderColor: 'var(--divider)' }}
+            {/* Drag handle mobile */}
+            {!isDesktop && (
+              <div
+                onPointerDown={(e) => dragControls.start(e)}
+                className="flex justify-center pt-2.5 pb-0.5 cursor-grab active:cursor-grabbing touch-none shrink-0"
               >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div
-                    className="w-9 h-9 rounded-xl border flex items-center justify-center shrink-0"
-                    style={{
-                      backgroundColor: 'var(--surface-inset)',
-                      borderColor: 'var(--border-subtle)',
-                      color: 'var(--accent-text)',
-                    }}
-                  >
-                    <Sparkles className="w-4 h-4" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h2
-                        id="ai-plan-sheet-title"
-                        className="text-base font-bold leading-tight truncate"
-                        style={{ color: 'var(--text-primary)' }}
-                      >
-                        Diseñar plan con IA
-                      </h2>
-                      <span
-                        className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold shrink-0 border"
+                <span
+                  className="w-10 h-1 rounded-full"
+                  style={{ backgroundColor: 'var(--border-control)' }}
+                />
+              </div>
+            )}
+
+            {/* Embedded Side Quest Designer inside the same sheet (zero modal stacking) */}
+            {subView === 'side-quest' ? (
+              <AISideQuestSheet
+                isOpen
+                embedded
+                onBack={() => setSubView('plan')}
+                initialIdeaPrompt={sideQuestInitialPrompt}
+                userContext={enrichedContextForSideQuest}
+                saveButtonLabel="Sumar al plan"
+                onApplyQuest={handleAddSessionSideQuest}
+                onClose={() => setSubView('plan')}
+              />
+            ) : (
+              <>
+                {/* Compact Header + Segmented View Switcher */}
+                <header
+                  className="px-4 sm:px-5 pt-2.5 pb-3 border-b shrink-0 flex flex-col gap-2.5"
+                  style={{ borderColor: 'var(--divider)' }}
+                >
+                  <div className="flex items-center justify-between gap-2.5">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div
+                        className="size-9 rounded-xl border flex items-center justify-center shrink-0"
                         style={{
                           backgroundColor: 'var(--surface-inset)',
                           borderColor: 'var(--border-subtle)',
                           color: 'var(--accent-text)',
                         }}
                       >
-                        Asistente IA
-                      </span>
-                    </div>
-                    <p className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>
-                      Charlá, revisá tus tareas y guardá recién cuando esté perfecto
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={onClose}
-                  aria-label="Cerrar"
-                  className="h-9 w-9 rounded-full flex items-center justify-center shrink-0 transition-colors cursor-pointer"
-                  style={{
-                    backgroundColor: 'var(--surface-inset)',
-                    color: 'var(--text-secondary)',
-                  }}
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </header>
-
-              {/* Context strip when onboarding profile / quests are known */}
-              {contextChips.length > 0 && (
-                <div
-                  className="px-5 py-2 border-b flex items-center gap-1.5 overflow-x-auto shrink-0"
-                  style={{
-                    backgroundColor: 'var(--surface-inset)',
-                    borderColor: 'var(--divider)',
-                  }}
-                >
-                  <span className="text-[11px] font-medium shrink-0" style={{ color: 'var(--text-muted)' }}>
-                    Contexto activo:
-                  </span>
-                  {contextChips.map((chip, idx) => (
-                    <span key={idx} className="pv2-chip text-[11px] shrink-0">
-                      {chip}
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              {/* Unified Chat Stream + Integrated Interactive Task Draft */}
-              <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 sm:px-5 py-4 space-y-3.5">
-                {messages.map((msg) => {
-                  const isUser = msg.role === 'user';
-                  const showChips =
-                    !isUser &&
-                    msg.id === lastAssistantId &&
-                    msg.suggestedQuickReplies &&
-                    msg.suggestedQuickReplies.length > 0 &&
-                    !isProcessing;
-
-                  return (
-                    <div key={msg.id} className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
-                      <div
-                        className={`max-w-[88%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed border ${
-                          isUser ? 'rounded-br-md' : 'rounded-bl-md'
-                        }`}
-                        style={
-                          isUser
-                            ? {
-                                backgroundColor: 'var(--accent-fill)',
-                                borderColor: 'var(--accent-fill)',
-                                color: 'var(--on-accent)',
-                              }
-                            : {
-                                backgroundColor: 'var(--surface-inset)',
-                                borderColor: 'var(--border-subtle)',
-                                color: 'var(--text-primary)',
-                              }
-                        }
-                      >
-                        {!isUser && (
-                          <div className="flex items-center gap-1.5 mb-1">
-                            <Sparkles className="w-3 h-3" style={{ color: 'var(--accent-text)' }} />
-                            <span className="text-[11px] font-semibold" style={{ color: 'var(--text-muted)' }}>
-                              Asistente IA
-                            </span>
-                          </div>
-                        )}
-
-                        <p className="whitespace-pre-line">{msg.text}</p>
-
-                        {isUser && msg.viaVoice && (
-                          <span className="mt-1 inline-flex items-center gap-1 text-[10px] opacity-80">
-                            <Mic className="w-3 h-3" />
-                            Audio transcrito
-                          </span>
-                        )}
-
-                        {!isUser && msg.openQuestions && msg.openQuestions.length > 0 && (
-                          <ol
-                            className="mt-2.5 pt-2.5 border-t space-y-1.5 text-xs"
-                            style={{ borderColor: 'var(--divider)', color: 'var(--text-secondary)' }}
-                          >
-                            {msg.openQuestions.map((question, qIdx) => (
-                              <li key={qIdx} className="flex items-start gap-2">
-                                <span
-                                  className="w-4 h-4 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5 tabular-nums"
-                                  style={{
-                                    backgroundColor: 'var(--surface-raised)',
-                                    color: 'var(--accent-text)',
-                                  }}
-                                >
-                                  {qIdx + 1}
-                                </span>
-                                <span>{question}</span>
-                              </li>
-                            ))}
-                          </ol>
-                        )}
+                        <Sparkles className="size-4" />
                       </div>
-
-                      {showChips && (
-                        <div className="mt-2 flex flex-wrap gap-1.5 max-w-[92%]">
-                          {msg.suggestedQuickReplies!.map((reply, idx) => (
-                            <button
-                              key={idx}
-                              type="button"
-                              onClick={() => handleQuickReply(reply)}
-                              className="px-3 py-1.5 rounded-full text-xs font-medium border transition-colors cursor-pointer active:scale-95"
-                              style={{
-                                backgroundColor: 'var(--surface-card)',
-                                borderColor: 'var(--border-subtle)',
-                                color: 'var(--text-secondary)',
-                              }}
-                            >
-                              {reply}
-                            </button>
-                          ))}
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <h2
+                            id="ai-plan-sheet-title"
+                            className="text-[15px] sm:text-base font-bold leading-tight truncate"
+                            style={{ color: 'var(--text-primary)' }}
+                          >
+                            Diseñar plan con IA
+                          </h2>
                         </div>
-                      )}
+                        <p className="text-[11px] truncate" style={{ color: 'var(--text-muted)' }}>
+                          {contextChips.length > 0
+                            ? contextChips.join(' · ')
+                            : 'Charlá por voz o texto y guardá recién al confirmar'}
+                        </p>
+                      </div>
                     </div>
-                  );
-                })}
 
-                {isProcessing && (
-                  <div className="flex items-start">
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {canQuickSaveFromHeader && activeTab === 'chat' && (
+                        <button
+                          type="button"
+                          disabled={isBusy}
+                          onClick={() =>
+                            onApplyPlan(stripChangeTypes(generatedTasks), sessionSideQuests)
+                          }
+                          className="min-h-[36px] px-3 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer active:scale-95 transition-transform duration-150 ease-out disabled:opacity-50"
+                          style={{
+                            touchAction: 'manipulation',
+                            backgroundColor: 'var(--accent-fill)',
+                            color: 'var(--on-accent)',
+                          }}
+                        >
+                          <Check className="size-3.5" />
+                          <span>{isSaving ? 'Guardando...' : 'Guardar'}</span>
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={onClose}
+                        aria-label="Cerrar"
+                        className="size-9 rounded-full flex items-center justify-center shrink-0 cursor-pointer active:scale-95 transition-transform duration-150 ease-out"
+                        style={{
+                          touchAction: 'manipulation',
+                          backgroundColor: 'var(--surface-inset)',
+                          color: 'var(--text-secondary)',
+                        }}
+                      >
+                        <X className="size-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Segmented Control: Conversación vs Metas (N) */}
+                  {hasReadyTasks && (
                     <div
-                      className="rounded-2xl rounded-bl-md px-3.5 py-2.5 border flex items-center gap-2"
+                      role="tablist"
+                      aria-label="Secciones del diseñador de plan"
+                      className="grid grid-cols-2 gap-1 p-1 rounded-xl border"
                       style={{
                         backgroundColor: 'var(--surface-inset)',
                         borderColor: 'var(--border-subtle)',
                       }}
                     >
-                      <Sparkles className="w-3.5 h-3.5 shrink-0" style={{ color: 'var(--accent-text)' }} />
-                      <AIThinkingStatus
-                        states={hasReadyTasks ? PROPOSAL_THINKING_STATES : DISCOVERY_THINKING_STATES}
-                      />
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={activeTab === 'chat'}
+                        onClick={() => setActiveTab('chat')}
+                        className="min-h-[34px] rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 cursor-pointer transition-colors duration-150 ease-out"
+                        style={{
+                          touchAction: 'manipulation',
+                          backgroundColor:
+                            activeTab === 'chat' ? 'var(--surface-card)' : 'transparent',
+                          color: activeTab === 'chat' ? 'var(--text-primary)' : 'var(--text-muted)',
+                        }}
+                      >
+                        <MessageSquare className="size-3.5" />
+                        <span>Conversación</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={activeTab === 'draft'}
+                        onClick={() => {
+                          setActiveTab('draft');
+                          setHasUnreadDraftChanges(false);
+                        }}
+                        className="min-h-[34px] rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 cursor-pointer transition-colors duration-150 ease-out"
+                        style={{
+                          touchAction: 'manipulation',
+                          backgroundColor:
+                            activeTab === 'draft' ? 'var(--surface-card)' : 'transparent',
+                          color:
+                            activeTab === 'draft' ? 'var(--text-primary)' : 'var(--text-muted)',
+                        }}
+                      >
+                        <ListChecks className="size-3.5" />
+                        <span>
+                          Metas ({generatedTasks.length}
+                          {sessionSideQuests.length > 0 ? ` + ${sessionSideQuests.length}M` : ''})
+                        </span>
+                        {hasUnreadDraftChanges && activeTab !== 'draft' && (
+                          <span
+                            className="size-2 rounded-full"
+                            style={{ backgroundColor: 'var(--accent-fill)' }}
+                          />
+                        )}
+                      </button>
                     </div>
-                  </div>
-                )}
+                  )}
+                </header>
 
-                {apiError && (
-                  <div
-                    role="alert"
-                    className="rounded-2xl p-3 border text-xs"
-                    style={{
-                      backgroundColor: 'color-mix(in srgb, var(--status-danger) 10%, transparent)',
-                      borderColor: 'color-mix(in srgb, var(--status-danger) 35%, transparent)',
-                      color: 'var(--status-danger)',
-                    }}
-                  >
-                    {apiError}
-                  </div>
-                )}
-
-                {/* Integrated Interactive Visual Plan Card (Purely in memory, no DB write yet) */}
-                {hasReadyTasks && (
-                  <section
-                    aria-label="Propuesta visual de tareas del plan"
-                    className="rounded-2xl border overflow-hidden"
-                    style={{
-                      backgroundColor: 'var(--surface-inset)',
-                      borderColor: 'var(--border-subtle)',
-                    }}
-                  >
+                {/* Main Body: Clean Chat Stream OR Inset Grouped Draft View */}
+                {activeTab === 'chat' ? (
+                  <div className="relative flex-1 min-h-0 flex flex-col">
                     <div
-                      className="px-4 py-3 border-b flex flex-wrap items-center justify-between gap-2"
-                      style={{ borderColor: 'var(--divider)' }}
+                      ref={chatScrollRef}
+                      onScroll={handleChatScroll}
+                      className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 sm:px-5 py-3.5 flex flex-col gap-3"
                     >
+                      {/* Compact 1-line base tasks pill instead of dumping 5 huge cards into the chat */}
+                      {hasReadyTasks && !hasAiProposalReady && (
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab('draft')}
+                          className="w-full px-3 py-2 rounded-xl border flex items-center justify-between gap-2 text-left cursor-pointer active:scale-[0.99] transition-transform duration-150 ease-out"
+                          style={{
+                            touchAction: 'manipulation',
+                            backgroundColor: 'var(--surface-inset)',
+                            borderColor: 'var(--border-subtle)',
+                          }}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <ListChecks
+                              className="size-3.5 shrink-0"
+                              style={{ color: 'var(--accent-text)' }}
+                            />
+                            <span
+                              className="text-xs font-medium truncate"
+                              style={{ color: 'var(--text-secondary)' }}
+                            >
+                              {selectedTaskIds.length > 0
+                                ? `${selectedTaskIds.length} metas seleccionadas para modificar`
+                                : `${generatedTasks.length} metas base cargadas · Ver o elegir cuáles cambiar`}
+                            </span>
+                          </div>
+                          <ChevronRight
+                            className="size-4 shrink-0"
+                            style={{ color: 'var(--text-muted)' }}
+                          />
+                        </button>
+                      )}
+
+                      {messages.map((msg, idx) => {
+                        const isUser = msg.role === 'user';
+                        const isLast = idx === messages.length - 1;
+                        const showQuickReplies =
+                          !isUser &&
+                          msg.id === lastAssistantId &&
+                          msg.suggestedQuickReplies &&
+                          msg.suggestedQuickReplies.length > 0 &&
+                          !isAiThinking;
+
+                        return (
+                          <div
+                            key={msg.id}
+                            ref={isLast ? lastMsgRef : undefined}
+                            className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}
+                          >
+                            <div
+                              className={`max-w-[90%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed border ${
+                                isUser ? 'rounded-br-md' : 'rounded-bl-md'
+                              }`}
+                              style={
+                                isUser
+                                  ? {
+                                      backgroundColor:
+                                        'color-mix(in srgb, var(--accent-fill) 16%, var(--surface-raised))',
+                                      borderColor:
+                                        'color-mix(in srgb, var(--accent-fill) 38%, var(--border-subtle))',
+                                      color: 'var(--text-primary)',
+                                    }
+                                  : {
+                                      backgroundColor: 'var(--surface-inset)',
+                                      borderColor: 'var(--border-subtle)',
+                                      color: 'var(--text-primary)',
+                                    }
+                              }
+                            >
+                              {!isUser && (
+                                <div className="flex items-center gap-1.5 mb-1">
+                                  <Sparkles
+                                    className="size-3"
+                                    style={{ color: 'var(--accent-text)' }}
+                                  />
+                                  <span
+                                    className="text-[11px] font-semibold"
+                                    style={{ color: 'var(--text-muted)' }}
+                                  >
+                                    Asistente IA
+                                  </span>
+                                </div>
+                              )}
+
+                              <p className="whitespace-pre-line break-words">{msg.text}</p>
+
+                              {isUser && msg.viaVoice && (
+                                <span
+                                  className="mt-1 inline-flex items-center gap-1 text-[10px]"
+                                  style={{ color: 'var(--text-muted)' }}
+                                >
+                                  <Mic className="size-3" />
+                                  Audio enviado
+                                </span>
+                              )}
+
+                              {!isUser && msg.openQuestions && msg.openQuestions.length > 0 && (
+                                <ol
+                                  className="mt-2.5 pt-2.5 border-t flex flex-col gap-2 text-xs"
+                                  style={{
+                                    borderColor: 'var(--divider)',
+                                    color: 'var(--text-secondary)',
+                                  }}
+                                >
+                                  {msg.openQuestions.map((question, qIdx) => (
+                                    <li key={qIdx} className="flex items-start gap-2">
+                                      <span
+                                        className="size-4.5 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5 tabular-nums"
+                                        style={{
+                                          backgroundColor: 'var(--surface-raised)',
+                                          color: 'var(--accent-text)',
+                                        }}
+                                      >
+                                        {qIdx + 1}
+                                      </span>
+                                      <span className="leading-snug">{question}</span>
+                                    </li>
+                                  ))}
+                                </ol>
+                              )}
+                            </div>
+
+                            {/* Compact Inline Proposal Card ONLY when AI delivers ready tasks */}
+                            {!isUser && msg.proposalSummary && (
+                              <div
+                                className="mt-2 w-full max-w-[92%] rounded-2xl border p-3 flex flex-col gap-2.5"
+                                style={{
+                                  backgroundColor: 'var(--surface-card)',
+                                  borderColor: 'var(--border-subtle)',
+                                }}
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <ListChecks
+                                      className="size-4 shrink-0"
+                                      style={{ color: 'var(--accent-text)' }}
+                                    />
+                                    <span
+                                      className="text-xs font-bold truncate"
+                                      style={{ color: 'var(--text-primary)' }}
+                                    >
+                                      Propuesta lista ({msg.proposalSummary.totalCount} metas)
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    {msg.proposalSummary.addedCount > 0 && (
+                                      <span
+                                        className="text-[10px] font-semibold px-1.5 py-0.5 rounded"
+                                        style={{
+                                          backgroundColor:
+                                            'color-mix(in srgb, var(--status-success) 16%, transparent)',
+                                          color: 'var(--status-success)',
+                                        }}
+                                      >
+                                        +{msg.proposalSummary.addedCount}
+                                      </span>
+                                    )}
+                                    {msg.proposalSummary.modifiedCount > 0 && (
+                                      <span
+                                        className="text-[10px] font-semibold px-1.5 py-0.5 rounded"
+                                        style={{
+                                          backgroundColor:
+                                            'color-mix(in srgb, var(--status-info) 16%, transparent)',
+                                          color: 'var(--status-info)',
+                                        }}
+                                      >
+                                        {msg.proposalSummary.modifiedCount} edit.
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="flex flex-wrap gap-1">
+                                  {msg.proposalSummary.previewTitles.map((title, pIdx) => (
+                                    <span
+                                      key={pIdx}
+                                      className="pv2-chip text-[11px] max-w-full truncate"
+                                    >
+                                      {title}
+                                    </span>
+                                  ))}
+                                  {msg.proposalSummary.totalCount >
+                                    msg.proposalSummary.previewTitles.length && (
+                                    <span className="pv2-chip text-[11px]">
+                                      +
+                                      {msg.proposalSummary.totalCount -
+                                        msg.proposalSummary.previewTitles.length}{' '}
+                                      más
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="flex items-center gap-2 pt-0.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveTab('draft');
+                                      setHasUnreadDraftChanges(false);
+                                    }}
+                                    className="flex-1 min-h-[38px] px-3 rounded-xl border text-xs font-semibold inline-flex items-center justify-center gap-1.5 cursor-pointer active:scale-[0.98] transition-transform duration-150 ease-out"
+                                    style={{
+                                      touchAction: 'manipulation',
+                                      backgroundColor: 'var(--surface-inset)',
+                                      borderColor: 'var(--border-control)',
+                                      color: 'var(--text-primary)',
+                                    }}
+                                  >
+                                    <span>Revisar / ajustar metas</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    disabled={isBusy}
+                                    onClick={() =>
+                                      onApplyPlan(
+                                        stripChangeTypes(generatedTasks),
+                                        sessionSideQuests
+                                      )
+                                    }
+                                    className="min-h-[38px] px-3.5 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 cursor-pointer active:scale-[0.98] transition-transform duration-150 ease-out disabled:opacity-50"
+                                    style={{
+                                      touchAction: 'manipulation',
+                                      backgroundColor: 'var(--accent-fill)',
+                                      color: 'var(--on-accent)',
+                                    }}
+                                  >
+                                    <Check className="size-3.5" />
+                                    <span>Guardar</span>
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+
+                            {showQuickReplies && (
+                              <QuickReplyOptionsCard
+                                options={msg.suggestedQuickReplies!}
+                                mode={msg.quickReplySelectionMode}
+                                disabled={isBusy}
+                                onSendSelected={(combined) => void sendToAi({ text: combined })}
+                                onInsertIntoComposer={(combined) => {
+                                  setTextInput((prev) =>
+                                    prev.trim() ? `${prev.trim()}. ${combined}` : combined
+                                  );
+                                }}
+                              />
+                            )}
+                          </div>
+                        );
+                      })}
+
+                      {isAiThinking && (
+                        <div ref={lastMsgRef} className="flex items-start">
+                          <div
+                            className="rounded-2xl rounded-bl-md px-3.5 py-2.5 border flex items-center gap-2"
+                            style={{
+                              backgroundColor: 'var(--surface-inset)',
+                              borderColor: 'var(--border-subtle)',
+                            }}
+                          >
+                            <Sparkles
+                              className="size-3.5 shrink-0"
+                              style={{ color: 'var(--accent-text)' }}
+                            />
+                            <AIThinkingStatus
+                              states={
+                                hasReadyTasks ? PROPOSAL_THINKING_STATES : DISCOVERY_THINKING_STATES
+                              }
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {apiError && (
+                        <div
+                          role="alert"
+                          className="rounded-2xl p-3 border text-xs leading-relaxed"
+                          style={{
+                            backgroundColor:
+                              'color-mix(in srgb, var(--status-danger) 10%, transparent)',
+                            borderColor:
+                              'color-mix(in srgb, var(--status-danger) 35%, transparent)',
+                            color: 'var(--status-danger)',
+                          }}
+                        >
+                          {apiError}
+                        </div>
+                      )}
+
+                      {/* Complementary Side Quest Offer ONLY AFTER AI actually delivers a ready proposal */}
+                      {hasAiProposalReady &&
+                        !dismissedSideQuestOffer &&
+                        sessionSideQuests.length === 0 &&
+                        !isAiThinking && (
+                          <section
+                            aria-label="Sugerencia de misión secundaria complementaria"
+                            className="rounded-2xl border p-3.5 flex flex-col gap-2.5"
+                            style={{
+                              backgroundColor: 'var(--surface-inset)',
+                              borderColor: 'var(--border-subtle)',
+                            }}
+                          >
+                            <div className="flex items-start gap-2.5">
+                              <div
+                                className="size-8 rounded-xl border flex items-center justify-center shrink-0 mt-0.5"
+                                style={{
+                                  backgroundColor: 'var(--surface-card)',
+                                  borderColor: 'var(--border-subtle)',
+                                  color: 'var(--accent-text)',
+                                }}
+                              >
+                                <Trophy className="size-4" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p
+                                  className="text-xs font-bold leading-snug"
+                                  style={{ color: 'var(--text-primary)' }}
+                                >
+                                  {sideQuestSuggestion
+                                    ? `¿Sumamos misión secundaria: "${sideQuestSuggestion.title}"?`
+                                    : '¿Querés sumar una misión secundaria complementaria?'}
+                                </p>
+                                <p
+                                  className="text-[11px] mt-0.5 leading-relaxed"
+                                  style={{ color: 'var(--text-secondary)' }}
+                                >
+                                  {sideQuestSuggestion
+                                    ? sideQuestSuggestion.reason
+                                    : 'Un mini-desafío paralelo diseñado con IA para potenciar tu plan.'}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleOpenSideQuestDesigner(sideQuestSuggestion?.ideaPrompt)
+                                }
+                                className="min-h-[36px] px-3 rounded-xl text-xs font-semibold border inline-flex items-center gap-1.5 cursor-pointer active:scale-95 transition-transform duration-150 ease-out"
+                                style={{
+                                  touchAction: 'manipulation',
+                                  backgroundColor: 'var(--surface-card)',
+                                  borderColor: 'var(--border-control)',
+                                  color: 'var(--accent-text)',
+                                }}
+                              >
+                                <Sparkles className="size-3.5" />
+                                <span>Diseñar misión con IA</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setDismissedSideQuestOffer(true)}
+                                className="min-h-[36px] px-3 rounded-xl text-xs font-medium cursor-pointer active:scale-95 transition-transform duration-150 ease-out"
+                                style={{
+                                  touchAction: 'manipulation',
+                                  color: 'var(--text-muted)',
+                                }}
+                              >
+                                Ahora no
+                              </button>
+                            </div>
+                          </section>
+                        )}
+
+                      {micBlocked && (
+                        <div
+                          className="rounded-xl p-3 border text-xs flex items-center justify-between gap-2"
+                          style={{
+                            backgroundColor: 'var(--surface-inset)',
+                            borderColor: 'var(--border-subtle)',
+                            color: 'var(--text-secondary)',
+                          }}
+                        >
+                          <span>
+                            {recError ||
+                              'Micrófono bloqueado. Podés escribir acá abajo o refrescar.'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => window.location.reload()}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border font-semibold shrink-0 cursor-pointer"
+                            style={{
+                              backgroundColor: 'var(--surface-card)',
+                              borderColor: 'var(--border-subtle)',
+                              color: 'var(--accent-text)',
+                            }}
+                          >
+                            <RefreshCw className="size-3" />
+                            Refrescar
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {showScrollBottom && (
+                      <button
+                        type="button"
+                        onClick={() => scrollToLatestMessage('smooth')}
+                        aria-label="Ir al último mensaje"
+                        className="absolute right-4 bottom-3 size-9 rounded-full border shadow-md flex items-center justify-center cursor-pointer active:scale-95 transition-transform duration-150 ease-out"
+                        style={{
+                          touchAction: 'manipulation',
+                          backgroundColor: 'var(--surface-raised)',
+                          borderColor: 'var(--border-subtle)',
+                          color: 'var(--text-primary)',
+                        }}
+                      >
+                        <ArrowDown className="size-4" />
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  /* Draft Tab: Clean iOS Inset Grouped List of Proposed/Current Tasks + Side Quests */
+                  <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 sm:px-5 py-3.5 flex flex-col gap-3.5">
+                    <div className="flex items-center justify-between gap-2 px-0.5">
                       <div>
                         <h3 className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>
-                          Tu plan propuesto ({generatedTasks.length} metas)
+                          {hasAiProposalReady
+                            ? `Tu plan propuesto (${generatedTasks.length} metas)`
+                            : `Metas actuales en base (${generatedTasks.length})`}
                         </h3>
                         <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-                          Marcá las que quieras modificar y pedime editar, eliminar, agregar o reordenar
+                          Tocá las que quieras modificar con IA o editá todo manualmente
                         </p>
                       </div>
                       <span
-                        className="pv2-chip text-[11px]"
+                        className="pv2-chip text-[11px] shrink-0"
                         style={{ color: 'var(--status-warning)' }}
                       >
                         Sin guardar
                       </span>
                     </div>
 
-                    <ul className="p-3 space-y-2">
+                    <ul
+                      aria-label="Lista de metas del plan"
+                      className="rounded-2xl border overflow-hidden divide-y"
+                      style={{
+                        backgroundColor: 'var(--surface-inset)',
+                        borderColor: 'var(--border-subtle)',
+                      }}
+                    >
                       {generatedTasks.map((task, idx) => {
                         const Icon = getCustomTaskIcon(task.icon);
                         const isChecked = selectedTaskSet.has(task.id);
 
                         return (
-                          <li key={task.id}>
+                          <li key={task.id} style={{ borderColor: 'var(--divider)' }}>
                             <button
                               type="button"
                               role="checkbox"
                               aria-checked={isChecked}
                               onClick={() => toggleTaskSelection(task.id)}
-                              className="w-full text-left flex items-start gap-2.5 p-3 rounded-xl border transition-colors cursor-pointer"
+                              className="w-full text-left flex items-start gap-2.5 p-3 transition-colors duration-150 ease-out cursor-pointer"
                               style={{
                                 touchAction: 'manipulation',
                                 backgroundColor: isChecked
                                   ? 'color-mix(in srgb, var(--accent-fill) 10%, var(--surface-card))'
-                                  : 'var(--surface-card)',
-                                borderColor: isChecked
-                                  ? 'var(--accent-fill)'
-                                  : 'var(--border-subtle)',
+                                  : 'transparent',
                               }}
                             >
                               <span
-                                className="t-check mt-0.5 w-5 h-5 rounded-md border flex items-center justify-center shrink-0"
+                                className="t-check mt-0.5 size-5 rounded-md border flex items-center justify-center shrink-0"
                                 aria-checked={isChecked}
                                 style={{
                                   backgroundColor: isChecked ? 'var(--accent-fill)' : 'transparent',
@@ -775,7 +1262,7 @@ export default function AICustomPlanSheet({
                               >
                                 <svg
                                   viewBox="0 0 10.1668 10.1668"
-                                  className="w-3 h-3 fill-none stroke-current"
+                                  className="size-3 fill-none stroke-current"
                                   strokeWidth="2"
                                   strokeLinecap="round"
                                   strokeLinejoin="round"
@@ -784,49 +1271,37 @@ export default function AICustomPlanSheet({
                                 </svg>
                               </span>
 
-                              <span
-                                className="mt-0.5 w-5 h-5 rounded-md text-[11px] font-bold flex items-center justify-center shrink-0 tabular-nums"
-                                style={{
-                                  backgroundColor: 'var(--surface-inset)',
-                                  color: 'var(--text-muted)',
-                                }}
-                              >
-                                {idx + 1}
-                              </span>
-
                               <div
-                                className="w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 mt-0.5"
+                                className="size-8 rounded-lg border flex items-center justify-center shrink-0 mt-0.5"
                                 style={{
-                                  backgroundColor: 'var(--surface-inset)',
+                                  backgroundColor: 'var(--surface-card)',
                                   borderColor: 'var(--border-subtle)',
                                   color: 'var(--accent-text)',
                                 }}
                               >
-                                <Icon className="w-4 h-4" />
+                                <Icon className="size-4" />
                               </div>
 
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span
+                                    className="text-xs font-bold tabular-nums"
+                                    style={{ color: 'var(--text-muted)' }}
+                                  >
+                                    {idx + 1}.
+                                  </span>
                                   <span
                                     className="text-sm font-bold leading-snug"
                                     style={{ color: 'var(--text-primary)' }}
                                   >
                                     {task.title}
                                   </span>
-                                  <span
-                                    className="text-[10px] font-semibold px-1.5 py-0.5 rounded"
-                                    style={{
-                                      backgroundColor: 'var(--surface-card)',
-                                      color: 'var(--text-muted)',
-                                    }}
-                                  >
-                                    {formatTaskBadge(task)}
-                                  </span>
                                   {task.changeType === 'added' && (
                                     <span
                                       className="text-[10px] font-semibold px-1.5 py-0.5 rounded"
                                       style={{
-                                        backgroundColor: 'color-mix(in srgb, var(--status-success) 16%, transparent)',
+                                        backgroundColor:
+                                          'color-mix(in srgb, var(--status-success) 16%, transparent)',
                                         color: 'var(--status-success)',
                                       }}
                                     >
@@ -837,7 +1312,8 @@ export default function AICustomPlanSheet({
                                     <span
                                       className="text-[10px] font-semibold px-1.5 py-0.5 rounded"
                                       style={{
-                                        backgroundColor: 'color-mix(in srgb, var(--status-info) 16%, transparent)',
+                                        backgroundColor:
+                                          'color-mix(in srgb, var(--status-info) 16%, transparent)',
                                         color: 'var(--status-info)',
                                       }}
                                     >
@@ -848,11 +1324,12 @@ export default function AICustomPlanSheet({
                                     <span
                                       className="text-[10px] font-semibold px-1.5 py-0.5 rounded"
                                       style={{
-                                        backgroundColor: 'color-mix(in srgb, var(--accent-fill) 16%, transparent)',
+                                        backgroundColor:
+                                          'color-mix(in srgb, var(--accent-fill) 16%, transparent)',
                                         color: 'var(--accent-text)',
                                       }}
                                     >
-                                      A cambiar
+                                      Marcada
                                     </span>
                                   )}
                                 </div>
@@ -868,369 +1345,239 @@ export default function AICustomPlanSheet({
                         );
                       })}
                     </ul>
-                  </section>
-                )}
 
-                {/* Pending Side Quests designed in this session */}
-                {sessionSideQuests.length > 0 && (
-                  <section
-                    aria-label="Misiones secundarias listas para guardar"
-                    className="rounded-2xl border p-3.5 space-y-2.5"
-                    style={{
-                      backgroundColor: 'var(--surface-inset)',
-                      borderColor: 'var(--border-subtle)',
-                    }}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <Trophy className="w-4 h-4" style={{ color: 'var(--accent-text)' }} />
-                        <h3 className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>
-                          Misiones secundarias a crear ({sessionSideQuests.length})
-                        </h3>
+                    {/* Session Side Quests section inside Draft Tab */}
+                    <section
+                      aria-label="Misiones secundarias complementarias"
+                      className="rounded-2xl border p-3.5 flex flex-col gap-2.5"
+                      style={{
+                        backgroundColor: 'var(--surface-inset)',
+                        borderColor: 'var(--border-subtle)',
+                      }}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <Trophy className="size-4" style={{ color: 'var(--accent-text)' }} />
+                          <h4 className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>
+                            Misiones secundarias ({sessionSideQuests.length})
+                          </h4>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleOpenSideQuestDesigner(sideQuestSuggestion?.ideaPrompt ?? '')
+                          }
+                          className="inline-flex items-center gap-1 text-xs font-semibold cursor-pointer"
+                          style={{ color: 'var(--accent-text)' }}
+                        >
+                          <Plus className="size-3.5" />
+                          <span>Sumar con IA</span>
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => handleOpenSideQuestDesigner('')}
-                        className="inline-flex items-center gap-1 text-[11px] font-semibold cursor-pointer"
-                        style={{ color: 'var(--accent-text)' }}
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        Crear otra
-                      </button>
-                    </div>
-                    <ul className="space-y-1.5">
-                      {sessionSideQuests.map((quest, idx) => {
-                        const SQIcon = getSideQuestIcon(quest.icon);
-                        return (
-                          <li
-                            key={`${quest.title}-${idx}`}
-                            className="flex items-center justify-between gap-2.5 p-2.5 rounded-xl border"
-                            style={{
-                              backgroundColor: 'var(--surface-card)',
-                              borderColor: 'var(--border-subtle)',
-                            }}
-                          >
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              <span
-                                className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+
+                      {sessionSideQuests.length === 0 ? (
+                        <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                          Opcional: podés diseñar una misión paralela corta que complemente tu plan.
+                        </p>
+                      ) : (
+                        <ul className="flex flex-col gap-1.5">
+                          {sessionSideQuests.map((quest, idx) => {
+                            const SQIcon = getSideQuestIcon(quest.icon);
+                            return (
+                              <li
+                                key={`${quest.title}-${idx}`}
+                                className="flex items-center justify-between gap-2.5 p-2.5 rounded-xl border"
                                 style={{
-                                  backgroundColor: 'var(--surface-inset)',
-                                  color: 'var(--accent-text)',
+                                  backgroundColor: 'var(--surface-card)',
+                                  borderColor: 'var(--border-subtle)',
                                 }}
                               >
-                                <SQIcon className="w-3.5 h-3.5" />
-                              </span>
-                              <div className="min-w-0">
-                                <p
-                                  className="text-xs font-bold truncate"
-                                  style={{ color: 'var(--text-primary)' }}
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <span
+                                    className="size-7 rounded-lg flex items-center justify-center shrink-0"
+                                    style={{
+                                      backgroundColor: 'var(--surface-inset)',
+                                      color: 'var(--accent-text)',
+                                    }}
+                                  >
+                                    <SQIcon className="size-3.5" />
+                                  </span>
+                                  <div className="min-w-0">
+                                    <p
+                                      className="text-xs font-bold truncate"
+                                      style={{ color: 'var(--text-primary)' }}
+                                    >
+                                      {quest.title}
+                                    </p>
+                                    <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                                      {quest.durationDays} días · {quest.tasks.length} tareas
+                                    </p>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setSessionSideQuests((prev) =>
+                                      prev.filter((_, i) => i !== idx)
+                                    )
+                                  }
+                                  aria-label={`Quitar misión ${quest.title}`}
+                                  className="size-9 rounded-lg flex items-center justify-center cursor-pointer"
+                                  style={{ color: 'var(--status-danger)' }}
                                 >
-                                  {quest.title}
-                                </p>
-                                <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-                                  {quest.durationDays} días · {quest.tasks.length} tareas · Sin guardar
-                                </p>
-                              </div>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setSessionSideQuests((prev) => prev.filter((_, i) => i !== idx))
-                              }
-                              aria-label={`Quitar misión ${quest.title}`}
-                              className="p-1.5 rounded-lg cursor-pointer"
-                              style={{ color: 'var(--status-danger)' }}
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </section>
+                                  <Trash2 className="size-4" />
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </section>
+                  </div>
                 )}
 
-                {/* Complementary Side Quest Offer from AI */}
-                {hasReadyTasks && !dismissedSideQuestOffer && sessionSideQuests.length === 0 && (
-                  <section
-                    aria-label="Sugerencia de misión secundaria complementaria"
-                    className="rounded-2xl border p-4 space-y-3"
-                    style={{
-                      backgroundColor: 'var(--surface-inset)',
-                      borderColor: 'var(--border-subtle)',
-                    }}
-                  >
-                    <div className="flex items-start gap-2.5">
-                      <div
-                        className="w-8 h-8 rounded-xl border flex items-center justify-center shrink-0 mt-0.5"
-                        style={{
-                          backgroundColor: 'var(--surface-card)',
-                          borderColor: 'var(--border-subtle)',
-                          color: 'var(--accent-text)',
-                        }}
-                      >
-                        <Trophy className="w-4 h-4" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>
-                          {sideQuestSuggestion
-                            ? `¿Sumamos una misión secundaria: "${sideQuestSuggestion.title}"?`
-                            : '¿Querés diseñar una misión secundaria complementaria?'}
-                        </p>
-                        <p className="text-xs mt-0.5 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-                          {sideQuestSuggestion
-                            ? sideQuestSuggestion.reason
-                            : 'Podés armar un mini-desafío paralelo con IA que potencie tu plan principal, o dejarlo para más tarde.'}
-                        </p>
-                      </div>
-                    </div>
+                {/* Contextual Footer: Slim Composer in Chat Tab | Full Actions in Draft Tab */}
+                <footer
+                  className="shrink-0 border-t px-4 sm:px-5 pt-2.5 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] flex flex-col gap-2"
+                  style={{
+                    backgroundColor: 'var(--surface-card)',
+                    borderColor: 'var(--divider)',
+                  }}
+                >
+                  {activeTab === 'chat' ? (
+                    <>
+                      {selectedTaskIds.length > 0 && (
+                        <div
+                          className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl border text-xs"
+                          style={{
+                            backgroundColor:
+                              'color-mix(in srgb, var(--accent-fill) 10%, var(--surface-inset))',
+                            borderColor: 'color-mix(in srgb, var(--accent-fill) 35%, transparent)',
+                            color: 'var(--text-primary)',
+                          }}
+                        >
+                          <span className="truncate font-medium">
+                            {selectedTaskIds.length}{' '}
+                            {selectedTaskIds.length === 1 ? 'meta marcada' : 'metas marcadas'} para
+                            modificar
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedTaskIds([])}
+                            className="text-[11px] font-semibold underline cursor-pointer shrink-0"
+                            style={{ color: 'var(--accent-text)' }}
+                          >
+                            Desmarcar
+                          </button>
+                        </div>
+                      )}
 
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleOpenSideQuestDesigner(sideQuestSuggestion?.ideaPrompt)
+                      <AutoGrowComposer
+                        textareaRef={textareaRef}
+                        value={textInput}
+                        onChange={setTextInput}
+                        onSubmitText={handleTextSubmit}
+                        placeholder={
+                          selectedTaskIds.length > 0
+                            ? 'Decime qué cambiar en las marcadas...'
+                            : 'Escribí o usá el micrófono...'
                         }
-                        className="min-h-[38px] px-3.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95"
-                        style={{
-                          backgroundColor: 'var(--accent-fill)',
-                          color: 'var(--on-accent)',
-                        }}
-                      >
-                        <Sparkles className="w-3.5 h-3.5" />
-                        Crear misión con IA
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDismissedSideQuestOffer(true)}
-                        className="min-h-[38px] px-3.5 rounded-xl text-xs font-semibold border cursor-pointer transition-transform active:scale-95"
-                        style={{
-                          backgroundColor: 'var(--surface-card)',
-                          borderColor: 'var(--border-subtle)',
-                          color: 'var(--text-secondary)',
-                        }}
-                      >
-                        Dejar para más tarde
-                      </button>
-                    </div>
-                  </section>
-                )}
-
-                {micBlocked && (
-                  <div
-                    className="rounded-xl p-3 border text-xs flex items-center justify-between gap-2"
-                    style={{
-                      backgroundColor: 'var(--surface-inset)',
-                      borderColor: 'var(--border-subtle)',
-                      color: 'var(--text-secondary)',
-                    }}
-                  >
-                    <span>
-                      {recError || 'Micrófono bloqueado. Podés escribir acá abajo o refrescar la página.'}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => window.location.reload()}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border font-semibold shrink-0 cursor-pointer"
-                      style={{
-                        backgroundColor: 'var(--surface-card)',
-                        borderColor: 'var(--border-subtle)',
-                        color: 'var(--accent-text)',
-                      }}
-                    >
-                      <RefreshCw className="w-3 h-3" />
-                      Refrescar
-                    </button>
-                  </div>
-                )}
-
-                <div ref={chatEndRef} />
-              </div>
-
-              {/* Sticky Composer + Save/Finalize Footer */}
-              <footer
-                className="shrink-0 border-t px-4 sm:px-5 pt-3 pb-[calc(0.9rem+env(safe-area-inset-bottom,0px))] space-y-2.5"
-                style={{
-                  backgroundColor: 'var(--surface-card)',
-                  borderColor: 'var(--divider)',
-                }}
-              >
-                {selectedTaskIds.length > 0 && (
-                  <div
-                    className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl border text-xs"
-                    style={{
-                      backgroundColor: 'color-mix(in srgb, var(--accent-fill) 10%, var(--surface-inset))',
-                      borderColor: 'color-mix(in srgb, var(--accent-fill) 35%, transparent)',
-                      color: 'var(--text-primary)',
-                    }}
-                  >
-                    <span className="truncate font-medium">
-                      {selectedTaskIds.length}{' '}
-                      {selectedTaskIds.length === 1 ? 'tarea marcada' : 'tareas marcadas'} para cambiar
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedTaskIds([])}
-                      className="text-[11px] font-semibold underline cursor-pointer shrink-0"
-                      style={{ color: 'var(--accent-text)' }}
-                    >
-                      Desmarcar
-                    </button>
-                  </div>
-                )}
-
-                {isRecording ? (
-                  <div
-                    className="flex items-center justify-between gap-3 px-3.5 py-2 rounded-2xl border"
-                    style={{
-                      backgroundColor: 'var(--surface-inset)',
-                      borderColor: 'var(--accent-fill)',
-                    }}
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <span
-                        className="w-3 h-3 rounded-full shrink-0 transition-transform"
-                        style={{
-                          backgroundColor: 'var(--accent-fill)',
-                          transform: `scale(${1 + audioLevel * 0.6})`,
-                        }}
+                        disabled={isBusy}
+                        micBlocked={micBlocked}
+                        voiceStatus={recStatus}
+                        isSpeaking={isSpeaking}
+                        elapsedSeconds={elapsedSeconds}
+                        subscribeAudioMetrics={subscribeAudioMetrics}
+                        onStartVoice={() => void startRecording()}
+                        onCancelVoice={cancelRecording}
+                        onPauseVoice={pauseRecording}
+                        onResumeVoice={resumeRecording}
+                        onStopAndTranscribeVoice={() => void handleStopAndTranscribe()}
+                        onSendVoiceDirect={() => void handleSendVoiceDirect()}
                       />
-                      <span className="text-xs font-semibold truncate" style={{ color: 'var(--text-primary)' }}>
-                        Escuchando... tocá detener para enviar
-                      </span>
+
+                      {!hasReadyTasks && history.length > 0 && recStatus === 'idle' && (
+                        <button
+                          type="button"
+                          disabled={isBusy}
+                          onClick={() => void sendToAi({ forceProposal: true })}
+                          className="w-full min-h-[40px] px-3.5 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 border cursor-pointer active:scale-[0.98] transition-transform duration-150 ease-out disabled:opacity-50"
+                          style={{
+                            touchAction: 'manipulation',
+                            backgroundColor: 'var(--surface-inset)',
+                            borderColor: 'var(--border-control)',
+                            color: 'var(--text-primary)',
+                          }}
+                        >
+                          <Sparkles className="size-3.5" style={{ color: 'var(--accent-text)' }} />
+                          <span>Armar propuesta de tareas ahora</span>
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      {selectedTaskIds.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveTab('chat');
+                            requestAnimationFrame(() => textareaRef.current?.focus());
+                          }}
+                          className="w-full min-h-[42px] px-4 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer active:scale-[0.98] transition-transform duration-150 ease-out"
+                          style={{
+                            touchAction: 'manipulation',
+                            backgroundColor: 'var(--surface-inset)',
+                            borderColor: 'var(--border-control)',
+                            color: 'var(--text-primary)',
+                          }}
+                        >
+                          <Sparkles className="size-3.5" style={{ color: 'var(--accent-text)' }} />
+                          <span>Pedir cambios a la IA ({selectedTaskIds.length})</span>
+                        </button>
+                      )}
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          disabled={isBusy}
+                          onClick={() => onEditManually(stripChangeTypes(generatedTasks))}
+                          className="min-h-[44px] px-3.5 rounded-xl font-semibold text-xs border inline-flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-transform duration-150 ease-out disabled:opacity-50"
+                          style={{
+                            touchAction: 'manipulation',
+                            backgroundColor: 'var(--surface-inset)',
+                            borderColor: 'var(--border-subtle)',
+                            color: 'var(--text-primary)',
+                          }}
+                        >
+                          <Pencil className="size-3.5" />
+                          <span>Manual</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={isBusy}
+                          onClick={() =>
+                            onApplyPlan(stripChangeTypes(generatedTasks), sessionSideQuests)
+                          }
+                          className="flex-1 min-h-[44px] px-4 rounded-xl font-semibold text-sm inline-flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98] transition-transform duration-150 ease-out disabled:opacity-50"
+                          style={{
+                            touchAction: 'manipulation',
+                            backgroundColor: 'var(--accent-fill)',
+                            color: 'var(--on-accent)',
+                          }}
+                        >
+                          <Check className="size-4" />
+                          <span>{isSaving ? 'Guardando...' : saveButtonLabel}</span>
+                        </button>
+                      </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleMicToggle}
-                      aria-label="Detener y enviar audio"
-                      className="min-h-[38px] px-3.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 cursor-pointer shrink-0"
-                      style={{
-                        backgroundColor: 'var(--accent-fill)',
-                        color: 'var(--on-accent)',
-                      }}
-                    >
-                      <Square className="w-3 h-3 fill-current" />
-                      Enviar voz
-                    </button>
-                  </div>
-                ) : (
-                  <form onSubmit={handleTextSubmit} className="flex items-center gap-2">
-                    <input
-                      ref={inputRef}
-                      type="text"
-                      value={textInput}
-                      onChange={(e) => setTextInput(e.target.value)}
-                      placeholder={
-                        selectedTaskIds.length > 0
-                          ? 'Decime qué editar, eliminar, agregar o reordenar...'
-                          : hasReadyTasks
-                          ? 'Pedí cambios, agregá metas o cambiá el orden...'
-                          : 'Describí tu plan o respondé las preguntas acá...'
-                      }
-                      disabled={isProcessing || isSaving}
-                      className="flex-1 min-h-[44px] px-3.5 py-2 rounded-xl border text-sm outline-none"
-                      style={{
-                        backgroundColor: 'var(--surface-inset)',
-                        borderColor: 'var(--border-subtle)',
-                        color: 'var(--text-primary)',
-                      }}
-                    />
-
-                    <button
-                      type="button"
-                      onClick={handleMicToggle}
-                      disabled={micBlocked || isProcessing || isSaving}
-                      aria-label="Grabar mensaje de voz"
-                      className="h-11 w-11 rounded-xl border flex items-center justify-center shrink-0 transition-transform active:scale-95 disabled:opacity-40 cursor-pointer"
-                      style={{
-                        backgroundColor: 'var(--surface-inset)',
-                        borderColor: 'var(--border-subtle)',
-                        color: 'var(--text-primary)',
-                      }}
-                    >
-                      <Mic className="w-4 h-4" />
-                    </button>
-
-                    <button
-                      type="submit"
-                      disabled={!textInput.trim() || isProcessing || isSaving}
-                      aria-label="Enviar mensaje"
-                      className="h-11 w-11 rounded-xl flex items-center justify-center shrink-0 transition-transform active:scale-95 disabled:opacity-40 cursor-pointer"
-                      style={{
-                        backgroundColor: 'var(--accent-fill)',
-                        color: 'var(--on-accent)',
-                      }}
-                    >
-                      <Send className="w-4 h-4" />
-                    </button>
-                  </form>
-                )}
-
-                {/* Action bar — always available to finalize after any turn */}
-                {hasReadyTasks ? (
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                    <button
-                      type="button"
-                      disabled={isProcessing || isSaving}
-                      onClick={() => onEditManually(stripChangeTypes(generatedTasks))}
-                      className="min-h-[44px] px-4 rounded-xl font-semibold text-xs sm:text-sm flex items-center justify-center gap-1.5 border transition-transform active:scale-95 disabled:opacity-50 cursor-pointer"
-                      style={{
-                        backgroundColor: 'var(--surface-inset)',
-                        borderColor: 'var(--border-subtle)',
-                        color: 'var(--text-primary)',
-                      }}
-                    >
-                      <Pencil className="w-4 h-4" />
-                      Editar manualmente
-                    </button>
-
-                    <button
-                      type="button"
-                      disabled={isProcessing || isSaving}
-                      onClick={() =>
-                        onApplyPlan(stripChangeTypes(generatedTasks), sessionSideQuests)
-                      }
-                      className="flex-1 min-h-[44px] px-5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-transform active:scale-[0.98] disabled:opacity-50 cursor-pointer"
-                      style={{
-                        backgroundColor: 'var(--accent-fill)',
-                        color: 'var(--on-accent)',
-                      }}
-                    >
-                      <Check className="w-4 h-4" />
-                      {isSaving ? 'Guardando plan...' : saveButtonLabel}
-                    </button>
-                  </div>
-                ) : history.length > 0 ? (
-                  <button
-                    type="button"
-                    disabled={isProcessing || isSaving}
-                    onClick={() => sendToAi({ forceProposal: true })}
-                    className="w-full min-h-[42px] px-4 rounded-xl font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 border transition-transform active:scale-[0.98] disabled:opacity-50 cursor-pointer"
-                    style={{
-                      backgroundColor: 'var(--surface-inset)',
-                      borderColor: 'var(--border-control)',
-                      color: 'var(--text-primary)',
-                    }}
-                  >
-                    <Sparkles className="w-4 h-4" style={{ color: 'var(--accent-text)' }} />
-                    Finalizar charla y armar propuesta ahora
-                  </button>
-                ) : null}
-              </footer>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Nested AI Side Quest Designer (purely visual until parent saves) */}
-      <AISideQuestSheet
-        isOpen={isSideQuestSheetOpen}
-        initialIdeaPrompt={sideQuestInitialPrompt}
-        userContext={enrichedContextForSideQuest}
-        saveButtonLabel="Sumar misión al borrador"
-        onApplyQuest={handleAddSessionSideQuest}
-        onClose={() => setIsSideQuestSheetOpen(false)}
-      />
-    </>
+                  )}
+                </footer>
+              </>
+            )}
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
   );
 }
