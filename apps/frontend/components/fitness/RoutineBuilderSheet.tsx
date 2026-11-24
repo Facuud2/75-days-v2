@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ArrowDown, ArrowUp, Plus, Save, Trash2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { CatalogExercise } from '@/lib/api/exerciseCatalog';
@@ -19,37 +19,30 @@ interface RoutineBuilderSheetProps {
   onSaved: (routine: WorkoutRoutineRecord) => void;
 }
 
-export default function RoutineBuilderSheet({
-  isOpen,
+export default function RoutineBuilderSheet(props: RoutineBuilderSheetProps) {
+  if (!props.isOpen) return null;
+  return (
+    <RoutineBuilderSheetContent
+      key={props.initialRoutine?.id ?? 'new'}
+      initialRoutine={props.initialRoutine}
+      onClose={props.onClose}
+      onSaved={props.onSaved}
+    />
+  );
+}
+
+function RoutineBuilderSheetContent({
   initialRoutine,
   onClose,
   onSaved,
-}: RoutineBuilderSheetProps) {
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [exercises, setExercises] = useState<RoutineExerciseItem[]>([]);
+}: Omit<RoutineBuilderSheetProps, 'isOpen'>) {
+  const [name, setName] = useState(() => initialRoutine?.name || '');
+  const [description, setDescription] = useState(() => initialRoutine?.description || '');
+  const [exercises, setExercises] = useState<RoutineExerciseItem[]>(
+    () => initialRoutine?.exercises || []
+  );
   const [showPicker, setShowPicker] = useState(false);
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    if (initialRoutine && !initialRoutine.id.startsWith('template-')) {
-      setName(initialRoutine.name);
-      setDescription(initialRoutine.description || '');
-      setExercises(initialRoutine.exercises || []);
-    } else if (initialRoutine) {
-      setName(`${initialRoutine.name}`);
-      setDescription(initialRoutine.description || '');
-      setExercises(initialRoutine.exercises || []);
-    } else {
-      setName('');
-      setDescription('');
-      setExercises([]);
-    }
-    setShowPicker(false);
-  }, [isOpen, initialRoutine]);
-
-  if (!isOpen) return null;
 
   const isEditingExisting = Boolean(
     initialRoutine && !initialRoutine.id.startsWith('template-')

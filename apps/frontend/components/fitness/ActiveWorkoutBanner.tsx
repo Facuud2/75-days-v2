@@ -5,23 +5,23 @@ import { ChevronUp, Dumbbell, Timer } from 'lucide-react';
 import { useActiveWorkoutStore } from '@/store/useActiveWorkoutStore';
 import { formatDurationClock } from '@/lib/constants/fitness';
 
-/**
- * Floating minimized capsule shown above the mobile bottom navigation bar
- * whenever a user minimizes their live gym workout to browse another page.
- */
-export default function ActiveWorkoutBanner() {
-  const { isActive, isMinimized, startedAt, title, restEndsAt, setMinimized } =
-    useActiveWorkoutStore();
+function ActiveWorkoutBannerContent({
+  startedAt,
+  title,
+  restEndsAt,
+  onExpand,
+}: {
+  startedAt: number | null;
+  title: string;
+  restEndsAt: number | null;
+  onExpand: () => void;
+}) {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    if (!isActive || !isMinimized) return;
-    setNow(Date.now());
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
-  }, [isActive, isMinimized]);
-
-  if (!isActive || !isMinimized) return null;
+  }, []);
 
   const elapsedSec = startedAt ? Math.max(0, Math.floor((now - startedAt) / 1000)) : 0;
   const restRemainingSec = restEndsAt ? Math.max(0, Math.ceil((restEndsAt - now) / 1000)) : 0;
@@ -30,7 +30,7 @@ export default function ActiveWorkoutBanner() {
     <div className="fixed bottom-[84px] left-3 right-3 z-[80] lg:bottom-6 lg:left-auto lg:right-6 lg:w-80">
       <button
         type="button"
-        onClick={() => setMinimized(false)}
+        onClick={onExpand}
         className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-2xl border border-emerald-500/40 bg-zinc-950/95 px-4 py-3 text-left shadow-2xl shadow-black/60 backdrop-blur-md transition-transform active:scale-[0.98] hover:border-emerald-400"
       >
         <div className="flex min-w-0 items-center gap-3">
@@ -54,5 +54,25 @@ export default function ActiveWorkoutBanner() {
         <ChevronUp className="h-4 w-4 shrink-0 text-zinc-400" />
       </button>
     </div>
+  );
+}
+
+/**
+ * Floating minimized capsule shown above the mobile bottom navigation bar
+ * whenever a user minimizes their live gym workout to browse another page.
+ */
+export default function ActiveWorkoutBanner() {
+  const { isActive, isMinimized, startedAt, title, restEndsAt, setMinimized } =
+    useActiveWorkoutStore();
+
+  if (!isActive || !isMinimized) return null;
+
+  return (
+    <ActiveWorkoutBannerContent
+      startedAt={startedAt}
+      title={title}
+      restEndsAt={restEndsAt}
+      onExpand={() => setMinimized(false)}
+    />
   );
 }

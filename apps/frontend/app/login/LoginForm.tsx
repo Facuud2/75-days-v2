@@ -93,20 +93,6 @@ export default function LoginForm() {
     };
   }, [clearError]);
 
-  // Support direct link `?google=1` from the inline notice in /register
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('google') === '1') {
-      const timer = window.setTimeout(() => {
-        window.history.replaceState({}, '', '/login');
-        void handleStartGoogleAuth();
-      }, 0);
-      return () => window.clearTimeout(timer);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const handleReturnToSelect = () => {
     tokenHandleRef.current?.cancel();
     tokenHandleRef.current = null;
@@ -163,6 +149,20 @@ export default function LoginForm() {
       );
     }
   };
+
+  // Support direct link `?google=1` from the inline notice in /register
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('google') === '1') {
+      const timer = window.setTimeout(() => {
+        window.history.replaceState({}, '', '/login');
+        void handleStartGoogleAuth();
+      }, 0);
+      return () => window.clearTimeout(timer);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleConfirmLinkAccount = async () => {
     if (!pendingLink) return;

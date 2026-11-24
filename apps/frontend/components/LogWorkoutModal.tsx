@@ -51,14 +51,27 @@ const INTENSITY_OPTIONS = [
   { value: 'high', label: 'Intensa' },
 ] as const;
 
-export default function LogWorkoutModal({
-  isOpen,
+export default function LogWorkoutModal(props: LogWorkoutModalProps) {
+  if (!props.isOpen) return null;
+  return (
+    <LogWorkoutModalContent
+      key={props.initialData?.id ?? 'new'}
+      onClose={props.onClose}
+      date={props.date}
+      onSaved={props.onSaved}
+      initialData={props.initialData}
+      onDelete={props.onDelete}
+    />
+  );
+}
+
+function LogWorkoutModalContent({
   onClose,
   date,
   onSaved,
   initialData,
   onDelete,
-}: LogWorkoutModalProps) {
+}: Omit<LogWorkoutModalProps, 'isOpen'>) {
   const {
     profileData,
     logWorkoutOptimistic,
@@ -69,59 +82,38 @@ export default function LogWorkoutModal({
   const hasActiveWorkout = useActiveWorkoutStore((s) => s.isActive);
   const setMinimized = useActiveWorkoutStore((s) => s.setMinimized);
 
-  const [sport, setSport] = useState('strength');
-  const [durationMin, setDurationMin] = useState(45);
-  const [intensity, setIntensity] = useState<'low' | 'medium' | 'high'>('medium');
-  const [title, setTitle] = useState('');
-  const [caloriesBurned, setCaloriesBurned] = useState<string>('');
-  const [distanceKm, setDistanceKm] = useState<string>('');
-  const [notes, setNotes] = useState('');
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [sport, setSport] = useState<string>(() => initialData?.sport || 'strength');
+  const [durationMin, setDurationMin] = useState<number>(() => Number(initialData?.durationMin) || 45);
+  const [intensity, setIntensity] = useState<'low' | 'medium' | 'high'>(
+    () => initialData?.intensity || 'medium'
+  );
+  const [title, setTitle] = useState<string>(() => initialData?.title || '');
+  const [caloriesBurned, setCaloriesBurned] = useState<string>(() =>
+    initialData?.isManualCalories && initialData?.caloriesBurned
+      ? String(initialData.caloriesBurned)
+      : ''
+  );
+  const [distanceKm, setDistanceKm] = useState<string>(() =>
+    initialData?.distanceKm ? String(initialData.distanceKm) : ''
+  );
+  const [notes, setNotes] = useState<string>(() => initialData?.notes || '');
+  const [showAdvanced, setShowAdvanced] = useState(() =>
+    Boolean(
+      initialData?.title ||
+        initialData?.distanceKm ||
+        initialData?.notes ||
+        initialData?.isManualCalories
+    )
+  );
   const [error, setError] = useState<string | null>(null);
 
   React.useEffect(() => {
-    if (!isOpen) return;
-    if (initialData) {
-      setSport(initialData.sport || 'strength');
-      setDurationMin(initialData.durationMin || 45);
-      setIntensity(initialData.intensity || 'medium');
-      setTitle(initialData.title || '');
-      setCaloriesBurned(
-        initialData.isManualCalories && initialData.caloriesBurned
-          ? String(initialData.caloriesBurned)
-          : ''
-      );
-      setDistanceKm(initialData.distanceKm ? String(initialData.distanceKm) : '');
-      setNotes(initialData.notes || '');
-      setShowAdvanced(
-        Boolean(
-          initialData.title ||
-            initialData.distanceKm ||
-            initialData.notes ||
-            initialData.isManualCalories
-        )
-      );
-    } else {
-      setSport('strength');
-      setDurationMin(45);
-      setIntensity('medium');
-      setTitle('');
-      setCaloriesBurned('');
-      setDistanceKm('');
-      setNotes('');
-      setShowAdvanced(false);
-    }
-    setError(null);
-  }, [isOpen, initialData]);
-
-  React.useEffect(() => {
-    if (!isOpen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [onClose]);
 
   const estimatedCalories = useMemo(() => {
     const weightKg = Number(profileData?.user?.currentWeight) || 70;
@@ -130,8 +122,6 @@ export default function LogWorkoutModal({
       estimateWorkoutCaloriesClient(sport, durationMin, intensity, weightKg, heightCm)
     );
   }, [sport, durationMin, intensity, profileData]);
-
-  if (!isOpen) return null;
 
   const handleOpenLiveTracker = () => {
     onClose();

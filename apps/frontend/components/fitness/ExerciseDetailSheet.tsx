@@ -32,34 +32,41 @@ function describeIntensityFromMet(met: number): { label: string; kcalPerHour: nu
   return { label: 'Suave', kcalPerHour };
 }
 
-export default function ExerciseDetailSheet({
+export default function ExerciseDetailSheet(props: ExerciseDetailSheetProps) {
+  if (!props.exercise) return null;
+  return (
+    <ExerciseDetailSheetContent
+      key={props.exercise.id}
+      exercise={props.exercise}
+      imageBaseUrl={props.imageBaseUrl}
+      onClose={props.onClose}
+      onAddToActive={props.onAddToActive}
+      hasActiveWorkout={props.hasActiveWorkout}
+    />
+  );
+}
+
+function ExerciseDetailSheetContent({
   exercise,
   imageBaseUrl,
   onClose,
   onAddToActive,
   hasActiveWorkout = false,
-}: ExerciseDetailSheetProps) {
+}: Omit<ExerciseDetailSheetProps, 'exercise'> & { exercise: CatalogExercise }) {
   const [history, setHistory] = useState<ExerciseHistoryResponse | null>(null);
-  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(true);
   const [showOriginalSteps, setShowOriginalSteps] = useState(false);
 
   useEffect(() => {
-    if (!exercise) return;
-    setShowOriginalSteps(false);
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
     document.addEventListener('keydown', handleKey);
     return () => document.removeEventListener('keydown', handleKey);
-  }, [exercise, onClose]);
+  }, [onClose]);
 
   useEffect(() => {
-    if (!exercise) {
-      setHistory(null);
-      return;
-    }
     let cancelled = false;
-    setLoadingHistory(true);
     healthService
       .getExerciseHistory(exercise.id)
       .then((res) => {
@@ -75,9 +82,7 @@ export default function ExerciseDetailSheet({
     return () => {
       cancelled = true;
     };
-  }, [exercise]);
-
-  if (!exercise) return null;
+  }, [exercise.id]);
 
   const muscleBadge =
     exercise.bodyZoneLabel.toLowerCase() === exercise.primaryMuscleLabel.toLowerCase()

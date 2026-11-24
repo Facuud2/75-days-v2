@@ -26,21 +26,24 @@ export default function ExerciseImagePreview({
   showControls = false,
   className = 'h-16 w-16 rounded-xl',
 }: ExerciseImagePreviewProps) {
-  const [frameIndex, setFrameIndex] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(animate);
-  const [hasError, setHasError] = useState(false);
+  const mediaKey = `${images.join('|')}::${animate}`;
+  const [playback, setPlayback] = useState(() => ({
+    key: mediaKey,
+    frameIndex: 0,
+    isPlaying: animate,
+    hasError: false,
+  }));
+
+  const isCurrentKey = playback.key === mediaKey;
+  const frameIndex = isCurrentKey ? playback.frameIndex : 0;
+  const isPlaying = isCurrentKey ? playback.isPlaying : animate;
+  const hasError = isCurrentKey ? playback.hasError : false;
 
   const resolvedUrls = images
     .map((img) => resolveExerciseImageUrl(img, imageBaseUrl))
     .filter((url): url is string => Boolean(url));
 
   const hasMultipleFrames = resolvedUrls.length > 1;
-
-  useEffect(() => {
-    setHasError(false);
-    setFrameIndex(0);
-    setIsPlaying(animate);
-  }, [images, animate]);
 
   useEffect(() => {
     if (!isPlaying || !hasMultipleFrames) return;
@@ -52,11 +55,20 @@ export default function ExerciseImagePreview({
     }
 
     const timer = window.setInterval(() => {
-      setFrameIndex((prev) => (prev + 1) % resolvedUrls.length);
+      setPlayback((prev) => {
+        const base =
+          prev.key === mediaKey
+            ? prev
+            : { key: mediaKey, frameIndex: 0, isPlaying: animate, hasError: false };
+        return {
+          ...base,
+          frameIndex: (base.frameIndex + 1) % resolvedUrls.length,
+        };
+      });
     }, 1150);
 
     return () => window.clearInterval(timer);
-  }, [isPlaying, hasMultipleFrames, resolvedUrls.length]);
+  }, [isPlaying, hasMultipleFrames, resolvedUrls.length, mediaKey, animate]);
 
   const currentUrl = resolvedUrls[frameIndex] || resolvedUrls[0];
 
@@ -81,7 +93,15 @@ export default function ExerciseImagePreview({
         alt={alt}
         loading="lazy"
         decoding="async"
-        onError={() => setHasError(true)}
+        onError={() =>
+          setPlayback((prev) => {
+            const base =
+              prev.key === mediaKey
+                ? prev
+                : { key: mediaKey, frameIndex: 0, isPlaying: animate, hasError: false };
+            return { ...base, hasError: true };
+          })
+        }
         className="h-full w-full object-cover transition-opacity duration-200"
       />
 
@@ -94,7 +114,13 @@ export default function ExerciseImagePreview({
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              setIsPlaying((prev) => !prev);
+              setPlayback((prev) => {
+                const base =
+                  prev.key === mediaKey
+                    ? prev
+                    : { key: mediaKey, frameIndex: 0, isPlaying: animate, hasError: false };
+                return { ...base, isPlaying: !base.isPlaying };
+              });
             }}
             aria-label={isPlaying ? 'Pausar demostración' : 'Reproducir demostración'}
             className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-black/75 text-white backdrop-blur-sm transition-transform active:scale-95 hover:bg-black/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"

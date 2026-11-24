@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 
 interface WakeLockSentinelLike {
   released: boolean;
@@ -8,18 +8,23 @@ interface WakeLockSentinelLike {
   addEventListener?: (type: string, listener: () => void) => void;
 }
 
+const subscribeNoop = () => () => {};
+const getWakeLockSupported = () =>
+  typeof navigator !== 'undefined' && 'wakeLock' in navigator;
+const getServerWakeLockSupported = () => false;
+
 /**
  * Keeps the mobile screen awake during an active gym workout session using
  * the standard Screen Wake Lock API, automatically re-acquiring on tab return.
  */
 export function useWakeLock(enabled: boolean) {
   const sentinelRef = useRef<WakeLockSentinelLike | null>(null);
-  const [isSupported, setIsSupported] = useState(false);
+  const isSupported = useSyncExternalStore(
+    subscribeNoop,
+    getWakeLockSupported,
+    getServerWakeLockSupported
+  );
   const [isActive, setIsActive] = useState(false);
-
-  useEffect(() => {
-    setIsSupported(typeof navigator !== 'undefined' && 'wakeLock' in navigator);
-  }, []);
 
   useEffect(() => {
     if (typeof navigator === 'undefined' || !('wakeLock' in navigator)) return;

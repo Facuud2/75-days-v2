@@ -123,7 +123,10 @@ export default function ExerciseCatalogBrowser({
   const [equipment, setEquipment] = useState('all');
   const [onlyCustom, setOnlyCustom] = useState(false);
   const [showEquipmentFilter, setShowEquipmentFilter] = useState(false);
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+
+  const filterKey = `${query}|${bodyZone}|${equipment}|${onlyCustom}`;
+  const [pagination, setPagination] = useState({ key: filterKey, count: PAGE_SIZE });
+  const visibleCount = pagination.key === filterKey ? pagination.count : PAGE_SIZE;
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [detailExercise, setDetailExercise] = useState<CatalogExercise | null>(null);
@@ -131,8 +134,6 @@ export default function ExerciseCatalogBrowser({
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setLoadError(null);
 
     Promise.all([
       loadExerciseCatalog(),
@@ -178,10 +179,6 @@ export default function ExerciseCatalogBrowser({
       onlyCustom,
     });
   }, [allExercises, query, bodyZone, equipment, onlyCustom]);
-
-  useEffect(() => {
-    setVisibleCount(PAGE_SIZE);
-  }, [query, bodyZone, equipment, onlyCustom]);
 
   const visibleItems = useMemo(
     () => filtered.slice(0, visibleCount),
@@ -457,7 +454,12 @@ export default function ExerciseCatalogBrowser({
           {visibleCount < filtered.length && (
             <button
               type="button"
-              onClick={() => setVisibleCount((prev) => prev + PAGE_SIZE)}
+              onClick={() =>
+                setPagination((prev) => ({
+                  key: filterKey,
+                  count: (prev.key === filterKey ? prev.count : PAGE_SIZE) + PAGE_SIZE,
+                }))
+              }
               className="mx-auto mt-1 min-h-11 w-full max-w-xs cursor-pointer rounded-2xl border border-zinc-800 bg-zinc-900 px-5 text-xs font-semibold text-zinc-200 transition-colors hover:border-zinc-700 hover:bg-zinc-800 active:scale-[0.98]"
             >
               Mostrar más ({filtered.length - visibleCount} restantes)

@@ -64,6 +64,7 @@ export default function FitnessPage() {
 
   const today = useMemo(() => getLocalDateString(), []);
   const storeTodayStats = useHealthStore((s) => s.dailyStatsByDate[today]);
+  const storeTodayWorkoutMin = storeTodayStats?.totalWorkoutMin;
   const recentWorkoutsInStore = useHealthStore((s) => s.recentWorkouts);
 
   const loadFitnessData = useCallback(async () => {
@@ -87,12 +88,12 @@ export default function FitnessPage() {
   }, [loadFitnessData]);
 
   useEffect(() => {
-    if (!recentWorkoutsInStore.length && !storeTodayStats) return;
+    if (!recentWorkoutsInStore.length && storeTodayWorkoutMin === undefined) return;
     const timer = window.setTimeout(() => {
       void loadFitnessData();
     }, 650);
     return () => window.clearTimeout(timer);
-  }, [recentWorkoutsInStore, storeTodayStats?.totalWorkoutMin, loadFitnessData]);
+  }, [recentWorkoutsInStore, storeTodayWorkoutMin, loadFitnessData]);
 
   const handleStartRoutine = (routine: WorkoutRoutineRecord) => {
     if (hasActiveWorkout) {

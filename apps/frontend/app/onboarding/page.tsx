@@ -135,21 +135,28 @@ export default function Onboarding() {
   const [height, setHeight] = useState(user?.height ?? 170);
 
   useEffect(() => {
-    if (user?.name && !profileName) {
-      setProfileName(user.name);
-    }
-    if (user?.avatarUrl && !profileAvatarUrl) {
-      setProfileAvatarUrl(user.avatarUrl);
-    }
-    if (user?.bannerUrl && !profileBannerUrl) {
-      setProfileBannerUrl(user.bannerUrl);
-    }
-    if (user?.profileQuote && !profileQuote) {
-      setProfileQuote(user.profileQuote);
-    }
-    if (typeof user?.age === 'number') {
-      setAge(user.age);
-    }
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      if (user?.name && !profileName) {
+        setProfileName(user.name);
+      }
+      if (user?.avatarUrl && !profileAvatarUrl) {
+        setProfileAvatarUrl(user.avatarUrl);
+      }
+      if (user?.bannerUrl && !profileBannerUrl) {
+        setProfileBannerUrl(user.bannerUrl);
+      }
+      if (user?.profileQuote && !profileQuote) {
+        setProfileQuote(user.profileQuote);
+      }
+      if (typeof user?.age === 'number') {
+        setAge(user.age);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, user?.age]);
 
@@ -182,29 +189,36 @@ export default function Onboarding() {
   useEffect(() => {
     if (hasHydratedDraftRef.current || typeof window === 'undefined') return;
     hasHydratedDraftRef.current = true;
+    let cancelled = false;
     try {
       const raw = sessionStorage.getItem(draftStorageKey);
       if (!raw) return;
       const draft = JSON.parse(raw);
-      if (typeof draft.step === 'number') {
-        setStep(Math.max(0, Math.min(totalSteps - 1, draft.step)));
-      }
-      if (typeof draft.age === 'number') setAge(draft.age);
-      if (typeof draft.weight === 'number') setWeight(draft.weight);
-      if (draft.targetWeight === null || typeof draft.targetWeight === 'number') {
-        setTargetWeight(draft.targetWeight);
-      }
-      if (typeof draft.height === 'number') setHeight(draft.height);
-      if (Array.isArray(draft.selectedQuests)) setSelectedQuests(draft.selectedQuests);
-      if (Array.isArray(draft.pendingCustomQuests)) setPendingCustomQuests(draft.pendingCustomQuests);
-      if (draft.difficulty) setDifficulty(draft.difficulty);
-      if (Array.isArray(draft.customTasks)) setCustomTasks(draft.customTasks);
-      if (typeof draft.isAiPlanSheetOpen === 'boolean') {
-        setIsAiPlanSheetOpen(draft.isAiPlanSheetOpen);
-      }
+      queueMicrotask(() => {
+        if (cancelled) return;
+        if (typeof draft.step === 'number') {
+          setStep(Math.max(0, Math.min(totalSteps - 1, draft.step)));
+        }
+        if (typeof draft.age === 'number') setAge(draft.age);
+        if (typeof draft.weight === 'number') setWeight(draft.weight);
+        if (draft.targetWeight === null || typeof draft.targetWeight === 'number') {
+          setTargetWeight(draft.targetWeight);
+        }
+        if (typeof draft.height === 'number') setHeight(draft.height);
+        if (Array.isArray(draft.selectedQuests)) setSelectedQuests(draft.selectedQuests);
+        if (Array.isArray(draft.pendingCustomQuests)) setPendingCustomQuests(draft.pendingCustomQuests);
+        if (draft.difficulty) setDifficulty(draft.difficulty);
+        if (Array.isArray(draft.customTasks)) setCustomTasks(draft.customTasks);
+        if (typeof draft.isAiPlanSheetOpen === 'boolean') {
+          setIsAiPlanSheetOpen(draft.isAiPlanSheetOpen);
+        }
+      });
     } catch {
       // Ignorar borrador corrupto
     }
+    return () => {
+      cancelled = true;
+    };
   }, [draftStorageKey, totalSteps]);
 
   useEffect(() => {

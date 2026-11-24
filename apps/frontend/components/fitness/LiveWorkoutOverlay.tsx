@@ -153,9 +153,13 @@ export default function LiveWorkoutOverlay() {
 
   useEffect(() => {
     if (!isActive) return;
-    setNow(Date.now());
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(id);
+    const tick = () => setNow(Date.now());
+    const initId = window.setTimeout(tick, 0);
+    const id = window.setInterval(tick, 1000);
+    return () => {
+      window.clearTimeout(initId);
+      window.clearInterval(id);
+    };
   }, [isActive]);
 
   useEffect(() => {
@@ -167,11 +171,18 @@ export default function LiveWorkoutOverlay() {
     };
   }, [isVisible, completedSummary, isPreStartPickerOpen]);
 
+  const handleClosePreStart = () => {
+    setPreStartTitle('');
+    closePreStartPicker();
+  };
+
   useEffect(() => {
     if (!isPreStartPickerOpen) return;
-    setPreStartTitle('');
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') closePreStartPicker();
+      if (e.key === 'Escape') {
+        setPreStartTitle('');
+        closePreStartPicker();
+      }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
@@ -203,10 +214,11 @@ export default function LiveWorkoutOverlay() {
   useEffect(() => {
     if (!isActive) {
       hydratedIdsRef.current.clear();
-      setConfirmDiscard(false);
-      setIsFinishConfirmOpen(false);
     }
   }, [isActive]);
+
+  const showConfirmDiscard = isActive && confirmDiscard;
+  const showFinishConfirm = isActive && isFinishConfirmOpen;
 
   const restRemainingSec = restEndsAt ? Math.max(0, Math.ceil((restEndsAt - now) / 1000)) : 0;
   useEffect(() => {
@@ -392,6 +404,7 @@ export default function LiveWorkoutOverlay() {
         preStartTitle.trim() ||
         (uniqueZones.length > 0 ? `Sesión de ${uniqueZones.join(' y ')}` : 'Entrenamiento de hoy');
 
+      setPreStartTitle('');
       startFreeWorkout(
         picked.map((ex) => ({
           exerciseId: ex.id,
@@ -411,7 +424,7 @@ export default function LiveWorkoutOverlay() {
         role="dialog"
         aria-modal="true"
         aria-labelledby="prestart-picker-title"
-        onClick={closePreStartPicker}
+        onClick={handleClosePreStart}
       >
         <div
           className="flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-[28px] border border-zinc-800 bg-zinc-950 shadow-2xl sm:rounded-2xl"
@@ -434,7 +447,7 @@ export default function LiveWorkoutOverlay() {
             </div>
             <button
               type="button"
-              onClick={closePreStartPicker}
+              onClick={handleClosePreStart}
               aria-label="Cerrar selector de ejercicios"
               className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-900 hover:text-white"
             >
@@ -964,7 +977,7 @@ export default function LiveWorkoutOverlay() {
               </>
             )}
 
-            {confirmDiscard ? (
+            {showConfirmDiscard ? (
               <div className="flex items-center justify-between gap-2 rounded-2xl border border-red-500/30 bg-red-500/10 p-3">
                 <span className="text-xs font-semibold text-red-500 dark:text-red-300">
                   ¿Descartar este entrenamiento sin guardar?
@@ -980,6 +993,7 @@ export default function LiveWorkoutOverlay() {
                   <button
                     type="button"
                     onClick={() => {
+                      setConfirmDiscard(false);
                       discardWorkout();
                       toast('Entrenamiento descartado');
                     }}
@@ -1049,7 +1063,7 @@ export default function LiveWorkoutOverlay() {
       )}
 
       {/* Safe Finish Confirmation Sheet (prevents accidental tap from ending a live workout) */}
-      {isFinishConfirmOpen && (
+      {showFinishConfirm && (
         <div
           className="fixed inset-0 z-[128] flex items-end justify-center bg-black/80 backdrop-blur-xs sm:items-center sm:p-4"
           role="dialog"
