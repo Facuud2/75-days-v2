@@ -392,7 +392,7 @@ export default function Onboarding() {
         return true;
       });
 
-      await Promise.all([
+      const questResults = await Promise.all([
         ...selectedTemplates.map((q) =>
           subscribeToQuest(q.title, q.difficulty, q.durationDays)
         ),
@@ -405,15 +405,19 @@ export default function Onboarding() {
             durationDays: quest.durationDays,
             tasks: quest.tasks.map((t) => ({
               title: t.title,
-              description: t.description || null,
+              description: t.description?.trim() || '',
               icon: t.icon || 'target',
               frequency: t.frequency,
               targetValue: t.targetValue ?? null,
-              targetUnit: t.targetUnit || null,
+              targetUnit: t.targetUnit?.trim() || '',
             })),
           })
         ),
       ]);
+
+      if (questResults.some((ok) => !ok)) {
+        throw new Error('No pudimos guardar alguna de tus misiones secundarias. Intentá de nuevo.');
+      }
 
       await completeOnboarding();
       if (typeof window !== 'undefined') {
@@ -1744,8 +1748,22 @@ export default function Onboarding() {
           setCustomTasks(tasks);
           await persistAndCompleteOnboarding('Custom', tasks, createdSideQuests);
         }}
-        onEditManually={(tasks) => {
+        onEditManually={(tasks, createdSideQuests = []) => {
           setCustomTasks(tasks);
+          if (createdSideQuests.length > 0) {
+            setPendingCustomQuests((prev) => {
+              const seen = new Set(prev.map((q) => q.title.trim().toLowerCase()));
+              const next = [...prev];
+              for (const q of createdSideQuests) {
+                const key = q.title.trim().toLowerCase();
+                if (key && !seen.has(key)) {
+                  seen.add(key);
+                  next.push(q);
+                }
+              }
+              return next;
+            });
+          }
           setIsAiPlanSheetOpen(false);
           setIsCustomEditorOpen(true);
         }}

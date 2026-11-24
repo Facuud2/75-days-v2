@@ -103,17 +103,17 @@ export const getAvailableQuests = async (_req: Request, res: Response) => {
 
 const addQuestSchema = z.object({
     title: z.string().min(1),
-    description: z.string().max(2000).optional().default(''),
-    icon: z.string().max(40).optional().default('target'),
+    description: z.string().max(2000).nullish().transform((v) => v ?? ''),
+    icon: z.string().max(40).nullish().transform((v) => v || 'target'),
     difficulty: z.enum(['Easy', 'Medium', 'Hard']),
     durationDays: z.number().int().positive(),
     tasks: z.array(z.object({
         title: z.string().min(1).max(200),
-        description: z.string().max(1000).optional().default(''),
-        icon: z.string().max(40).optional().default('target'),
+        description: z.string().max(1000).nullish().transform((v) => v || null),
+        icon: z.string().max(40).nullish().transform((v) => v || 'target'),
         frequency: z.enum(['daily', 'weekly', 'once']).default('daily'),
         targetValue: z.number().int().positive().nullable().optional(),
-        targetUnit: z.string().max(40).optional().default(''),
+        targetUnit: z.string().max(40).nullish().transform((v) => v || null),
     }).strict()).min(1).max(20).optional(),
 }).strict();
 

@@ -106,7 +106,10 @@ export type AICustomPlanSheetProps = {
     tasks: CustomTask[],
     createdSideQuests?: AiSideQuestDraft[]
   ) => void | Promise<void>;
-  onEditManually: (tasks: CustomTask[]) => void;
+  onEditManually: (
+    tasks: CustomTask[],
+    createdSideQuests?: AiSideQuestDraft[]
+  ) => void;
   onClose: () => void;
 };
 
@@ -870,7 +873,7 @@ export default function AICustomPlanSheet({
     invalidateActiveWork();
     actionLockRef.current = 'manual';
     onDismissLockChange?.(true);
-    onEditManually(stripChangeTypes(generatedTasks));
+    onEditManually(stripChangeTypes(generatedTasks), sessionSideQuests);
   };
 
   const handleApplyPlan = async () => {
@@ -899,6 +902,14 @@ export default function AICustomPlanSheet({
   const canQuickSaveFromHeader =
     hasReadyTasks && (hasAiProposalReady || sessionSideQuests.length > 0);
   const lastAssistantId = [...messages].reverse().find((m) => m.role === 'assistant')?.id;
+  const sessionQuestTitles = new Set(
+    sessionSideQuests.map((q) => q.title.trim().toLowerCase()).filter(Boolean)
+  );
+  const existingActiveSideQuests = (userContext?.activeSideQuests ?? []).filter((q) => {
+    const key = q.title.trim().toLowerCase();
+    return Boolean(key) && !sessionQuestTitles.has(key);
+  });
+  const totalSideQuestsCount = existingActiveSideQuests.length + sessionSideQuests.length;
 
   const studioBody = (
     <div className="relative w-full h-full min-h-0 flex flex-col overflow-hidden">
@@ -1460,7 +1471,7 @@ export default function AICustomPlanSheet({
                         <div className="flex items-center gap-2">
                           <Trophy className="size-4" style={{ color: 'var(--accent-text)' }} />
                           <h4 className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>
-                            Misiones secundarias ({sessionSideQuests.length})
+                            Misiones secundarias ({totalSideQuestsCount})
                           </h4>
                         </div>
                         <button
@@ -1476,12 +1487,65 @@ export default function AICustomPlanSheet({
                         </button>
                       </div>
 
-                      {sessionSideQuests.length === 0 ? (
+                      {totalSideQuestsCount === 0 ? (
                         <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
                           Opcional: podés diseñar una misión paralela corta que complemente tu plan.
                         </p>
                       ) : (
                         <ul className="flex flex-col gap-1.5">
+                          {existingActiveSideQuests.map((quest, idx) => {
+                            const metaParts = [
+                              typeof quest.durationDays === 'number' && quest.durationDays > 0
+                                ? `${quest.durationDays} días`
+                                : null,
+                              Array.isArray(quest.tasks) && quest.tasks.length > 0
+                                ? `${quest.tasks.length} ${quest.tasks.length === 1 ? 'tarea' : 'tareas'}`
+                                : null,
+                            ].filter(Boolean);
+                            return (
+                              <li
+                                key={`active-${quest.title}-${idx}`}
+                                className="flex items-center justify-between gap-2.5 p-2.5 rounded-xl border"
+                                style={{
+                                  backgroundColor: 'var(--surface-card)',
+                                  borderColor: 'var(--border-subtle)',
+                                }}
+                              >
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <span
+                                    className="size-7 rounded-lg flex items-center justify-center shrink-0"
+                                    style={{
+                                      backgroundColor: 'var(--surface-inset)',
+                                      color: 'var(--accent-text)',
+                                    }}
+                                  >
+                                    <Trophy className="size-3.5" />
+                                  </span>
+                                  <div className="min-w-0">
+                                    <p
+                                      className="text-xs font-bold truncate"
+                                      style={{ color: 'var(--text-primary)' }}
+                                    >
+                                      {quest.title}
+                                    </p>
+                                    <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                                      {metaParts.length > 0 ? metaParts.join(' · ') : 'Misión activa'}
+                                    </p>
+                                  </div>
+                                </div>
+                                <span
+                                  className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold border"
+                                  style={{
+                                    backgroundColor: 'var(--surface-inset)',
+                                    borderColor: 'var(--border-subtle)',
+                                    color: 'var(--accent-text)',
+                                  }}
+                                >
+                                  Activa
+                                </span>
+                              </li>
+                            );
+                          })}
                           {sessionSideQuests.map((quest, idx) => {
                             const SQIcon = getSideQuestIcon(quest.icon);
                             return (
@@ -1504,12 +1568,23 @@ export default function AICustomPlanSheet({
                                     <SQIcon className="size-3.5" />
                                   </span>
                                   <div className="min-w-0">
-                                    <p
-                                      className="text-xs font-bold truncate"
-                                      style={{ color: 'var(--text-primary)' }}
-                                    >
-                                      {quest.title}
-                                    </p>
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                      <p
+                                        className="text-xs font-bold truncate"
+                                        style={{ color: 'var(--text-primary)' }}
+                                      >
+                                        {quest.title}
+                                      </p>
+                                      <span
+                                        className="shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-semibold"
+                                        style={{
+                                          backgroundColor: 'var(--status-success-bg, rgba(16, 185, 129, 0.14))',
+                                          color: 'var(--status-success, #34d399)',
+                                        }}
+                                      >
+                                        Nueva
+                                      </span>
+                                    </div>
                                     <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
                                       {quest.durationDays} días · {quest.tasks.length} tareas
                                     </p>

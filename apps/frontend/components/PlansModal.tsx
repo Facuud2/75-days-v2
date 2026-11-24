@@ -431,7 +431,7 @@ export default function PlansModal() {
       seen.add(key);
       return true;
     });
-    await Promise.all(
+    const results = await Promise.all(
       uniqueQuests.map((quest) =>
         createCustomQuest({
           title: quest.title,
@@ -441,15 +441,18 @@ export default function PlansModal() {
           durationDays: quest.durationDays,
           tasks: quest.tasks.map((t) => ({
             title: t.title,
-            description: t.description || null,
+            description: t.description?.trim() || '',
             icon: t.icon || 'target',
             frequency: t.frequency,
             targetValue: t.targetValue ?? null,
-            targetUnit: t.targetUnit || null,
+            targetUnit: t.targetUnit?.trim() || '',
           })),
         })
       )
     );
+    if (results.some((ok) => !ok)) {
+      throw new Error('No pudimos guardar una de las misiones secundarias. Intentá de nuevo.');
+    }
   };
 
   const handleContinueActiveCustom = async () => {
@@ -597,8 +600,22 @@ export default function PlansModal() {
 
               await executeStartChallenge('Custom', validTasks, createdSideQuests);
             }}
-            onEditManually={(tasks) => {
+            onEditManually={(tasks, createdSideQuests = []) => {
               setCustomTasks(tasks);
+              if (createdSideQuests.length > 0) {
+                setPendingAiSideQuests((prev) => {
+                  const seen = new Set(prev.map((q) => q.title.trim().toLowerCase()));
+                  const next = [...prev];
+                  for (const q of createdSideQuests) {
+                    const key = q.title.trim().toLowerCase();
+                    if (key && !seen.has(key)) {
+                      seen.add(key);
+                      next.push(q);
+                    }
+                  }
+                  return next;
+                });
+              }
               setIsAiPlanSheetOpen(false);
               setAiTitleId('ai-plan-sheet-title');
               setIsCustomEditorOpen(true);

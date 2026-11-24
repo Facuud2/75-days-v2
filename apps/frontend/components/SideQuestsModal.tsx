@@ -230,11 +230,11 @@ export default function SideQuestsModal({ onClose }: SideQuestsModalProps) {
     durationDays: draft.durationDays,
     tasks: draft.tasks.map((t) => ({
       title: t.title,
-      description: t.description || null,
+      description: t.description?.trim() || '',
       icon: t.icon || 'target',
       frequency: t.frequency,
       targetValue: t.targetValue ?? null,
-      targetUnit: t.targetUnit || null,
+      targetUnit: t.targetUnit?.trim() || '',
     })),
   });
 
