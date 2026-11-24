@@ -162,28 +162,40 @@ export default function ProfilePreview({
       </div>
 
       <div className="px-4 pb-4">
-        <div
-          className={`flex items-center justify-center overflow-hidden rounded-full text-xl font-semibold uppercase ${
-            hasAvatar ? 'border-2' : 'border'
-          }`}
-          style={{
-            height: avatarSize,
-            width: avatarSize,
-            borderColor: hasAvatar ? 'var(--surface-card)' : 'var(--border-subtle)',
-            backgroundColor: 'var(--surface-inset)',
-            color: 'var(--accent-text)',
-            marginBlockStart: hasAvatar ? -avatarSize / 2 - 2 : 0,
-            position: 'relative',
-            zIndex: 1,
-          }}
-          aria-hidden="true"
-        >
-          {hasAvatar ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={avatarPreview || ''} alt="" className="h-full w-full object-cover" />
-          ) : (
-            getInitial(values.name)
-          )}
+        <div className="flex items-end gap-3">
+          <div
+            className={`flex shrink-0 items-center justify-center overflow-hidden rounded-full text-xl font-semibold uppercase ${
+              hasAvatar ? 'border-2' : 'border'
+            }`}
+            style={{
+              height: avatarSize,
+              width: avatarSize,
+              borderColor: hasAvatar ? 'var(--surface-card)' : 'var(--border-subtle)',
+              backgroundColor: 'var(--surface-inset)',
+              color: 'var(--accent-text)',
+              marginBlockStart: hasAvatar ? -avatarSize / 2 - 2 : 0,
+              position: 'relative',
+              zIndex: 1,
+            }}
+            aria-hidden="true"
+          >
+            {hasAvatar ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={avatarPreview || ''} alt="" className="h-full w-full object-cover" />
+            ) : (
+              getInitial(values.name)
+            )}
+          </div>
+
+          {quote ? (
+            <p
+              className="min-w-0 flex-1 pt-2 line-clamp-2 text-xs sm:text-sm leading-snug [overflow-wrap:anywhere]"
+              style={{ color: 'var(--text-secondary)' }}
+              title={quote}
+            >
+              {quote}
+            </p>
+          ) : null}
         </div>
 
         <div className="mt-2 min-w-0">
@@ -199,15 +211,6 @@ export default function ProfilePreview({
             </p>
           ) : null}
         </div>
-
-        {quote ? (
-          <p
-            className="mt-3 text-sm leading-relaxed [overflow-wrap:anywhere]"
-            style={{ color: 'var(--text-primary)' }}
-          >
-            {quote}
-          </p>
-        ) : null}
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <span className="pv2-chip" style={{ color: 'var(--accent-text)' }}>

@@ -18,13 +18,9 @@ import {
   Calendar,
   Pencil,
   Check,
-  Camera,
-  Upload,
-  Crop,
-  RotateCcw,
+  Plus,
   Sparkles,
   Trash2,
-  X,
 } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { PLANS } from '@/components/PlansModal';
@@ -102,24 +98,31 @@ export default function Onboarding() {
   const [profileAvatarUrl, setProfileAvatarUrl] = useState(
     user?.avatarUrl || ''
   );
+  const [profileBannerUrl, setProfileBannerUrl] = useState(
+    user?.bannerUrl || ''
+  );
+  const [profileQuote, setProfileQuote] = useState(
+    user?.profileQuote || ''
+  );
   const [failedAvatarPreview, setFailedAvatarPreview] = useState<string | null>(
     null
   );
-  const [cropSrc, setCropSrc] = useState<string | null>(null);
-  const [rawAvatarSourceUrl, setRawAvatarSourceUrl] = useState<string | null>(
+  const [failedBannerPreview, setFailedBannerPreview] = useState<string | null>(
     null
   );
-  const [isDragOverAvatar, setIsDragOverAvatar] = useState(false);
-  const [avatarUploadError, setAvatarUploadError] = useState('');
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
+  const [cropMode, setCropMode] = useState<'avatar' | 'banner'>('avatar');
+  const [imageUploadError, setImageUploadError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const bannerFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     return () => {
-      if (rawAvatarSourceUrl?.startsWith('blob:')) {
-        URL.revokeObjectURL(rawAvatarSourceUrl);
+      if (cropSrc?.startsWith('blob:')) {
+        URL.revokeObjectURL(cropSrc);
       }
     };
-  }, [rawAvatarSourceUrl]);
+  }, [cropSrc]);
 
   // Sync initial user values once hydrated
   const googleDetectedAge =
@@ -137,6 +140,12 @@ export default function Onboarding() {
     }
     if (user?.avatarUrl && !profileAvatarUrl) {
       setProfileAvatarUrl(user.avatarUrl);
+    }
+    if (user?.bannerUrl && !profileBannerUrl) {
+      setProfileBannerUrl(user.bannerUrl);
+    }
+    if (user?.profileQuote && !profileQuote) {
+      setProfileQuote(user.profileQuote);
     }
     if (typeof user?.age === 'number') {
       setAge(user.age);
@@ -304,37 +313,29 @@ export default function Onboarding() {
     setStep(nextStep);
   };
 
-  const processAvatarFile = (file: File | undefined) => {
+  const processProfileImageFile = (
+    file: File | undefined,
+    mode: 'avatar' | 'banner'
+  ) => {
     if (!file) return;
     if (!file.type.startsWith('image/')) {
-      setAvatarUploadError('Seleccioná un archivo de imagen válido.');
+      setImageUploadError('Seleccioná un archivo de imagen válido.');
       return;
     }
-    setAvatarUploadError('');
+    setImageUploadError('');
     const objectUrl = URL.createObjectURL(file);
-    setRawAvatarSourceUrl((prev) => {
-      if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev);
-      return objectUrl;
-    });
+    setCropMode(mode);
     setCropSrc(objectUrl);
   };
 
   const handleAvatarFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-    processAvatarFile(event.target.files?.[0]);
+    processProfileImageFile(event.target.files?.[0], 'avatar');
     event.target.value = '';
   };
 
-  const handleAvatarDrop = (event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    setIsDragOverAvatar(false);
-    processAvatarFile(event.dataTransfer.files?.[0]);
-  };
-
-  const handleOpenAvatarCropper = () => {
-    const source = rawAvatarSourceUrl || profileAvatarUrl.trim();
-    if (!source) return;
-    setAvatarUploadError('');
-    setCropSrc(source);
+  const handleBannerFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    processProfileImageFile(event.target.files?.[0], 'banner');
+    event.target.value = '';
   };
 
   const persistAndCompleteOnboarding = async (
@@ -419,15 +420,21 @@ export default function Onboarding() {
     if (currentStepId === 'profile') {
       const cleanedName = profileName.trim();
       const cleanedAvatar = profileAvatarUrl.trim() || null;
+      const cleanedBanner = profileBannerUrl.trim() || null;
+      const cleanedQuote = profileQuote.trim() || null;
       updateProfile({
         name: cleanedName,
         avatarUrl: cleanedAvatar,
+        bannerUrl: cleanedBanner,
+        profileQuote: cleanedQuote,
       });
       // Persist immediately so app data always takes precedence over Google
       userService
         .updateProfile({
           name: cleanedName,
           avatarUrl: cleanedAvatar,
+          bannerUrl: cleanedBanner,
+          profileQuote: cleanedQuote,
         })
         .catch(() => {});
       goToStep(step + 1);
@@ -573,6 +580,9 @@ export default function Onboarding() {
   const showAvatarImage =
     Boolean(profileAvatarUrl.trim()) &&
     profileAvatarUrl.trim() !== failedAvatarPreview;
+  const showBannerImage =
+    Boolean(profileBannerUrl.trim()) &&
+    profileBannerUrl.trim() !== failedBannerPreview;
   const handle = getNameHandle(profileName || 'usuario');
 
   return (
@@ -656,7 +666,7 @@ export default function Onboarding() {
             }
             className="h-full min-h-0 flex flex-col justify-center"
           >
-            {/* Substep Google Profile: Vista previa estilo Twitter + Edición de name y avatarUrl */}
+            {/* Substep Google Profile: Vista previa estilo Twitter + Edición de name, fotos y frase */}
             {currentStepId === 'profile' && (
               <div className="h-full min-h-0 overflow-y-auto overscroll-contain space-y-3.5 px-1 py-1">
                 {/* Tarjeta de vista previa estilo Twitter */}
@@ -668,15 +678,35 @@ export default function Onboarding() {
                     borderColor: 'var(--border-subtle)',
                   }}
                 >
-                  <div
-                    className="relative h-24 w-full overflow-hidden"
+                  <button
+                    type="button"
+                    onClick={() => bannerFileInputRef.current?.click()}
+                    className="relative block h-24 w-full overflow-hidden cursor-pointer group"
                     style={{
                       background:
                         'linear-gradient(135deg, color-mix(in srgb, var(--accent-fill) 38%, var(--surface-inset)), var(--surface-inset))',
                     }}
+                    aria-label="Cambiar portada de perfil"
                   >
+                    {showBannerImage && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={profileBannerUrl.trim()}
+                        alt="Portada de perfil"
+                        className="h-full w-full object-cover"
+                        onError={() =>
+                          setFailedBannerPreview(profileBannerUrl.trim())
+                        }
+                      />
+                    )}
                     <span
-                      className="absolute top-2.5 right-3 rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
+                      className="absolute inset-0 flex items-center justify-center bg-black/45 transition-colors group-hover:bg-black/55"
+                      aria-hidden="true"
+                    >
+                      <Plus className="h-6 w-6 text-white" />
+                    </span>
+                    <span
+                      className="absolute top-2.5 right-3 z-10 rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
                       style={{
                         backgroundColor: 'rgb(0 0 0 / 0.45)',
                         color: '#ffffff',
@@ -684,14 +714,14 @@ export default function Onboarding() {
                     >
                       Vista previa
                     </span>
-                  </div>
+                  </button>
 
                   <div className="px-4 pb-4">
-                    <div className="flex items-end justify-between gap-3">
+                    <div className="flex items-end gap-3">
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
-                        className="relative -mt-10 h-20 w-20 rounded-full border-4 flex items-center justify-center overflow-hidden text-xl font-bold uppercase cursor-pointer group shrink-0"
+                        className="relative z-10 -mt-10 h-20 w-20 rounded-full border-4 flex items-center justify-center overflow-hidden text-xl font-bold uppercase cursor-pointer group shrink-0"
                         style={{
                           borderColor: 'var(--surface-card)',
                           backgroundColor: 'var(--surface-inset)',
@@ -713,26 +743,25 @@ export default function Onboarding() {
                           getInitial(profileName || 'U')
                         )}
                         <span
-                          className="absolute inset-0 flex items-center justify-center bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="absolute inset-0 flex items-center justify-center bg-black/45 transition-colors group-hover:bg-black/55"
                           aria-hidden="true"
                         >
-                          <Camera className="h-5 w-5 text-white" />
+                          <Plus className="h-5 w-5 text-white" />
                         </span>
                       </button>
 
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-transform active:scale-95 cursor-pointer"
+                      <p
+                        className={`min-w-0 flex-1 pt-2 line-clamp-2 text-xs sm:text-sm leading-snug [overflow-wrap:anywhere] ${
+                          profileQuote.trim() ? '' : 'italic'
+                        }`}
                         style={{
-                          backgroundColor: 'var(--surface-inset)',
-                          borderColor: 'var(--border-subtle)',
-                          color: 'var(--text-primary)',
+                          color: profileQuote.trim()
+                            ? 'var(--text-secondary)'
+                            : 'var(--text-muted)',
                         }}
                       >
-                        <Upload className="h-3.5 w-3.5" />
-                        Subir foto
-                      </button>
+                        {profileQuote.trim() || 'Tu frase motivacional...'}
+                      </p>
                     </div>
 
                     <div className="mt-2.5 min-w-0">
@@ -767,7 +796,16 @@ export default function Onboarding() {
                   </div>
                 </section>
 
-                {/* Controles editables: Name y AvatarUrl */}
+                {imageUploadError && (
+                  <p
+                    className="px-1 text-xs font-medium"
+                    style={{ color: 'var(--status-danger)' }}
+                  >
+                    {imageUploadError}
+                  </p>
+                )}
+
+                {/* Controles editables: Name y Frase motivacional */}
                 <div
                   className="rounded-2xl border p-3.5 space-y-3"
                   style={{
@@ -799,149 +837,36 @@ export default function Onboarding() {
                     />
                   </div>
 
-                  <div className="space-y-1.5">
-                    <span
-                      className="block text-xs font-semibold"
-                      style={{ color: 'var(--text-secondary)' }}
-                    >
-                      Foto de perfil
-                    </span>
-
-                    <div
-                      onDragEnter={(event) => {
-                        event.preventDefault();
-                        setIsDragOverAvatar(true);
-                      }}
-                      onDragOver={(event) => {
-                        event.preventDefault();
-                        if (!isDragOverAvatar) setIsDragOverAvatar(true);
-                      }}
-                      onDragLeave={(event) => {
-                        if (
-                          !event.currentTarget.contains(
-                            event.relatedTarget as Node
-                          )
-                        ) {
-                          setIsDragOverAvatar(false);
-                        }
-                      }}
-                      onDrop={handleAvatarDrop}
-                      className="rounded-xl border border-dashed p-2.5 transition-colors space-y-2"
-                      style={{
-                        backgroundColor: isDragOverAvatar
-                          ? 'color-mix(in srgb, var(--accent-fill) 12%, var(--surface-inset))'
-                          : 'var(--surface-inset)',
-                        borderColor: isDragOverAvatar
-                          ? 'var(--accent-fill)'
-                          : 'var(--border-subtle)',
-                      }}
-                    >
-                      <div className="flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => fileInputRef.current?.click()}
-                          className="flex-1 min-h-[40px] inline-flex items-center justify-center gap-2 rounded-xl px-3.5 py-2 text-xs font-semibold transition-transform active:scale-[0.98] cursor-pointer"
-                          style={{
-                            backgroundColor: 'var(--accent-fill)',
-                            color: 'var(--on-accent)',
-                          }}
-                        >
-                          <Upload className="h-3.5 w-3.5 shrink-0" />
-                          {isDragOverAvatar
-                            ? 'Soltá la imagen acá'
-                            : 'Cargar o arrastrar imagen'}
-                        </button>
-
-                        {(rawAvatarSourceUrl || showAvatarImage) && (
-                          <button
-                            type="button"
-                            onClick={handleOpenAvatarCropper}
-                            className="min-h-[40px] inline-flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition-transform active:scale-[0.98] cursor-pointer"
-                            style={{
-                              backgroundColor: 'var(--surface-card)',
-                              borderColor: 'var(--border-subtle)',
-                              color: 'var(--text-primary)',
-                            }}
-                          >
-                            <Crop
-                              className="h-3.5 w-3.5 shrink-0"
-                              style={{ color: 'var(--accent-text)' }}
-                            />
-                            Recortar
-                          </button>
-                        )}
-
-                        {user?.avatarUrl &&
-                          profileAvatarUrl.trim() !== user.avatarUrl && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setAvatarUploadError('');
-                                setFailedAvatarPreview(null);
-                                setRawAvatarSourceUrl((prev) => {
-                                  if (prev?.startsWith('blob:'))
-                                    URL.revokeObjectURL(prev);
-                                  return null;
-                                });
-                                setProfileAvatarUrl(user.avatarUrl || '');
-                              }}
-                              className="min-h-[40px] inline-flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition-transform active:scale-[0.98] cursor-pointer"
-                              style={{
-                                backgroundColor: 'var(--surface-card)',
-                                borderColor: 'var(--border-subtle)',
-                                color: 'var(--text-secondary)',
-                              }}
-                              title="Restaurar foto de Google"
-                            >
-                              <RotateCcw className="h-3.5 w-3.5 shrink-0" />
-                              Usar la de Google
-                            </button>
-                          )}
-
-                        {Boolean(profileAvatarUrl.trim()) && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setAvatarUploadError('');
-                              setFailedAvatarPreview(null);
-                              setRawAvatarSourceUrl((prev) => {
-                                if (prev?.startsWith('blob:'))
-                                  URL.revokeObjectURL(prev);
-                                return null;
-                              });
-                              setProfileAvatarUrl('');
-                            }}
-                            className="min-h-[40px] inline-flex items-center justify-center gap-1 rounded-xl border px-2.5 py-2 text-xs font-semibold transition-transform active:scale-[0.98] cursor-pointer"
-                            style={{
-                              backgroundColor: 'var(--surface-card)',
-                              borderColor: 'var(--border-subtle)',
-                              color: 'var(--text-muted)',
-                            }}
-                            aria-label="Quitar foto de perfil"
-                            title="Quitar foto"
-                          >
-                            <X className="h-3.5 w-3.5 shrink-0" />
-                            Quitar
-                          </button>
-                        )}
-                      </div>
-
-                      <p
-                        className="text-[11px] text-center"
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <label
+                        htmlFor="onboarding-profile-quote"
+                        className="block text-xs font-semibold"
+                        style={{ color: 'var(--text-secondary)' }}
+                      >
+                        Frase motivacional
+                      </label>
+                      <span
+                        className="text-[11px] tabular-nums"
                         style={{ color: 'var(--text-muted)' }}
                       >
-                        JPG, PNG o WebP · Podés recortarla antes de guardar
-                      </p>
+                        {profileQuote.length}/120
+                      </span>
                     </div>
-
-                    {avatarUploadError && (
-                      <p
-                        className="text-xs font-medium"
-                        style={{ color: 'var(--status-danger)' }}
-                      >
-                        {avatarUploadError}
-                      </p>
-                    )}
+                    <textarea
+                      id="onboarding-profile-quote"
+                      value={profileQuote}
+                      onChange={(e) => setProfileQuote(e.target.value)}
+                      placeholder="Ej.: Un día a la vez."
+                      maxLength={120}
+                      rows={2}
+                      className="w-full resize-none rounded-xl border px-3 py-2 text-sm outline-none"
+                      style={{
+                        backgroundColor: 'var(--surface-inset)',
+                        borderColor: 'var(--border-subtle)',
+                        color: 'var(--text-primary)',
+                      }}
+                    />
                   </div>
                 </div>
 
@@ -950,6 +875,13 @@ export default function Onboarding() {
                   type="file"
                   accept="image/*"
                   onChange={handleAvatarFileChange}
+                  className="sr-only"
+                />
+                <input
+                  ref={bannerFileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleBannerFileChange}
                   className="sr-only"
                 />
               </div>
@@ -1819,14 +1751,19 @@ export default function Onboarding() {
       <ImageCropperModal
         open={Boolean(cropSrc)}
         src={cropSrc}
-        mode="avatar"
+        mode={cropMode}
         onCancel={() => {
           setCropSrc(null);
         }}
         onApply={(croppedDataUrl) => {
-          setAvatarUploadError('');
-          setFailedAvatarPreview(null);
-          setProfileAvatarUrl(croppedDataUrl);
+          setImageUploadError('');
+          if (cropMode === 'banner') {
+            setFailedBannerPreview(null);
+            setProfileBannerUrl(croppedDataUrl);
+          } else {
+            setFailedAvatarPreview(null);
+            setProfileAvatarUrl(croppedDataUrl);
+          }
           setCropSrc(null);
         }}
       />

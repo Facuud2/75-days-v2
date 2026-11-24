@@ -87,31 +87,43 @@ export default function ProfileHeader({
 
       <div className="p-4 sm:p-5">
         <div className="flex items-start justify-between gap-3">
-          <button
-            type="button"
-            onClick={onAvatar}
-            className={`relative z-10 flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full text-lg font-semibold uppercase ${
-              showBanner ? '-mt-11 border-2 sm:-mt-12' : 'border'
-            }`}
-            style={{
-              borderColor: showBanner ? 'var(--surface-card)' : 'var(--border-subtle)',
-              backgroundColor: 'var(--surface-inset)',
-              color: 'var(--accent-text)',
-            }}
-            aria-label={`Cambiar foto de perfil de ${name || 'usuario'}`}
-          >
-            {showImage ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={avatarUrl || ''}
-                alt=""
-                className="h-full w-full object-cover"
-                onError={() => setFailedAvatarUrl(avatarUrl || null)}
-              />
-            ) : (
-              getInitial(name)
-            )}
-          </button>
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <button
+              type="button"
+              onClick={onAvatar}
+              className={`relative z-10 flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full text-lg font-semibold uppercase ${
+                showBanner ? '-mt-11 border-2 sm:-mt-12' : 'border'
+              }`}
+              style={{
+                borderColor: showBanner ? 'var(--surface-card)' : 'var(--border-subtle)',
+                backgroundColor: 'var(--surface-inset)',
+                color: 'var(--accent-text)',
+              }}
+              aria-label={`Cambiar foto de perfil de ${name || 'usuario'}`}
+            >
+              {showImage ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={avatarUrl || ''}
+                  alt=""
+                  className="h-full w-full object-cover"
+                  onError={() => setFailedAvatarUrl(avatarUrl || null)}
+                />
+              ) : (
+                getInitial(name)
+              )}
+            </button>
+
+            {quote ? (
+              <p
+                className="min-w-0 flex-1 line-clamp-2 text-xs sm:text-sm leading-snug [overflow-wrap:anywhere]"
+                style={{ color: 'var(--text-secondary)' }}
+                title={quote}
+              >
+                {quote}
+              </p>
+            ) : null}
+          </div>
 
           <button type="button" onClick={onEdit} className="pv2-ghost shrink-0 px-3" aria-label="Editar perfil">
             <Pencil size={16} strokeWidth={2} aria-hidden="true" />
@@ -138,16 +150,6 @@ export default function ProfileHeader({
               </span>
             ) : null}
           </div>
-
-          {quote ? (
-            <p
-              className="mt-3 line-clamp-2 text-sm leading-relaxed [overflow-wrap:anywhere]"
-              style={{ color: 'var(--text-secondary)' }}
-              title={quote}
-            >
-              {quote}
-            </p>
-          ) : null}
         </div>
       </div>
     </section>
