@@ -317,6 +317,89 @@ describe('Fase 1: Optimistic UI (0ms) & Stale-While-Revalidate', () => {
       resolvePatch(afterToggle);
       await togglePromise;
     });
+
+    it('prevents duplicate side quests on concurrent createCustomQuest calls and deduplicates fetch/sync', async () => {
+      const apiSpy = vi.spyOn(apiClientMod, 'apiClient').mockImplementation(
+        async (_url, options) => {
+          const body = JSON.parse((options?.body as string) || '{}');
+          return {
+            id: 'quest-custom-1',
+            userId: 'u1',
+            title: body.title,
+            description: body.description ?? null,
+            difficulty: body.difficulty,
+            durationDays: body.durationDays,
+            icon: body.icon ?? 'target',
+            startedAt: new Date().toISOString(),
+            progress: 0,
+            completed: false,
+            completionCount: 0,
+            currentRun: null,
+          };
+        }
+      );
+
+      useQuestStore.getState().reset();
+
+      await Promise.all([
+        useQuestStore.getState().createCustomQuest({
+          title: 'Presencia, Rutina y Cocina',
+          description: '',
+          icon: 'target',
+          difficulty: 'Medium',
+          durationDays: 30,
+          tasks: [{ title: 'Cocinar', description: null, icon: 'target', frequency: 'daily', targetValue: null, targetUnit: null }],
+        }),
+        useQuestStore.getState().createCustomQuest({
+          title: '  presencia, rutina y cocina ',
+          description: '',
+          icon: 'target',
+          difficulty: 'Medium',
+          durationDays: 30,
+          tasks: [{ title: 'Cocinar', description: null, icon: 'target', frequency: 'daily', targetValue: null, targetUnit: null }],
+        }),
+      ]);
+
+      expect(apiSpy).toHaveBeenCalledTimes(1);
+      expect(useQuestStore.getState().quests).toHaveLength(1);
+
+      useQuestStore.getState().hydrateFromSync(
+        [
+          {
+            id: 'dup-1',
+            userId: 'u1',
+            title: 'Presencia, Rutina y Cocina',
+            description: null,
+            difficulty: 'Medium',
+            durationDays: 30,
+            icon: 'target',
+            startedAt: new Date().toISOString(),
+            progress: 0,
+            completed: false,
+            completionCount: 0,
+            currentRun: null,
+          },
+          {
+            id: 'dup-2',
+            userId: 'u1',
+            title: 'Presencia, Rutina y Cocina',
+            description: null,
+            difficulty: 'Medium',
+            durationDays: 30,
+            icon: 'target',
+            startedAt: new Date().toISOString(),
+            progress: 2,
+            completed: false,
+            completionCount: 0,
+            currentRun: null,
+          },
+        ],
+        []
+      );
+
+      expect(useQuestStore.getState().quests).toHaveLength(1);
+      expect(useQuestStore.getState().quests[0].id).toBe('dup-2');
+    });
   });
 
   describe('useHealthStore', () => {
