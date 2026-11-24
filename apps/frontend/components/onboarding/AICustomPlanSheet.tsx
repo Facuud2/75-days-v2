@@ -28,6 +28,7 @@ import { useVoiceRecorder } from '@/hooks/useVoiceRecorder';
 import {
   aiService,
   blobToBase64,
+  type AiClarificationQuestion,
   type AiConversationTurn,
   type AiCustomTask,
   type AiSideQuestDraft,
@@ -57,7 +58,7 @@ import {
 } from './AIConversationalStudio';
 import AIThinkingStatus from './AIThinkingStatus';
 import AutoGrowComposer from './AutoGrowComposer';
-import QuickReplyOptionsCard from './QuickReplyOptionsCard';
+import QuickReplyOptionsCard, { isConfirmationQuickReply } from './QuickReplyOptionsCard';
 
 type DraftCustomTask = CustomTask & {
   changeType?: 'kept' | 'modified' | 'added';
@@ -81,6 +82,7 @@ interface ChatMessageItem {
   text: string;
   viaVoice?: boolean;
   openQuestions?: string[];
+  clarificationQuestions?: AiClarificationQuestion[];
   suggestedQuickReplies?: string[];
   quickReplySelectionMode?: QuickReplySelectionMode;
   proposalSummary?: PlanProposalSummary;
@@ -485,16 +487,21 @@ export default function AICustomPlanSheet({
       const container = chatScrollRef.current;
       const target = lastMsgRef.current;
       if (!container) return;
+      const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
       if (target) {
-        // Anchor near the start of the latest message so open questions + options stay readable from line 1
-        const targetTop = target.offsetTop - 12;
-        const maxScroll = container.scrollHeight - container.clientHeight;
+        const containerRect = container.getBoundingClientRect();
+        const targetRect = target.getBoundingClientRect();
+        const targetTopInScroll = container.scrollTop + (targetRect.top - containerRect.top) - 10;
+        const nextTop =
+          targetRect.height <= container.clientHeight - 8
+            ? maxScroll
+            : Math.max(0, Math.min(targetTopInScroll, maxScroll));
         container.scrollTo({
-          top: Math.max(0, Math.min(targetTop, maxScroll)),
+          top: nextTop,
           behavior,
         });
       } else {
-        container.scrollTo({ top: container.scrollHeight, behavior });
+        container.scrollTo({ top: maxScroll, behavior });
       }
     },
     [reduceMotion]
@@ -502,8 +509,15 @@ export default function AICustomPlanSheet({
 
   useEffect(() => {
     if (!isOpen || subView !== 'plan' || activeTab !== 'chat') return;
-    const raf = requestAnimationFrame(() => scrollToLatestMessage());
-    return () => cancelAnimationFrame(raf);
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      scrollToLatestMessage('auto');
+      raf2 = requestAnimationFrame(() => scrollToLatestMessage());
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+    };
   }, [messages.length, recStatus, activeTab, subView, isOpen, scrollToLatestMessage]);
 
   const handleChatScroll = () => {
@@ -649,6 +663,7 @@ export default function AICustomPlanSheet({
           role: 'assistant',
           text: res.assistantMessage,
           openQuestions: res.openQuestions ?? [],
+          clarificationQuestions: res.clarificationQuestions ?? [],
           suggestedQuickReplies: res.suggestedQuickReplies ?? [],
           quickReplySelectionMode: res.quickReplySelectionMode ?? 'single',
           proposalSummary,
@@ -1029,11 +1044,14 @@ export default function AICustomPlanSheet({
                       {messages.map((msg, idx) => {
                         const isUser = msg.role === 'user';
                         const isLast = idx === messages.length - 1;
+                        const hasClarifications =
+                          (msg.clarificationQuestions?.length ?? 0) > 0 ||
+                          (msg.openQuestions?.length ?? 0) > 0 ||
+                          (msg.suggestedQuickReplies?.length ?? 0) > 0;
                         const showQuickReplies =
                           !isUser &&
                           msg.id === lastAssistantId &&
-                          msg.suggestedQuickReplies &&
-                          msg.suggestedQuickReplies.length > 0 &&
+                          hasClarifications &&
                           !isAiThinking;
 
                         return (
@@ -1043,7 +1061,7 @@ export default function AICustomPlanSheet({
                             role={msg.role}
                             text={msg.text}
                             viaVoice={msg.viaVoice}
-                            openQuestions={msg.openQuestions}
+                            openQuestions={showQuickReplies ? [] : msg.openQuestions}
                           >
 
                             {/* Compact Inline Proposal Card ONLY when AI delivers ready tasks */}
@@ -1120,7 +1138,7 @@ export default function AICustomPlanSheet({
                                   <button
                                     type="button"
                                     onClick={handleSelectDraftTab}
-                                    className="flex-1 min-h-[38px] px-3 rounded-xl border text-xs font-semibold inline-flex items-center justify-center gap-1.5 cursor-pointer active:scale-[0.98] transition-transform duration-150 ease-out"
+                                    className="w-full min-h-[38px] px-3 rounded-xl border text-xs font-semibold inline-flex items-center justify-center gap-1.5 cursor-pointer active:scale-[0.98] transition-transform duration-150 ease-out"
                                     style={{
                                       touchAction: 'manipulation',
                                       backgroundColor: 'var(--surface-inset)',
@@ -1130,31 +1148,24 @@ export default function AICustomPlanSheet({
                                   >
                                     <span>Revisar / ajustar metas</span>
                                   </button>
-
-                                  <button
-                                    type="button"
-                                    disabled={isBusy}
-                                    onClick={() => void handleApplyPlan()}
-                                    className="min-h-[38px] px-3.5 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 cursor-pointer active:scale-[0.98] transition-transform duration-150 ease-out disabled:opacity-50"
-                                    style={{
-                                      touchAction: 'manipulation',
-                                      backgroundColor: 'var(--accent-fill)',
-                                      color: 'var(--on-accent)',
-                                    }}
-                                  >
-                                    <Check className="size-3.5" />
-                                    <span>Guardar</span>
-                                  </button>
                                 </div>
                               </div>
                             )}
 
                             {showQuickReplies && (
                               <QuickReplyOptionsCard
-                                options={msg.suggestedQuickReplies!}
+                                options={msg.suggestedQuickReplies ?? []}
+                                openQuestions={msg.openQuestions}
+                                clarificationQuestions={msg.clarificationQuestions}
                                 mode={msg.quickReplySelectionMode}
                                 disabled={isBusy}
-                                onSendSelected={(combined) => void sendToAi({ text: combined })}
+                                onSendSelected={(combined) => {
+                                  if (hasReadyTasks && isConfirmationQuickReply(combined)) {
+                                    void handleApplyPlan();
+                                    return;
+                                  }
+                                  void sendToAi({ text: combined });
+                                }}
                                 onInsertIntoComposer={(combined) => {
                                   setTextInput((prev) =>
                                     prev.trim() ? `${prev.trim()}. ${combined}` : combined
@@ -1330,7 +1341,7 @@ export default function AICustomPlanSheet({
                 ) : (
                   /* Draft Tab: Clean iOS Inset Grouped List of Proposed/Current Tasks + Side Quests */
                   <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 sm:px-5 py-3.5 flex flex-col gap-3.5">
-                    <div className="flex items-center justify-between gap-2 px-0.5">
+                    <div className="shrink-0 flex items-center justify-between gap-2 px-0.5">
                       <div>
                         <h3 className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>
                           {hasAiProposalReady
@@ -1351,7 +1362,7 @@ export default function AICustomPlanSheet({
 
                     <ul
                       aria-label="Lista de metas del plan"
-                      className="rounded-2xl border overflow-hidden divide-y"
+                      className="shrink-0 rounded-2xl border overflow-hidden divide-y"
                       style={{
                         backgroundColor: 'var(--surface-inset)',
                         borderColor: 'var(--border-subtle)',
@@ -1439,7 +1450,7 @@ export default function AICustomPlanSheet({
                     {/* Session Side Quests section inside Draft Tab */}
                     <section
                       aria-label="Misiones secundarias complementarias"
-                      className="rounded-2xl border p-3.5 flex flex-col gap-2.5"
+                      className="shrink-0 rounded-2xl border p-3.5 flex flex-col gap-2.5"
                       style={{
                         backgroundColor: 'var(--surface-inset)',
                         borderColor: 'var(--border-subtle)',
