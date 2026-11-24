@@ -1171,11 +1171,6 @@ export default function AICustomPlanSheet({
                                   }
                                   void sendToAi({ text: combined });
                                 }}
-                                onInsertIntoComposer={(combined) => {
-                                  setTextInput((prev) =>
-                                    prev.trim() ? `${prev.trim()}. ${combined}` : combined
-                                  );
-                                }}
                               />
                             )}
                           </AIConversationStreamItem>

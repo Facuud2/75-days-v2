@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUp, ChevronLeft, ChevronRight, Pencil } from 'lucide-react';
+import { ArrowUp, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { AiClarificationQuestion, QuickReplySelectionMode } from '@/lib/api/ai';
 
 const OTHER_MIN_HEIGHT_PX = 44;
@@ -24,7 +24,6 @@ interface QuickReplyOptionsCardProps {
   clarificationQuestions?: AiClarificationQuestion[];
   disabled?: boolean;
   onSendSelected: (combinedText: string) => void;
-  onInsertIntoComposer: (combinedText: string) => void;
 }
 
 interface StepAnswerState {
@@ -46,7 +45,6 @@ export default function QuickReplyOptionsCard({
   clarificationQuestions = [],
   disabled = false,
   onSendSelected,
-  onInsertIntoComposer,
 }: QuickReplyOptionsCardProps) {
   const steps = useMemo<AiClarificationQuestion[]>(() => {
     if (clarificationQuestions && clarificationQuestions.length > 0) {
@@ -559,58 +557,31 @@ export default function QuickReplyOptionsCard({
       </ul>
 
       {/* Contextual Action Bar */}
-      {(hasAnySelection || totalSteps > 1) && (
+      {(activeIndex < totalSteps - 1 || hasAnySelection) && (
         <div
-          className="px-2.5 py-2 border-t flex items-center justify-between gap-2"
+          className="px-2.5 py-2 border-t flex items-center justify-end gap-2"
           style={{
             backgroundColor: 'var(--surface-inset)',
             borderColor: 'var(--divider)',
           }}
         >
-          {totalSteps > 1 ? (
+          {activeIndex < totalSteps - 1 ? (
             <button
               type="button"
-              disabled={disabled || activeIndex >= totalSteps - 1}
+              disabled={disabled}
               onClick={() => goToStep(activeIndex + 1)}
-              className="min-h-[44px] px-3 rounded-xl border text-xs font-semibold inline-flex items-center gap-1 cursor-pointer active:scale-95 transition-transform duration-150 ease-out disabled:opacity-35 disabled:cursor-default"
+              className="min-h-[44px] px-3.5 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer active:scale-95 transition-transform duration-150 ease-out disabled:opacity-35 disabled:cursor-default"
               style={{
                 touchAction: 'manipulation',
-                backgroundColor: 'var(--surface-card)',
-                borderColor: 'var(--border-subtle)',
-                color: 'var(--text-secondary)',
+                backgroundColor: 'var(--accent-fill)',
+                color: 'var(--on-accent)',
               }}
             >
-              <span>{getStepParts(activeIndex).length > 0 ? 'Siguiente' : 'Saltar'}</span>
+              <span>Siguiente</span>
               <ChevronRight className="size-3.5" />
             </button>
           ) : (
-            <span />
-          )}
-
-          {hasAnySelection && (
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                disabled={disabled}
-                onClick={() => {
-                  const text = buildCombinedReply();
-                  if (text) {
-                    onInsertIntoComposer(text);
-                    clearSelection();
-                  }
-                }}
-                className="min-h-[44px] px-3 rounded-xl border text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer active:scale-95 transition-transform duration-150 ease-out"
-                style={{
-                  touchAction: 'manipulation',
-                  backgroundColor: 'var(--surface-card)',
-                  borderColor: 'var(--border-subtle)',
-                  color: 'var(--text-secondary)',
-                }}
-              >
-                <Pencil className="size-3" />
-                <span>Editar antes</span>
-              </button>
-
+            hasAnySelection && (
               <button
                 type="button"
                 disabled={disabled}
@@ -621,7 +592,7 @@ export default function QuickReplyOptionsCard({
                     clearSelection();
                   }
                 }}
-                className="min-h-[44px] px-3.5 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer active:scale-95 transition-transform duration-150 ease-out"
+                className="min-h-[44px] px-3.5 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer active:scale-95 transition-transform duration-150 ease-out disabled:opacity-35 disabled:cursor-default"
                 style={{
                   touchAction: 'manipulation',
                   backgroundColor: 'var(--accent-fill)',
@@ -633,7 +604,7 @@ export default function QuickReplyOptionsCard({
                 </span>
                 <ArrowUp className="size-3.5 stroke-[2.3]" />
               </button>
-            </div>
+            )
           )}
         </div>
       )}
