@@ -48,7 +48,8 @@ model WorkoutEntry {
   id               String   @id @default(uuid())
   userId           String
   date             String // YYYY-MM-DD
-  sport            String // strength | running | cycling | yoga | swimming | other
+  title            String? // Optional workout title e.g. "Empuje A"
+  sport            String // strength | running | cycling | yoga | swimming | walking | other
   durationMin      Int
   intensity        String // low | medium | high
   caloriesBurned   Float
@@ -56,14 +57,96 @@ model WorkoutEntry {
   distanceKm       Float?
   loadVolumeKg     Float?
   notes            String?
+  routineId        String?
 
   // External Integration
-  source     String  @default("manual")
+  source     String  @default("manual") // manual | tracker | strava
   externalId String? @unique
+
+  exercises WorkoutExercise[]
 
   createdAt DateTime @default(now())
 
   @@index([userId, date])
+}
+
+model WorkoutExercise {
+  id            String       @id @default(uuid())
+  workoutId     String
+  exerciseId    String
+  exerciseName  String
+  primaryMuscle String?
+  equipment     String?
+  order         Int          @default(0)
+  notes         String?
+
+  workout WorkoutEntry @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  sets    WorkoutSet[]
+
+  @@index([workoutId])
+  @@index([exerciseId])
+}
+
+model WorkoutSet {
+  id                String          @id @default(uuid())
+  workoutExerciseId String
+  setNumber         Int
+  setType           String          @default("normal") // warmup | normal | dropset | failure
+  weightKg          Float?
+  reps              Int?
+  durationSec       Int?
+  distanceM         Float?
+  rpe               Float?
+  completed         Boolean         @default(true)
+
+  workoutExercise WorkoutExercise @relation(fields: [workoutExerciseId], references: [id], onDelete: Cascade)
+
+  @@index([workoutExerciseId])
+}
+
+model WorkoutRoutine {
+  id          String            @id @default(uuid())
+  userId      String
+  name        String
+  description String?
+  sport       String            @default("strength")
+  exercises   RoutineExercise[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([userId])
+}
+
+model RoutineExercise {
+  id             String         @id @default(uuid())
+  routineId      String
+  exerciseId     String
+  exerciseName   String
+  primaryMuscle  String?
+  equipment      String?
+  order          Int            @default(0)
+  targetSets     Int            @default(3)
+  targetReps     String?
+  defaultRestSec Int            @default(90)
+
+  routine WorkoutRoutine @relation(fields: [routineId], references: [id], onDelete: Cascade)
+
+  @@index([routineId])
+}
+
+model CustomExercise {
+  id            String   @id @default(uuid())
+  userId        String
+  name          String
+  bodyZone      String   @default("chest")
+  primaryMuscle String
+  equipment     String   @default("body only")
+  category      String   @default("strength")
+  metValue      Float    @default(5.0)
+  notes         String?
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
 }
 
 model Ingredient {

@@ -1179,9 +1179,9 @@ a,
   }
 
   /* Phone navigation lives in the thumb zone. The header keeps brand,
-     theme and logout; duplicating the same five destinations up top
-     made every screen a two-nav layout. */
-  .app-nav > a,
+     settings shortcut, theme and logout; duplicating the main nav links
+     up top made every screen a two-nav layout. */
+  .app-nav > a:not(.app-header-control),
   .app-nav > button[aria-label="Abrir acciones rápidas"] {
     display: none;
   }
@@ -1193,6 +1193,11 @@ a,
   .mobile-bottom-nav a[aria-current="page"] {
     background: color-mix(in srgb, var(--color-rose-500) 16%, transparent);
     color: var(--color-rose-300);
+  }
+
+  html[data-appearance="light"] .mobile-bottom-nav a[aria-current="page"] {
+    background: color-mix(in srgb, var(--color-rose-600) 14%, transparent);
+    color: var(--color-rose-700);
   }
 
   /* Dialogs that are centered cards on desktop become a sheet the

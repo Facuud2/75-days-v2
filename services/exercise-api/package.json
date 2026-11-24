@@ -1,0 +1,24 @@
+{
+  "name": "@75days/exercise-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Independent Cloudflare Workers + R2 microservice serving the 876-exercise catalog in Spanish/English for 75-days-v2.",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --port 8787 --local",
+    "deploy": "wrangler deploy",
+    "build:catalog": "node scripts/build-catalog.mjs",
+    "upload:r2": "node scripts/upload-r2.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "hono": "^4.7.10"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261123.1",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.7",
+    "wrangler": "^4.16.1"
+  }
+}

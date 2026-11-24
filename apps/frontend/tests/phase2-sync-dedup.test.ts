@@ -186,7 +186,7 @@ describe('Fase 2: 1-Round-Trip /api/sync, Server Reset Unification & GET Dedupli
         meals: [],
       },
       stravaConnected: true,
-      recentWorkouts: [{ id: 'w1', sport: 'running', durationMin: 45, caloriesBurned: 350 }],
+      recentWorkouts: [{ id: 'w1', date: '2026-11-12', sport: 'running', durationMin: 45, intensity: 'medium', caloriesBurned: 350 }],
       customFoods: [],
       systemIngredients: [
         {

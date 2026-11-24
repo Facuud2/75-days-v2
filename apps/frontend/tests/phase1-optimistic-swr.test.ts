@@ -461,7 +461,14 @@ describe('Fase 1: Optimistic UI (0ms) & Stale-While-Revalidate', () => {
     });
 
     it('logWorkoutOptimistic estimates calories and updates recentWorkouts + dailyStats in 0ms', async () => {
-      vi.spyOn(healthService, 'logWorkout').mockResolvedValueOnce({ id: 'workout-server-1' });
+      vi.spyOn(healthService, 'logWorkout').mockResolvedValueOnce({
+        id: 'workout-server-1',
+        date: '2026-11-12',
+        sport: 'running',
+        durationMin: 45,
+        intensity: 'medium',
+        caloriesBurned: 400,
+      });
 
       const p = useHealthStore.getState().logWorkoutOptimistic({
         date: '2026-11-16',

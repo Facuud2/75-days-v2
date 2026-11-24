@@ -5,7 +5,7 @@ import { useThemeStore } from '@/store/useThemeStore';
 import { useUIStore } from '@/store/useUIStore';
 import { useChallengeStore } from '@/store/useChallengeStore';
 import dynamic from 'next/dynamic';
-import { Home, Calendar, User, Settings, LogOut, Moon, Sun, Flame, Plus } from 'lucide-react';
+import { Home, Calendar, User, Settings, LogOut, Moon, Sun, Flame, Plus, Dumbbell } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
@@ -19,6 +19,8 @@ const LogMealModal = dynamic(() => import('@/components/LogMealModal'), { ssr: f
 const LogWorkoutModal = dynamic(() => import('@/components/LogWorkoutModal'), { ssr: false });
 const QuickActionsSheet = dynamic(() => import('@/components/QuickActionsSheet'), { ssr: false });
 const LogoutConfirmSheet = dynamic(() => import('@/components/profile/LogoutConfirmSheet'), { ssr: false });
+const LiveWorkoutOverlay = dynamic(() => import('@/components/fitness/LiveWorkoutOverlay'), { ssr: false });
+const ActiveWorkoutBanner = dynamic(() => import('@/components/fitness/ActiveWorkoutBanner'), { ssr: false });
 
 /**
  * Custom palettes can pick an arbitrarily bright accent. In dark appearance the
@@ -186,6 +188,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   <Plus size={20} strokeWidth={2.2} />
 
                 </button>
+                <Link data-tour="nav-fitness" href="/fitness" className={`app-header-nav flex flex-col items-center p-2 transition-colors ${pathname === '/fitness' ? 'is-active' : ''}`}>
+                  <Dumbbell size={20} strokeWidth={pathname === '/fitness' ? 2.4 : 1.8} />
+                  <span className="text-[10px] mt-1 hidden sm:block">Fitness</span>
+                </Link>
                 <Link data-tour="nav-profile" href="/profile" className={`app-header-nav flex flex-col items-center p-2 transition-colors ${pathname === '/profile' ? 'is-active' : ''}`}>
                   <User size={20} strokeWidth={pathname === '/profile' ? 2.4 : 1.8} />
                   <span className="text-[10px] mt-1 hidden sm:block">Perfil</span>
@@ -195,6 +201,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   <span className="text-[10px] mt-1 hidden sm:block">Ajustes</span>
                 </Link>
               </div>
+            )}
+
+            {/* Mobile Settings shortcut in header (moved from bottom nav to make room for Fitness) */}
+            {isAuthenticated && user?.onboardingCompleted && pathname !== '/settings' && (
+              <Link
+                data-tour="nav-settings-mobile"
+                href="/settings"
+                aria-label="Abrir ajustes"
+                className="lg:hidden inline-flex min-h-11 min-w-11 items-center justify-center app-header-control transition-colors rounded-full border active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
+              >
+                <Settings size={18} />
+              </Link>
             )}
 
             {/* Always visible theme toggle */}
@@ -225,6 +243,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       {isAuthenticated && isPlansModalOpen && <PlansModal />}
       {isAuthenticated && isLogMealModalOpen && <LogMealModal isOpen={isLogMealModalOpen} onClose={() => { useUIStore.getState().closeLogMealModal(); }} date={getLocalDateString()} onSaved={() => { }} />}
       {isAuthenticated && isLogWorkoutModalOpen && <LogWorkoutModal isOpen={isLogWorkoutModalOpen} onClose={() => { useUIStore.getState().closeLogWorkoutModal(); }} date={getLocalDateString()} onSaved={() => { }} />}
+      {isAuthenticated && user?.onboardingCompleted && (
+        <>
+          <LiveWorkoutOverlay />
+          <ActiveWorkoutBanner />
+        </>
+      )}
       {isAuthenticated && isQuickActionsOpen && (
         <QuickActionsSheet
           isOpen={isQuickActionsOpen}
@@ -263,13 +287,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <Plus size={28} strokeWidth={2.5} />
             </span>
           </button>
+          <Link data-tour="nav-fitness" href="/fitness" aria-current={pathname === '/fitness' ? 'page' : undefined} className={`flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl px-1 py-1.5 text-[11px] font-semibold ${pathname === '/fitness' ? '' : 'text-white/55'}`}>
+            <Dumbbell size={22} strokeWidth={pathname === '/fitness' ? 2.4 : 1.8} />
+            <span>Fitness</span>
+          </Link>
           <Link data-tour="nav-profile" href="/profile" aria-current={pathname === '/profile' ? 'page' : undefined} className={`flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl px-1 py-1.5 text-[11px] font-semibold ${pathname === '/profile' ? '' : 'text-white/55'}`}>
             <User size={22} strokeWidth={pathname === '/profile' ? 2.4 : 1.8} />
             <span>Perfil</span>
-          </Link>
-          <Link data-tour="nav-settings" href="/settings" aria-current={pathname === '/settings' ? 'page' : undefined} className={`flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl px-1 py-1.5 text-[11px] font-semibold ${pathname === '/settings' ? '' : 'text-white/55'}`}>
-            <Settings size={22} strokeWidth={pathname === '/settings' ? 2.4 : 1.8} />
-            <span>Ajustes</span>
           </Link>
         </nav>
       )}

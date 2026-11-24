@@ -15,3 +15,5 @@ coverage/
 .next-local/
 .neon
 apps/frontend/lib/generated/
+services/exercise-api/.wrangler/
+services/exercise-api/data/raw-exercises.json
