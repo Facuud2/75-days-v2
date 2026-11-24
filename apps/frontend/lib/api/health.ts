@@ -110,11 +110,148 @@ export interface LogMealPayload {
   fatG: number;
 }
 
+export interface WorkoutSetItem {
+  id?: string;
+  setNumber: number;
+  setType: 'warmup' | 'normal' | 'dropset' | 'failure';
+  weightKg?: number | null;
+  reps?: number | null;
+  durationSec?: number | null;
+  distanceM?: number | null;
+  rpe?: number | null;
+  completed: boolean;
+}
+
+export interface WorkoutExerciseItem {
+  id?: string;
+  exerciseId: string;
+  exerciseName: string;
+  primaryMuscle?: string | null;
+  equipment?: string | null;
+  order?: number;
+  notes?: string | null;
+  sets: WorkoutSetItem[];
+}
+
+export interface WorkoutPersonalRecord {
+  exerciseId: string;
+  exerciseName: string;
+  metric: 'weight' | 'estimated1RM' | 'volume';
+  previousBest: number;
+  newBest: number;
+}
+
+export interface WorkoutEntryRecord {
+  id: string;
+  date: string;
+  title?: string | null;
+  sport: string;
+  durationMin: number;
+  intensity: string;
+  caloriesBurned: number;
+  isManualCalories?: boolean;
+  distanceKm?: number | null;
+  loadVolumeKg?: number | null;
+  notes?: string | null;
+  routineId?: string | null;
+  source?: string;
+  exercises?: WorkoutExerciseItem[];
+  personalRecords?: WorkoutPersonalRecord[];
+  createdAt?: string;
+}
+
+export interface RoutineExerciseItem {
+  id?: string;
+  exerciseId: string;
+  exerciseName: string;
+  primaryMuscle?: string | null;
+  equipment?: string | null;
+  order?: number;
+  targetSets: number;
+  targetReps?: string | null;
+  defaultRestSec: number;
+}
+
+export interface WorkoutRoutineRecord {
+  id: string;
+  name: string;
+  description?: string | null;
+  sport: string;
+  exercises: RoutineExerciseItem[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CustomExerciseRecord {
+  id: string;
+  name: string;
+  bodyZone: string;
+  primaryMuscle: string;
+  equipment: string;
+  category: string;
+  metValue: number;
+  notes?: string | null;
+  createdAt?: string;
+}
+
+export interface ExerciseHistoryResponse {
+  exerciseId: string;
+  personalBest: {
+    maxWeightKg: number;
+    bestEstimated1RM: number;
+    maxSessionVolumeKg: number;
+  };
+  lastSession: {
+    workoutId: string;
+    date: string;
+    title: string | null;
+    sets: WorkoutSetItem[];
+    stats: {
+      maxWeightKg: number;
+      bestEstimated1RM: number;
+      totalVolumeKg: number;
+      completedSets: number;
+    };
+  } | null;
+  sessions: Array<{
+    workoutId: string;
+    date: string;
+    title: string | null;
+    sets: WorkoutSetItem[];
+    stats: {
+      maxWeightKg: number;
+      bestEstimated1RM: number;
+      totalVolumeKg: number;
+      completedSets: number;
+    };
+  }>;
+}
+
+export interface FitnessOverviewResponse {
+  date: string;
+  todayMinutes: number;
+  requiredWorkoutMin: number;
+  weekly: {
+    workouts: number;
+    minutes: number;
+    caloriesBurned: number;
+    volumeKg: number;
+  };
+  muscleDistribution: Array<{ muscle: string; sets: number }>;
+  topLifts: Array<{
+    exerciseId: string;
+    exerciseName: string;
+    maxWeightKg: number;
+    bestEstimated1RM: number;
+    date: string;
+  }>;
+}
+
 export interface HealthSyncBundle {
   syncVersion?: number;
   dailyStats: DailyStats;
   stravaConnected: boolean;
-  recentWorkouts: any[];
+  recentWorkouts: WorkoutEntryRecord[];
   customFoods?: CustomFood[];
   systemIngredients?: Ingredient[];
 }
@@ -183,14 +320,14 @@ export const healthService = {
       method: 'POST',
     }),
 
-  // Workouts (general)
+  // Workouts (general & structured)
   logWorkout: (payload: any) =>
-    healthClient<{ id: string }>('/workouts', {
+    healthClient<WorkoutEntryRecord>('/workouts', {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
   updateWorkout: (id: string, payload: any) =>
-    healthClient<{ id: string }>(`/workouts/${id}`, {
+    healthClient<WorkoutEntryRecord>(`/workouts/${id}`, {
       method: 'PUT',
       body: JSON.stringify(payload),
     }),
@@ -198,8 +335,83 @@ export const healthService = {
     healthClient<{ message: string }>(`/workouts/${id}`, {
       method: 'DELETE',
     }),
-  getRecentWorkouts: () =>
-    healthClient<{ workouts: any[] }>('/workouts/recent'),
+  getRecentWorkouts: (limit = 20) =>
+    healthClient<{ workouts: WorkoutEntryRecord[] }>(`/workouts/recent?limit=${limit}`),
   getWorkoutsForDay: (date: string) =>
-    healthClient<{ workouts: any[]; totals: any }>(`/workouts/${date}`),
+    healthClient<{ workouts: WorkoutEntryRecord[]; totals: any }>(`/workouts/${date}`),
+  getExerciseHistory: (exerciseId: string) =>
+    healthClient<ExerciseHistoryResponse>(
+      `/workouts/exercise-history/${encodeURIComponent(exerciseId)}`
+    ),
+  getLastSetsBatch: (exerciseIds: string[]) =>
+    healthClient<{
+      lastByExercise: Record<
+        string,
+        {
+          date: string;
+          sets: Array<{
+            setNumber: number;
+            setType: string;
+            weightKg: number | null;
+            reps: number | null;
+            durationSec: number | null;
+          }>;
+        }
+      >;
+    }>(`/workouts/last-sets?ids=${encodeURIComponent(exerciseIds.join(','))}`),
+  getFitnessOverview: (date?: string) =>
+    healthClient<FitnessOverviewResponse>(
+      date ? `/workouts/overview?date=${encodeURIComponent(date)}` : '/workouts/overview'
+    ),
+
+  // Workout Routines CRUD
+  getRoutines: () => healthClient<{ routines: WorkoutRoutineRecord[] }>('/workouts/routines'),
+  createRoutine: (payload: {
+    name: string;
+    description?: string | null;
+    sport?: string;
+    exercises: RoutineExerciseItem[];
+  }) =>
+    healthClient<WorkoutRoutineRecord>('/workouts/routines', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  updateRoutine: (
+    id: string,
+    payload: {
+      name: string;
+      description?: string | null;
+      sport?: string;
+      exercises: RoutineExerciseItem[];
+    }
+  ) =>
+    healthClient<WorkoutRoutineRecord>(`/workouts/routines/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+  deleteRoutine: (id: string) =>
+    healthClient<{ message: string }>(`/workouts/routines/${id}`, {
+      method: 'DELETE',
+    }),
+
+  // Custom Exercises CRUD
+  getCustomExercises: () =>
+    healthClient<{ exercises: CustomExerciseRecord[] }>('/exercises/custom'),
+  createCustomExercise: (payload: {
+    name: string;
+    bodyZone: string;
+    primaryMuscle: string;
+    equipment: string;
+    category?: string;
+    metValue?: number;
+    notes?: string | null;
+  }) =>
+    healthClient<CustomExerciseRecord>('/exercises/custom', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  deleteCustomExercise: (id: string) =>
+    healthClient<{ message: string }>(`/exercises/custom/${id}`, {
+      method: 'DELETE',
+    }),
 };

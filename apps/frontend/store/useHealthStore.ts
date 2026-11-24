@@ -49,6 +49,7 @@ export function estimateWorkoutCaloriesClient(
 
 export interface LogWorkoutPayload {
   date: string;
+  title?: string;
   sport: string;
   durationMin: number;
   intensity: string;

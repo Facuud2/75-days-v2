@@ -31,7 +31,13 @@ export const getHealthSync = async (
       prisma.workoutEntry.findMany({
         where: { userId },
         orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
-        take: 10,
+        take: 15,
+        include: {
+          exercises: {
+            orderBy: { order: 'asc' },
+            include: { sets: { orderBy: { setNumber: 'asc' } } },
+          },
+        },
       }),
       includeCatalog
         ? prisma.customFood.findMany({

@@ -34,17 +34,25 @@ export default function DevTimePanel() {
   const streak = useChallengeStore((s) => s.streak);
   const fetchCurrentChallenge = useChallengeStore((s) => s.fetchCurrentChallenge);
 
+  const closePanel = () => {
+    setOpen(false);
+    setConfirmReset(false);
+  };
+
   useEffect(() => {
-    if (!open) {
-      setConfirmReset(false);
-      return;
-    }
+    if (!open) return;
 
     const onPointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+        setConfirmReset(false);
+      }
     };
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
+      if (event.key === 'Escape') {
+        setOpen(false);
+        setConfirmReset(false);
+      }
     };
 
     document.addEventListener('pointerdown', onPointerDown);
@@ -116,7 +124,10 @@ export default function DevTimePanel() {
         aria-expanded={open}
         aria-controls="dev-time-panel"
         aria-label="Debug de tiempo y cuenta"
-        onClick={() => setOpen((prev) => !prev)}
+        onClick={() => {
+          if (open) closePanel();
+          else setOpen(true);
+        }}
         className={`
           flex items-center gap-2 rounded-full border px-4 py-2.5 text-sm font-medium shadow-lg
           transition-[background-color,border-color,color,box-shadow] duration-200 ease-out

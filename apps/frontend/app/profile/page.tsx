@@ -165,14 +165,20 @@ export default function Profile() {
     fetchProfile();
 
     // Manejo de callbacks de Strava OAuth
+    let cancelled = false;
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('strava') === 'success') {
       setStravaConnected(true);
       window.history.replaceState({}, document.title, window.location.pathname);
     } else if (urlParams.get('strava') === 'error') {
-      setStravaError('No pudimos conectar con Strava.');
+      queueMicrotask(() => {
+        if (!cancelled) setStravaError('No pudimos conectar con Strava.');
+      });
       window.history.replaceState({}, document.title, window.location.pathname);
     }
+    return () => {
+      cancelled = true;
+    };
   }, [fetchProfile, setStravaConnected]);
 
   const handleConnectStrava = async () => {

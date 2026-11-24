@@ -393,37 +393,53 @@ export const exportUserData = async (
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const [healthProfile, meals, workouts, customFoods] = await Promise.all([
-      healthPrisma.userHealthProfile.findUnique({
-        where: { userId },
-        select: {
-          id: true,
-          userId: true,
-          dailyCalorieGoal: true,
-          proteinGoalG: true,
-          carbGoalG: true,
-          fatGoalG: true,
-          weightKg: true,
-          heightCm: true,
-          stravaAthleteId: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      }),
-      healthPrisma.mealEntry.findMany({
-        where: { userId },
-        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
-      }),
-      healthPrisma.workoutEntry.findMany({
-        where: { userId },
-        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
-      }),
-      healthPrisma.customFood.findMany({
-        where: { userId },
-        include: { ingredients: { include: { ingredient: true } } },
-        orderBy: { createdAt: 'desc' },
-      }),
-    ]);
+    const [healthProfile, meals, workouts, customFoods, workoutRoutines, customExercises] =
+      await Promise.all([
+        healthPrisma.userHealthProfile.findUnique({
+          where: { userId },
+          select: {
+            id: true,
+            userId: true,
+            dailyCalorieGoal: true,
+            proteinGoalG: true,
+            carbGoalG: true,
+            fatGoalG: true,
+            weightKg: true,
+            heightCm: true,
+            stravaAthleteId: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        }),
+        healthPrisma.mealEntry.findMany({
+          where: { userId },
+          orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+        }),
+        healthPrisma.workoutEntry.findMany({
+          where: { userId },
+          orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+          include: {
+            exercises: {
+              orderBy: { order: 'asc' },
+              include: { sets: { orderBy: { setNumber: 'asc' } } },
+            },
+          },
+        }),
+        healthPrisma.customFood.findMany({
+          where: { userId },
+          include: { ingredients: { include: { ingredient: true } } },
+          orderBy: { createdAt: 'desc' },
+        }),
+        healthPrisma.workoutRoutine.findMany({
+          where: { userId },
+          include: { exercises: { orderBy: { order: 'asc' } } },
+          orderBy: { updatedAt: 'desc' },
+        }),
+        healthPrisma.customExercise.findMany({
+          where: { userId },
+          orderBy: { createdAt: 'desc' },
+        }),
+      ]);
 
     res.setHeader(
       'Content-Disposition',
@@ -431,7 +447,7 @@ export const exportUserData = async (
     );
     return res.json({
       exportedAt: new Date().toISOString(),
-      schemaVersion: '1.0',
+      schemaVersion: '1.1',
       account: {
         id: user.id,
         name: user.name,
@@ -454,6 +470,8 @@ export const exportUserData = async (
         meals,
         workouts,
         customFoods,
+        workoutRoutines,
+        customExercises,
       },
     });
   } catch (error) {
@@ -476,14 +494,25 @@ export const deleteAccount = async (
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Purge health DB first so no orphaned meals/workouts/Strava tokens remain
+    // Purge health DB first so no orphaned meals/workouts/routines/Strava tokens remain
     await healthPrisma.$transaction(async (htx) => {
       await htx.customFoodIngredient.deleteMany({
         where: { customFood: { userId } },
       });
       await htx.customFood.deleteMany({ where: { userId } });
       await htx.mealEntry.deleteMany({ where: { userId } });
+      await htx.workoutSet.deleteMany({
+        where: { workoutExercise: { workout: { userId } } },
+      });
+      await htx.workoutExercise.deleteMany({
+        where: { workout: { userId } },
+      });
       await htx.workoutEntry.deleteMany({ where: { userId } });
+      await htx.routineExercise.deleteMany({
+        where: { routine: { userId } },
+      });
+      await htx.workoutRoutine.deleteMany({ where: { userId } });
+      await htx.customExercise.deleteMany({ where: { userId } });
       await htx.userHealthProfile.deleteMany({ where: { userId } });
     });
 

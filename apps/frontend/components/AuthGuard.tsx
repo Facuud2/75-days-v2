@@ -1,9 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/useAuthStore';
 import RouteBootSkeleton from '@/components/auth/RouteBootSkeleton';
+
+const subscribeNoop = () => () => {};
+const getClientHydrated = () => true;
+const getServerHydrated = () => false;
 
 // Public routes that anyone can access, logged in or not.
 const PUBLIC_ROUTES =
@@ -20,16 +24,12 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     const { isAuthenticated, token, checkAuth, logout, user, checkOnboardingStatus } = useAuthStore();
 
     // Manage hydration to prevent layout flashes
-    const [isHydrated, setIsHydrated] = useState(false);
-    // Track whether we've verified onboarding status from the DB (or already verified as completed in store)
-    const [onboardingChecked, setOnboardingChecked] = useState(() => user?.onboardingCompleted === true);
+    const isHydrated = useSyncExternalStore(subscribeNoop, getClientHydrated, getServerHydrated);
+    // Track which authenticated user session has completed DB onboarding verification
+    const [verifiedSessionKey, setVerifiedSessionKey] = useState<string | null>(null);
 
     const bootCheckDoneRef = useRef(false);
     const checkedOnboardingUserIdRef = useRef<string | null>(null);
-
-    useEffect(() => {
-        setIsHydrated(true);
-    }, []);
 
     // Immediately clear in-memory auth state if any API request receives 401
     // so cached user data is replaced by RouteBootSkeleton during redirect.
@@ -57,18 +57,15 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
 
         if (isAuthenticated && !token) {
             logout();
-            setOnboardingChecked(true);
             return;
         }
 
         if (!isAuthenticated || !token) {
             checkedOnboardingUserIdRef.current = null;
-            setOnboardingChecked(true);
             return;
         }
 
         if (user?.onboardingCompleted === true) {
-            setOnboardingChecked(true);
             return;
         }
 
@@ -76,10 +73,9 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
         if (checkedOnboardingUserIdRef.current === sessionKey) return;
         checkedOnboardingUserIdRef.current = sessionKey;
 
-        setOnboardingChecked(false);
         checkOnboardingStatus()
             .catch(() => { })
-            .finally(() => setOnboardingChecked(true));
+            .finally(() => setVerifiedSessionKey(sessionKey));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isHydrated, isAuthenticated, token, user?.id, user?.onboardingCompleted]);
 
@@ -93,7 +89,11 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     const isRoutingRestricted = !isPublicRoute && !hasValidSession && !isSessionPending;
     const isRedundantLogin = hasValidSession && isAuthRoute;
 
-    const isOnboardingVerified = onboardingChecked || user?.onboardingCompleted === true;
+    const currentSessionKey = hasValidSession ? (user?.id ?? 'authenticated') : null;
+    const isOnboardingVerified =
+        !hasValidSession ||
+        user?.onboardingCompleted === true ||
+        verifiedSessionKey === currentSessionKey;
     // Must complete onboarding: authenticated but onboarding not done (DB-verified), and not already on onboarding page
     const needsOnboarding = hasValidSession && isOnboardingVerified && user && user.onboardingCompleted !== true && !isOnboardingRoute;
     // Already onboarded users should not re-enter the onboarding wizard and risk resetting their active challenge

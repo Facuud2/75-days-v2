@@ -1,0 +1,22 @@
+name = "seventyfive-days-exercise-api"
+main = "src/index.ts"
+compatibility_date = "2025-05-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+# Por defecto sirve las imágenes desde el repositorio oficial de dominio público.
+# Cuando subas las imágenes a tu bucket R2, cambia esto por tu dominio público R2
+# (ej: "https://media.tudominio.com/exercises" o "https://pub-xxxx.r2.dev/exercises").
+IMAGE_BASE_URL = "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises"
+ALLOWED_ORIGINS = "http://localhost:3000,http://127.0.0.1:3000,https://*.vercel.app"
+
+[previews.vars]
+IMAGE_BASE_URL = "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises"
+ALLOWED_ORIGINS = "http://localhost:3000,http://127.0.0.1:3000,https://*.vercel.app"
+
+# Descomenta este bloque una vez que crees tu bucket R2 en Cloudflare Dashboard
+# (paso a paso en services/exercise-api/CLOUDFLARE_SETUP.md):
+#
+# [[r2_buckets]]
+# binding = "EXERCISES_BUCKET"
+# bucket_name = "75days-exercises-media"

@@ -24,7 +24,18 @@ const MEAL_SUGGESTIONS: Record<MealType, string[]> = {
     dinner: ['Pescado', 'Pollo', 'Huevo', 'Ensalada', 'Sopa']
 };
 
-export default function LogMealModal({ isOpen, onClose, onSaved, date }: LogMealModalProps) {
+export default function LogMealModal(props: LogMealModalProps) {
+    if (!props.isOpen) return null;
+    return (
+        <LogMealModalContent
+            onClose={props.onClose}
+            onSaved={props.onSaved}
+            date={props.date}
+        />
+    );
+}
+
+function LogMealModalContent({ onClose, onSaved, date }: Omit<LogMealModalProps, 'isOpen'>) {
     const [activeTab, setActiveTab] = useState<Tab>('SEARCH');
     const [step, setStep] = useState<Step>('MAIN');
     const [mealType, setMealType] = useState<MealType>('lunch');
@@ -68,35 +79,18 @@ export default function LogMealModal({ isOpen, onClose, onSaved, date }: LogMeal
     // Submission
     const [isSaving, setIsSaving] = useState(false);
 
-    // Reset when opened
+    // Hydrate catalog when mounted
     useEffect(() => {
-        if (isOpen) {
-            setActiveTab('SEARCH');
-            setStep('MAIN');
-            setQuery('');
-            setSearchResults([]);
-            setHasSearched(false);
-            setFoodDetails(null);
-            setSelectedFoodId(null);
-            setQuantity(1);
-            setRecipeIngredients([]);
-            setIsSelectingIngredient(false);
-            setIngredientSearch('');
-            setIngredientSearchResults([]);
-            void fetchCatalogIfNeeded();
-        }
-    }, [isOpen, fetchCatalogIfNeeded]);
+        void fetchCatalogIfNeeded();
+    }, [fetchCatalogIfNeeded]);
 
     useEffect(() => {
-        if (!isOpen) return;
         const handleKeyDown = (event: KeyboardEvent) => {
             if (event.key === 'Escape') onClose();
         };
         document.addEventListener('keydown', handleKeyDown);
         return () => document.removeEventListener('keydown', handleKeyDown);
-    }, [isOpen, onClose]);
-
-    if (!isOpen) return null;
+    }, [onClose]);
 
     const handleSearch = async (e?: React.FormEvent, directQuery?: string) => {
         if (e) e.preventDefault();

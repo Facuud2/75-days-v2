@@ -57,13 +57,25 @@ function getDistance(a: PointerPoint, b: PointerPoint): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-export default function ImageCropperModal({
-  open,
+export default function ImageCropperModal(props: ImageCropperModalProps) {
+  if (!props.open || !props.src || typeof document === 'undefined') return null;
+  return (
+    <ImageCropperModalContent
+      key={`${props.src}::${props.mode}`}
+      src={props.src}
+      mode={props.mode}
+      onCancel={props.onCancel}
+      onApply={props.onApply}
+    />
+  );
+}
+
+function ImageCropperModalContent({
   src,
   mode,
   onCancel,
   onApply,
-}: ImageCropperModalProps) {
+}: Omit<ImageCropperModalProps, 'open' | 'src'> & { src: string }) {
   const config = CROP_CONFIG[mode];
   const stageRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
@@ -101,14 +113,8 @@ export default function ImageCropperModal({
     return { width: Math.round(w), height: Math.round(h) };
   })();
 
-  // Cargar imagen cuando cambia `src` o se abre el modal
+  // Cargar imagen cuando se monta el modal para este `src`
   useEffect(() => {
-    if (!open || !src) return;
-
-    setNaturalSize(null);
-    setLoadError('');
-    setZoom(MIN_ZOOM);
-    setOffset({ x: 0, y: 0 });
     imageRef.current = null;
     pointersRef.current.clear();
     pinchStartDistRef.current = null;
@@ -135,11 +141,10 @@ export default function ImageCropperModal({
     return () => {
       cancelled = true;
     };
-  }, [open, src]);
+  }, [src]);
 
   // Medir el área disponible con ResizeObserver
   useEffect(() => {
-    if (!open) return;
     const node = stageRef.current;
     if (!node) return;
 
@@ -152,11 +157,10 @@ export default function ImageCropperModal({
     const observer = new ResizeObserver(updateSize);
     observer.observe(node);
     return () => observer.disconnect();
-  }, [open]);
+  }, []);
 
   // Bloquear scroll del body y cerrar con Escape
   useEffect(() => {
-    if (!open) return;
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
 
@@ -173,7 +177,7 @@ export default function ImageCropperModal({
       document.body.style.overflow = prevOverflow;
       document.removeEventListener('keydown', handleKeyDown, true);
     };
-  }, [open, onCancel]);
+  }, [onCancel]);
 
   const applyZoom = useCallback(
     (nextZoom: number) => {
@@ -289,8 +293,6 @@ export default function ImageCropperModal({
       setApplying(false);
     }
   };
-
-  if (!open || !src || typeof document === 'undefined') return null;
 
   const baseScale = naturalSize
     ? getCoverScale(naturalSize.width, naturalSize.height, cropBox.width, cropBox.height)
