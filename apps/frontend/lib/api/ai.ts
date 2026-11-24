@@ -97,11 +97,18 @@ export interface AiCustomPlanRequest {
 
 export type QuickReplySelectionMode = 'single' | 'multiple';
 
+export interface AiClarificationQuestion {
+  question: string;
+  options: string[];
+  selectionMode?: QuickReplySelectionMode;
+}
+
 export interface AiCustomPlanResponse {
   status: 'needs_clarification' | 'ready';
   userTranscript: string;
   assistantMessage: string;
   openQuestions?: string[];
+  clarificationQuestions?: AiClarificationQuestion[];
   understoodFacts?: string[];
   suggestedQuickReplies?: string[];
   quickReplySelectionMode?: QuickReplySelectionMode;
@@ -126,6 +133,7 @@ export interface AiSideQuestResponse {
   userTranscript: string;
   assistantMessage: string;
   openQuestions?: string[];
+  clarificationQuestions?: AiClarificationQuestion[];
   understoodFacts?: string[];
   suggestedQuickReplies?: string[];
   quickReplySelectionMode?: QuickReplySelectionMode;

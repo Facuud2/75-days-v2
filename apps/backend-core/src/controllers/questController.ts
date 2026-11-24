@@ -32,6 +32,30 @@ export const serializeQuest = (quest: any) => {
     };
 };
 
+export const normalizeQuestTitle = (title: string) => title.trim().toLowerCase();
+
+export const deduplicateSerializedQuests = <
+    T extends { id: string; title: string; progress?: number; completionCount?: number }
+>(
+    quests: T[]
+): T[] => {
+    const byKey = new Map<string, T>();
+    for (const quest of quests) {
+        const key = normalizeQuestTitle(quest.title) || quest.id;
+        const existing = byKey.get(key);
+        if (!existing) {
+            byKey.set(key, quest);
+            continue;
+        }
+        const questScore = (quest.completionCount ?? 0) * 10000 + (quest.progress ?? 0);
+        const existingScore = (existing.completionCount ?? 0) * 10000 + (existing.progress ?? 0);
+        if (questScore > existingScore) {
+            byKey.set(key, quest);
+        }
+    }
+    return Array.from(byKey.values());
+};
+
 export const questInclude = {
     runs: { orderBy: { runNumber: 'desc' as const }, take: 1, include: taskInclude },
 };
@@ -43,7 +67,7 @@ export const getQuests = async (req: AuthRequest, res: Response) => {
             orderBy: { startedAt: 'desc' },
             include: questInclude,
         });
-        res.json(quests.map(serializeQuest));
+        res.json(deduplicateSerializedQuests(quests.map(serializeQuest)));
     } catch (error) {
         console.error('Error fetching side quests:', error);
         res.status(500).json({ error: 'Internal server error' });
@@ -121,25 +145,44 @@ export const addQuest = async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user!.id;
         const { title, description, icon, difficulty, durationDays, tasks } = addQuestSchema.parse(req.body);
+        const trimmedTitle = title.trim();
         // A payload with tasks explicitly describes a private custom quest, even
         // if its title happens to match a catalog template.
         const template = tasks ? null : await prisma.sideQuestTemplate.findUnique({
-            where: { title },
+            where: { title: trimmedTitle },
             include: { tasks: { orderBy: { order: 'asc' } } },
         });
         if (!template && !tasks) {
             return res.status(400).json({ error: 'Custom side quests require at least one task' });
         }
 
-        const quest = await prisma.$transaction(async (tx) => {
-            const created = await tx.sideQuest.create({
-                data: { userId, templateId: template?.id, title, description, icon, difficulty, durationDays },
+        const { quest, created } = await prisma.$transaction(async (tx) => {
+            if (typeof (tx as any).$executeRaw === 'function') {
+                const lockKey = `side_quest:${userId}:${normalizeQuestTitle(trimmedTitle)}`;
+                await (tx as any).$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
+            }
+
+            const existing = await tx.sideQuest.findFirst({
+                where: {
+                    userId,
+                    title: { equals: trimmedTitle, mode: 'insensitive' },
+                },
+                orderBy: { startedAt: 'desc' },
+                include: questInclude,
+            });
+            if (existing) {
+                return { quest: existing, created: false };
+            }
+
+            const createdQuest = await tx.sideQuest.create({
+                data: { userId, templateId: template?.id, title: trimmedTitle, description, icon, difficulty, durationDays },
                 include: { template: { include: { tasks: { orderBy: { order: 'asc' } } } } },
             });
-            await createRun(tx, created, 1, template ? undefined : tasks!);
-            return tx.sideQuest.findUnique({ where: { id: created.id }, include: questInclude });
+            await createRun(tx, createdQuest, 1, template ? undefined : tasks!);
+            const hydrated = await tx.sideQuest.findUnique({ where: { id: createdQuest.id }, include: questInclude });
+            return { quest: hydrated, created: true };
         });
-        res.status(201).json(serializeQuest(quest));
+        res.status(created ? 201 : 200).json(serializeQuest(quest));
     } catch (error) {
         if (error instanceof z.ZodError) return res.status(400).json({ error: 'Validation failed', details: error.issues });
         console.error('Error creating side quest:', error);

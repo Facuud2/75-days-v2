@@ -343,6 +343,7 @@ export default function Onboarding() {
     tasksToPersist: CustomTask[],
     extraCustomQuests: AiSideQuestDraft[] = []
   ) => {
+    if (isChallengeLoading) return;
     setIsChallengeLoading(true);
     try {
       const formattedCustomGoals = tasksToPersist
@@ -373,14 +374,28 @@ export default function Onboarding() {
       );
 
       // Persistir todas las misiones secundarias elegidas o diseñadas con IA recién al confirmar
-      const allCustomQuests = [...pendingCustomQuests, ...extraCustomQuests];
+      const seenQuestTitles = new Set<string>();
+      const selectedTemplates = selectedQuests
+        .map((qId) => availableQuests.find((aq) => aq.id === qId))
+        .filter((q): q is NonNullable<typeof q> => {
+          if (!q) return false;
+          const key = q.title.trim().toLowerCase();
+          if (seenQuestTitles.has(key)) return false;
+          seenQuestTitles.add(key);
+          return true;
+        });
+
+      const allCustomQuests = [...pendingCustomQuests, ...extraCustomQuests].filter((quest) => {
+        const key = quest.title.trim().toLowerCase();
+        if (!key || seenQuestTitles.has(key)) return false;
+        seenQuestTitles.add(key);
+        return true;
+      });
+
       await Promise.all([
-        ...selectedQuests.map((qId) => {
-          const q = availableQuests.find((aq) => aq.id === qId);
-          return q
-            ? subscribeToQuest(q.title, q.difficulty, q.durationDays)
-            : Promise.resolve();
-        }),
+        ...selectedTemplates.map((q) =>
+          subscribeToQuest(q.title, q.difficulty, q.durationDays)
+        ),
         ...allCustomQuests.map((quest) =>
           createCustomQuest({
             title: quest.title,

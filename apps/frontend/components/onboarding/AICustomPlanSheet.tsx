@@ -846,7 +846,12 @@ export default function AICustomPlanSheet({
 
   const handleAddSessionSideQuest = async (quest: AiSideQuestDraft) => {
     if (actionLockRef.current === 'save') return;
-    setSessionSideQuests((prev) => [...prev, quest]);
+    const normalized = quest.title.trim().toLowerCase();
+    setSessionSideQuests((prev) => {
+      const idx = prev.findIndex((q) => q.title.trim().toLowerCase() === normalized);
+      if (idx === -1) return [...prev, quest];
+      return prev.map((q, i) => (i === idx ? quest : q));
+    });
     setSubView('plan');
     setActiveTab('chat');
     setMessages((prev) => [

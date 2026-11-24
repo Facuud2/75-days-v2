@@ -7,6 +7,11 @@ import {
   transcribeUserAudio,
   type GeminiClientLike,
 } from '../lib/server/services/geminiService';
+import * as dbModule from '../lib/server/db';
+import {
+  startChallenge,
+  updateCustomGoals,
+} from '../lib/server/controllers/core/challengeController';
 
 describe('AI Custom Plan, Side Quest & Challenge Store', () => {
   beforeEach(() => {
@@ -353,6 +358,60 @@ describe('AI Custom Plan, Side Quest & Challenge Store', () => {
 
     expect(res.quickReplySelectionMode).toBe('multiple');
     expect(res.suggestedQuickReplies).toHaveLength(3);
+    expect(res.clarificationQuestions).toHaveLength(1);
+    expect(res.clarificationQuestions?.[0].question).toBe('Elegí los ejes que quieras combinar:');
+    expect(res.clarificationQuestions?.[0].options).toEqual([
+      'Hidratación 3L diarios',
+      'Caminata exterior 30 min',
+      'Lectura 15 min',
+    ]);
+    expect(res.clarificationQuestions?.[0].selectionMode).toBe('multiple');
+  });
+
+  it('processCustomPlanTurn preserves structured clarificationQuestions per question step', async () => {
+    const mockClient: GeminiClientLike = {
+      interactions: {
+        create: async () => ({
+          output_text: JSON.stringify({
+            status: 'needs_clarification',
+            userTranscript: 'Quiero entrenar y leer todos los días',
+            assistantMessage: 'Respondé estas dos preguntas rápidas para cerrar tu plan:',
+            openQuestions: [],
+            clarificationQuestions: [
+              {
+                question: '¿Cuántos minutos por sesión querés entrenar?',
+                options: ['30 minutos diarios', '45 minutos diarios', '60 minutos diarios'],
+                selectionMode: 'single',
+              },
+              {
+                question: '¿Qué formato de lectura preferís para el reto?',
+                options: ['10 páginas al día', '20 minutos de lectura', '1 capítulo diario'],
+                selectionMode: 'single',
+              },
+            ],
+            understoodFacts: ['Entrenar y leer a diario'],
+            suggestedQuickReplies: [],
+            tasks: [],
+          }),
+        }),
+      },
+    };
+
+    const res = await processCustomPlanTurn(
+      { textInput: 'Quiero entrenar y leer todos los días' },
+      mockClient
+    );
+
+    expect(res.clarificationQuestions).toHaveLength(2);
+    expect(res.openQuestions).toEqual([
+      '¿Cuántos minutos por sesión querés entrenar?',
+      '¿Qué formato de lectura preferís para el reto?',
+    ]);
+    expect(res.suggestedQuickReplies).toEqual([
+      '30 minutos diarios',
+      '45 minutos diarios',
+      '60 minutos diarios',
+    ]);
   });
 
   it('transcribeUserAudio transcribes speech cleanly and handles silent audio', async () => {
@@ -508,5 +567,201 @@ describe('AI Custom Plan, Side Quest & Challenge Store', () => {
     expect(res.status).toBe('needs_clarification');
     expect(res.quest).toBeNull();
     expect(res.quickReplySelectionMode).toBeUndefined();
+  });
+
+  it('startChallenge and updateCustomGoals accept customGoalsTemplate items with or without id (onboarding & PlansModal payloads)', async () => {
+    const onboardingPayload = {
+      difficulty: 'Custom',
+      customGoalsTemplate: [
+        {
+          title: '10.000 pasos diarios',
+          description: 'Alcanzar un mínimo de 10.000 pasos en el día para sostener tu movimiento diario.',
+          icon: 'sun',
+          cadence: 'daily',
+          measurementType: 'numeric',
+          targetValue: 10000,
+          targetUnit: 'pasos',
+          order: 0,
+        },
+        {
+          id: 'ai-task-1',
+          title: 'Ejercicio en interior (25 min)',
+          description: 'Completar al menos 25 minutos de entrenamiento físico en interior los 7 días de la semana.',
+          icon: 'dumbbell',
+          cadence: 'daily',
+          measurementType: 'numeric',
+          targetValue: 25,
+          targetUnit: 'min',
+          order: 1,
+        },
+        {
+          id: 'custom-2',
+          title: 'Máx. 2000 kcal y 2 comidas',
+          description: 'Cumplir el tope diario de hasta 2000 kcal distribuidas en un máximo de 2 comidas.',
+          icon: 'utensils',
+          cadence: 'daily',
+          measurementType: 'boolean',
+          targetValue: 1,
+          targetUnit: null,
+          order: 2,
+        },
+      ],
+      breakStreakOnPeriodFail: false,
+      timezoneOffset: 180,
+    };
+
+    const mockCreatedTemplates = onboardingPayload.customGoalsTemplate.map((g, i) => ({
+      ...g,
+      id: `tpl-${i}`,
+      isActive: true,
+    }));
+
+    const mockPrisma = {
+      user: {
+        findUnique: vi.fn().mockResolvedValue({ id: 'user-123' }),
+      },
+      challenge: {
+        findFirst: vi.fn().mockResolvedValue(null),
+      },
+      $transaction: vi.fn(async (cb: any) =>
+        cb({
+          challenge: {
+            updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+            create: vi.fn().mockResolvedValue({
+              id: 'ch-1',
+              userId: 'user-123',
+              difficulty: 'Custom',
+              breakStreakOnPeriodFail: false,
+              customGoalsTemplate: mockCreatedTemplates,
+            }),
+            findUnique: vi.fn().mockResolvedValue({
+              id: 'ch-1',
+              userId: 'user-123',
+              difficulty: 'Custom',
+              breakStreakOnPeriodFail: false,
+              customGoalsTemplate: mockCreatedTemplates,
+              dailyLogs: [{ date: '2026-11-24', goals: [] }],
+              periodGoals: [],
+            }),
+            update: vi.fn().mockResolvedValue({}),
+          },
+          dailyLog: {
+            create: vi.fn().mockResolvedValue({ id: 'dl-1' }),
+            findUnique: vi.fn().mockResolvedValue(null),
+          },
+          periodGoalProgress: {
+            createMany: vi.fn().mockResolvedValue({ count: 0 }),
+            findMany: vi.fn().mockResolvedValue([]),
+            deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+          },
+          goalTemplate: {
+            updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+            create: vi.fn().mockImplementation(async ({ data }: any) => ({
+              id: 'tpl-new',
+              ...data,
+            })),
+          },
+        })
+      ),
+    };
+
+    vi.spyOn(dbModule, 'getCorePrisma').mockReturnValue(mockPrisma as any);
+
+    let statusCode = 200;
+    let responseBody: any = null;
+    const mockRes: any = {
+      status(code: number) {
+        statusCode = code;
+        return this;
+      },
+      json(payload: any) {
+        responseBody = payload;
+        return this;
+      },
+    };
+
+    await startChallenge(
+      { user: { id: 'user-123' }, body: onboardingPayload } as any,
+      mockRes
+    );
+
+    expect(statusCode).toBe(201);
+    expect(responseBody?.id).toBe('ch-1');
+
+    // Now verify updateCustomGoals with id-bearing items from PlansModal
+    mockPrisma.challenge.findFirst.mockResolvedValueOnce({
+      id: 'ch-1',
+      userId: 'user-123',
+      difficulty: 'Custom',
+      startDate: new Date().toISOString(),
+      customGoalsTemplate: mockCreatedTemplates,
+    });
+
+    statusCode = 200;
+    responseBody = null;
+    await updateCustomGoals(
+      {
+        user: { id: 'user-123' },
+        body: {
+          customGoalsTemplate: onboardingPayload.customGoalsTemplate,
+          breakStreakOnPeriodFail: false,
+          timezoneOffset: 180,
+        },
+      } as any,
+      mockRes
+    );
+
+    expect(statusCode).toBe(200);
+    expect(responseBody?.id).toBe('ch-1');
+  });
+
+  it('startChallenge returns 401 when the authenticated JWT user no longer exists in DB', async () => {
+    const mockPrisma = {
+      user: {
+        findUnique: vi.fn().mockResolvedValue(null),
+      },
+      challenge: {
+        findFirst: vi.fn().mockResolvedValue(null),
+      },
+    };
+    vi.spyOn(dbModule, 'getCorePrisma').mockReturnValue(mockPrisma as any);
+
+    let statusCode = 200;
+    let responseBody: any = null;
+    const mockRes: any = {
+      status(code: number) {
+        statusCode = code;
+        return this;
+      },
+      json(payload: any) {
+        responseBody = payload;
+        return this;
+      },
+    };
+
+    await startChallenge(
+      {
+        user: { id: 'deleted-user-id' },
+        body: {
+          difficulty: 'Custom',
+          customGoalsTemplate: [
+            {
+              title: '10.000 pasos diarios',
+              cadence: 'daily',
+              measurementType: 'numeric',
+              targetValue: 10000,
+              targetUnit: 'pasos',
+              order: 0,
+            },
+          ],
+          breakStreakOnPeriodFail: false,
+          timezoneOffset: 180,
+        },
+      } as any,
+      mockRes
+    );
+
+    expect(statusCode).toBe(401);
+    expect(responseBody).toEqual({ error: 'User not found' });
   });
 });

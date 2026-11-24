@@ -76,6 +76,35 @@ export interface CreateQuestInput {
 }
 
 let questSyncSeq = 0;
+let tempQuestSeq = 0;
+const inFlightQuestTitles = new Set<string>();
+
+const normalizeQuestTitle = (title: string) => title.trim().toLowerCase();
+
+const deduplicateQuests = (quests: SideQuest[]): SideQuest[] => {
+  const byKey = new Map<string, SideQuest>();
+  for (const quest of quests) {
+    const key = normalizeQuestTitle(quest.title) || quest.id;
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, quest);
+      continue;
+    }
+    const questIsReal = !quest.id.startsWith('temp_');
+    const existingIsReal = !existing.id.startsWith('temp_');
+    if (questIsReal !== existingIsReal) {
+      if (questIsReal) byKey.set(key, quest);
+      continue;
+    }
+    const questScore = (quest.completionCount ?? 0) * 10000 + (quest.progress ?? 0);
+    const existingScore =
+      (existing.completionCount ?? 0) * 10000 + (existing.progress ?? 0);
+    if (questScore > existingScore) {
+      byKey.set(key, quest);
+    }
+  }
+  return Array.from(byKey.values());
+};
 
 export const useQuestStore = create<QuestStore>()(
   persist(
@@ -94,7 +123,7 @@ export const useQuestStore = create<QuestStore>()(
           const response = await apiClient<SideQuest[]>('/quests');
           if (seq !== questSyncSeq) return;
           set({
-            quests: Array.isArray(response) ? response : [],
+            quests: Array.isArray(response) ? deduplicateQuests(response) : [],
             isLoading: false,
             isValidating: false,
           });
@@ -126,17 +155,31 @@ export const useQuestStore = create<QuestStore>()(
       },
 
       subscribeToQuest: async (title: string, difficulty: string, durationDays: number) => {
-        ++questSyncSeq;
+        const trimmedTitle = title.trim();
+        const normalized = normalizeQuestTitle(trimmedTitle);
         const previousQuests = get().quests || [];
-        const template = (get().availableQuests || []).find((t) => t.title === title);
-        const tempId = `temp_quest_${Date.now()}`;
+        if (
+          !normalized ||
+          inFlightQuestTitles.has(normalized) ||
+          previousQuests.some((q) => normalizeQuestTitle(q.title) === normalized)
+        ) {
+          return;
+        }
+
+        inFlightQuestTitles.add(normalized);
+        ++questSyncSeq;
+        const template = (get().availableQuests || []).find(
+          (t) => normalizeQuestTitle(t.title) === normalized
+        );
+        const seqId = ++tempQuestSeq;
+        const tempId = `temp_quest_${Date.now()}_${seqId}`;
         const nowIso = new Date().toISOString();
 
         // Optimistic update en Frame 0 (0ms): inserta la misión inmediatamente
         const optimisticQuest: SideQuest = {
           id: tempId,
           userId: '',
-          title,
+          title: trimmedTitle,
           description: template?.description ?? null,
           difficulty,
           durationDays,
@@ -146,13 +189,13 @@ export const useQuestStore = create<QuestStore>()(
           completed: false,
           completionCount: 0,
           currentRun: {
-            id: `temp_run_${Date.now()}`,
+            id: `temp_run_${Date.now()}_${seqId}`,
             runNumber: 1,
             startedAt: nowIso,
             completedAt: null,
             completed: false,
             tasks: (template?.tasks || []).map((t, idx) => ({
-              id: t.id || `temp_task_${idx}_${Date.now()}`,
+              id: t.id || `temp_task_${idx}_${Date.now()}_${seqId}`,
               title: t.title,
               description: t.description ?? null,
               icon: t.icon ?? 'target',
@@ -167,17 +210,19 @@ export const useQuestStore = create<QuestStore>()(
         };
 
         set({
-          quests: [optimisticQuest, ...previousQuests],
+          quests: deduplicateQuests([optimisticQuest, ...previousQuests]),
           error: null,
         });
 
         try {
           const response = await apiClient<SideQuest>('/quests', {
             method: 'POST',
-            body: JSON.stringify({ title, difficulty, durationDays }),
+            body: JSON.stringify({ title: trimmedTitle, difficulty, durationDays }),
           });
           set((state) => ({
-            quests: (state.quests || []).map((q) => (q.id === tempId ? response : q)),
+            quests: deduplicateQuests(
+              (state.quests || []).map((q) => (q.id === tempId ? response : q))
+            ),
             isLoading: false,
           }));
         } catch (error: any) {
@@ -186,20 +231,34 @@ export const useQuestStore = create<QuestStore>()(
             error: error.message || 'Failed to subscribe to quest',
             isLoading: false,
           });
+        } finally {
+          inFlightQuestTitles.delete(normalized);
         }
       },
 
       createCustomQuest: async (quest) => {
-        ++questSyncSeq;
+        const trimmedTitle = quest.title.trim();
+        const normalized = normalizeQuestTitle(trimmedTitle);
         const previousQuests = get().quests || [];
-        const tempId = `temp_custom_${Date.now()}`;
+        if (
+          !normalized ||
+          inFlightQuestTitles.has(normalized) ||
+          previousQuests.some((q) => normalizeQuestTitle(q.title) === normalized)
+        ) {
+          return true;
+        }
+
+        inFlightQuestTitles.add(normalized);
+        ++questSyncSeq;
+        const seqId = ++tempQuestSeq;
+        const tempId = `temp_custom_${Date.now()}_${seqId}`;
         const nowIso = new Date().toISOString();
 
         // Optimistic update en Frame 0 (0ms)
         const optimisticQuest: SideQuest = {
           id: tempId,
           userId: '',
-          title: quest.title,
+          title: trimmedTitle,
           description: quest.description || null,
           difficulty: quest.difficulty,
           durationDays: quest.durationDays,
@@ -209,13 +268,13 @@ export const useQuestStore = create<QuestStore>()(
           completed: false,
           completionCount: 0,
           currentRun: {
-            id: `temp_run_${Date.now()}`,
+            id: `temp_run_${Date.now()}_${seqId}`,
             runNumber: 1,
             startedAt: nowIso,
             completedAt: null,
             completed: false,
             tasks: (quest.tasks || []).map((t, idx) => ({
-              id: `temp_task_${idx}_${Date.now()}`,
+              id: `temp_task_${idx}_${Date.now()}_${seqId}`,
               title: t.title,
               description: t.description ?? null,
               icon: t.icon ?? 'target',
@@ -230,17 +289,19 @@ export const useQuestStore = create<QuestStore>()(
         };
 
         set({
-          quests: [optimisticQuest, ...previousQuests],
+          quests: deduplicateQuests([optimisticQuest, ...previousQuests]),
           error: null,
         });
 
         try {
           const response = await apiClient<SideQuest>('/quests', {
             method: 'POST',
-            body: JSON.stringify(quest),
+            body: JSON.stringify({ ...quest, title: trimmedTitle }),
           });
           set((state) => ({
-            quests: (state.quests || []).map((q) => (q.id === tempId ? response : q)),
+            quests: deduplicateQuests(
+              (state.quests || []).map((q) => (q.id === tempId ? response : q))
+            ),
             isLoading: false,
           }));
           return true;
@@ -251,6 +312,8 @@ export const useQuestStore = create<QuestStore>()(
             isLoading: false,
           });
           return false;
+        } finally {
+          inFlightQuestTitles.delete(normalized);
         }
       },
 
@@ -377,7 +440,7 @@ export const useQuestStore = create<QuestStore>()(
       hydrateFromSync: (quests, availableQuests) => {
         ++questSyncSeq;
         set({
-          quests: Array.isArray(quests) ? quests : get().quests,
+          quests: Array.isArray(quests) ? deduplicateQuests(quests) : get().quests,
           availableQuests: Array.isArray(availableQuests)
             ? availableQuests
             : get().availableQuests,
@@ -389,6 +452,7 @@ export const useQuestStore = create<QuestStore>()(
 
       reset: () => {
         ++questSyncSeq;
+        inFlightQuestTitles.clear();
         set({ quests: [], availableQuests: [], isLoading: false, isValidating: false, error: null });
       },
     }),

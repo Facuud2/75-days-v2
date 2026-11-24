@@ -37,7 +37,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery';
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-type PlansModalView = 'plans' | 'modify' | 'custom-editor' | 'ai-plan';
+type PlansModalView = 'plans' | 'modify' | 'restart-confirm' | 'custom-editor' | 'ai-plan';
 type PlansModalTitleId =
   | 'plans-modal-title'
   | 'custom-editor-title'
@@ -151,6 +151,7 @@ export default function PlansModal() {
   const [isCustomEditorOpen, setIsCustomEditorOpen] = useState(false);
   const [isAiPlanSheetOpen, setIsAiPlanSheetOpen] = useState(false);
   const [showModifyChoiceView, setShowModifyChoiceView] = useState(false);
+  const [showRestartConfirmView, setShowRestartConfirmView] = useState(false);
   const [isSavingCustom, setIsSavingCustom] = useState(false);
   const [aiTitleId, setAiTitleId] =
     useState<Extract<PlansModalTitleId, 'ai-plan-sheet-title' | 'ai-side-quest-title'>>(
@@ -172,7 +173,9 @@ export default function PlansModal() {
       ? 'ai-plan'
       : showModifyChoiceView
         ? 'modify'
-        : 'plans';
+        : showRestartConfirmView
+          ? 'restart-confirm'
+          : 'plans';
   const titleId: PlansModalTitleId =
     currentView === 'custom-editor'
       ? 'custom-editor-title'
@@ -214,6 +217,8 @@ export default function PlansModal() {
     setIsCustomEditorOpen(false);
     setIsAiPlanSheetOpen(false);
     setShowModifyChoiceView(false);
+    setShowRestartConfirmView(false);
+    setPendingAiSideQuests([]);
     setAiTitleId('ai-plan-sheet-title');
     closePlansModal();
   }, [closePlansModal, isSavingCustom]);
@@ -252,6 +257,10 @@ export default function PlansModal() {
       setShowModifyChoiceView(false);
       return;
     }
+    if (showRestartConfirmView) {
+      setShowRestartConfirmView(false);
+      return;
+    }
     handleClose();
   }, [
     closeCustomEditor,
@@ -260,6 +269,7 @@ export default function PlansModal() {
     isCustomEditorOpen,
     isSavingCustom,
     showModifyChoiceView,
+    showRestartConfirmView,
   ]);
 
   useEffect(() => {
@@ -370,6 +380,34 @@ export default function PlansModal() {
         })
       );
 
+  const executeStartChallenge = async (
+    targetDifficulty: Difficulty,
+    tasksOverride?: CustomTask[],
+    sideQuestsOverride?: AiSideQuestDraft[]
+  ) => {
+    if (rootActionLockRef.current || isSavingCustom) return;
+    const tasksToUse = tasksOverride ?? customTasks;
+    const formattedCustomGoals = formatCustomGoals(tasksToUse);
+    if (targetDifficulty === 'Custom' && formattedCustomGoals.length === 0) return;
+
+    rootActionLockRef.current = true;
+    setIsSavingCustom(true);
+    try {
+      await startChallenge(
+        targetDifficulty,
+        targetDifficulty === 'Custom' ? formattedCustomGoals : undefined
+      );
+      await persistPendingSideQuests(sideQuestsOverride ?? pendingAiSideQuests);
+      setPendingAiSideQuests([]);
+      rootActionLockRef.current = false;
+      handleClose();
+      router.push('/dashboard');
+    } finally {
+      rootActionLockRef.current = false;
+      setIsSavingCustom(false);
+    }
+  };
+
   const handleStart = async () => {
     if (rootActionLockRef.current || isSavingCustom) return;
     if (isActive) {
@@ -378,30 +416,23 @@ export default function PlansModal() {
         setShowModifyChoiceView(true);
         return;
       }
-      if (
-        !confirm(
-          'Ya tienes un desafío activo. ¿Estás seguro de que quieres reiniciarlo con un nuevo plan? Perderás tu racha actual.'
-        )
-      ) {
-        return;
-      }
+      setShowRestartConfirmView(true);
+      return;
     }
-    const formattedCustomGoals = formatCustomGoals(customTasks);
-    rootActionLockRef.current = true;
-    try {
-      await startChallenge(difficulty, difficulty === 'Custom' ? formattedCustomGoals : undefined);
-      rootActionLockRef.current = false;
-      handleClose();
-      router.push('/dashboard');
-    } finally {
-      rootActionLockRef.current = false;
-    }
+    await executeStartChallenge(difficulty);
   };
 
   const persistPendingSideQuests = async (sideQuestsToCreate: AiSideQuestDraft[]) => {
     if (sideQuestsToCreate.length === 0) return;
+    const seen = new Set<string>();
+    const uniqueQuests = sideQuestsToCreate.filter((quest) => {
+      const key = quest.title.trim().toLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
     await Promise.all(
-      sideQuestsToCreate.map((quest) =>
+      uniqueQuests.map((quest) =>
         createCustomQuest({
           title: quest.title,
           description: quest.description,
@@ -441,22 +472,7 @@ export default function PlansModal() {
   };
 
   const handleRestartActiveCustom = async () => {
-    if (rootActionLockRef.current || isSavingCustom) return;
-    const formattedCustomGoals = formatCustomGoals(customTasks);
-    if (formattedCustomGoals.length === 0) return;
-    rootActionLockRef.current = true;
-    setIsSavingCustom(true);
-    try {
-      await startChallenge('Custom', formattedCustomGoals);
-      await persistPendingSideQuests(pendingAiSideQuests);
-      setPendingAiSideQuests([]);
-      rootActionLockRef.current = false;
-      handleClose();
-      router.push('/dashboard');
-    } finally {
-      rootActionLockRef.current = false;
-      setIsSavingCustom(false);
-    }
+    await executeStartChallenge('Custom');
   };
 
   const openManualEditor = () => {
@@ -570,24 +586,16 @@ export default function PlansModal() {
                 return;
               }
 
-              if (
-                isActive &&
-                !confirm(
-                  'Ya tienes un desafío activo. ¿Estás seguro de que quieres reiniciarlo con este nuevo plan Custom? Perderás tu racha actual.'
-                )
-              ) {
+              if (isActive) {
+                setPendingAiSideQuests(createdSideQuests);
+                setDifficulty('Custom');
+                setIsAiPlanSheetOpen(false);
+                setAiTitleId('ai-plan-sheet-title');
+                setShowRestartConfirmView(true);
                 return;
               }
 
-              setIsSavingCustom(true);
-              try {
-                await startChallenge('Custom', formatCustomGoals(validTasks));
-                await persistPendingSideQuests(createdSideQuests);
-                handleClose();
-                router.push('/dashboard');
-              } finally {
-                setIsSavingCustom(false);
-              }
+              await executeStartChallenge('Custom', validTasks, createdSideQuests);
             }}
             onEditManually={(tasks) => {
               setCustomTasks(tasks);
@@ -608,11 +616,14 @@ export default function PlansModal() {
               style={{ borderColor: 'var(--divider)' }}
             >
               <div className="flex items-center gap-2.5 min-w-0">
-                {showModifyChoiceView ? (
+                {showModifyChoiceView || showRestartConfirmView ? (
                   <button
                     type="button"
                     disabled={isSavingCustom}
-                    onClick={() => setShowModifyChoiceView(false)}
+                    onClick={() => {
+                      setShowModifyChoiceView(false);
+                      setShowRestartConfirmView(false);
+                    }}
                     aria-label="Volver a planes"
                     className="size-9 rounded-xl border flex items-center justify-center shrink-0 cursor-pointer active:scale-95 transition-transform duration-150 ease-out"
                     style={{
@@ -644,7 +655,9 @@ export default function PlansModal() {
                 >
                   {showModifyChoiceView
                     ? '¿Cómo aplicar los cambios?'
-                    : 'Seleccionar Plan de Desafío'}
+                    : showRestartConfirmView
+                      ? '¿Reiniciar desafío actual?'
+                      : 'Seleccionar Plan de Desafío'}
                 </h2>
               </div>
 
@@ -664,72 +677,111 @@ export default function PlansModal() {
 
             {/* Content */}
             <div className="p-4 sm:p-7 overflow-y-auto overscroll-contain flex-1">
-              {showModifyChoiceView ? (
+              {showModifyChoiceView || showRestartConfirmView ? (
                 <div className="max-w-md mx-auto py-3 flex flex-col gap-4">
                   <p className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-                    Podés continuar con tu desafío actual conservando todo tu historial y tu racha, o
-                    reiniciar desde el Día 1 con las nuevas metas.
+                    {showModifyChoiceView
+                      ? 'Podés continuar con tu desafío actual conservando todo tu historial y tu racha, o reiniciar desde el Día 1 con las nuevas metas.'
+                      : `Ya tenés un desafío activo (${currentDifficulty}). Si cambiás al plan ${selectedPlan.title}, tu desafío se reiniciará desde el Día 1 y perderás tu racha actual.`}
                   </p>
 
-                  <div
-                    className="rounded-2xl border p-3.5 flex flex-col gap-2"
-                    style={{
-                      backgroundColor: 'var(--surface-inset)',
-                      borderColor: 'var(--border-subtle)',
-                    }}
-                  >
-                    <span
-                      className="text-[11px] font-semibold uppercase tracking-wider"
-                      style={{ color: 'var(--text-muted)' }}
+                  {(showModifyChoiceView ||
+                    (difficulty === 'Custom' && formatCustomGoals(customTasks).length > 0)) && (
+                    <div
+                      className="rounded-2xl border p-3.5 flex flex-col gap-2"
+                      style={{
+                        backgroundColor: 'var(--surface-inset)',
+                        borderColor: 'var(--border-subtle)',
+                      }}
                     >
-                      Resumen a aplicar ({formatCustomGoals(customTasks).length} metas
-                      {pendingAiSideQuests.length > 0
-                        ? ` + ${pendingAiSideQuests.length} misión`
-                        : ''}
-                      )
-                    </span>
-                    <ul className="flex flex-col gap-1.5">
-                      {formatCustomGoals(customTasks).map((g, idx) => (
-                        <li
-                          key={idx}
-                          className="text-xs font-medium truncate"
-                          style={{ color: 'var(--text-primary)' }}
-                        >
-                          {idx + 1}. {g.title}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+                      <span
+                        className="text-[11px] font-semibold uppercase tracking-wider"
+                        style={{ color: 'var(--text-muted)' }}
+                      >
+                        Resumen a aplicar ({formatCustomGoals(customTasks).length} metas
+                        {pendingAiSideQuests.length > 0
+                          ? ` + ${pendingAiSideQuests.length} misión`
+                          : ''}
+                        )
+                      </span>
+                      <ul className="flex flex-col gap-1.5">
+                        {formatCustomGoals(customTasks).map((g, idx) => (
+                          <li
+                            key={idx}
+                            className="text-xs font-medium truncate"
+                            style={{ color: 'var(--text-primary)' }}
+                          >
+                            {idx + 1}. {g.title}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
 
                   <div className="flex flex-col gap-2.5 pt-1">
-                    <button
-                      type="button"
-                      disabled={isSavingCustom}
-                      onClick={handleContinueActiveCustom}
-                      className="w-full min-h-[48px] px-4 rounded-xl font-semibold text-sm cursor-pointer active:scale-[0.98] transition-transform duration-150 ease-out disabled:opacity-50"
-                      style={{
-                        touchAction: 'manipulation',
-                        backgroundColor: 'var(--accent-fill)',
-                        color: 'var(--on-accent)',
-                      }}
-                    >
-                      {isSavingCustom ? 'Guardando...' : 'Continuar manteniendo mi racha actual'}
-                    </button>
+                    {showModifyChoiceView ? (
+                      <>
+                        <button
+                          type="button"
+                          disabled={isSavingCustom}
+                          onClick={handleContinueActiveCustom}
+                          className="w-full min-h-[48px] px-4 rounded-xl font-semibold text-sm cursor-pointer active:scale-[0.98] transition-transform duration-150 ease-out disabled:opacity-50"
+                          style={{
+                            touchAction: 'manipulation',
+                            backgroundColor: 'var(--accent-fill)',
+                            color: 'var(--on-accent)',
+                          }}
+                        >
+                          {isSavingCustom ? 'Guardando...' : 'Continuar manteniendo mi racha actual'}
+                        </button>
 
-                    <button
-                      type="button"
-                      disabled={isSavingCustom}
-                      onClick={handleRestartActiveCustom}
-                      className="w-full min-h-[48px] px-4 rounded-xl font-semibold text-sm border cursor-pointer active:scale-[0.98] transition-transform duration-150 ease-out disabled:opacity-50"
-                      style={{
-                        touchAction: 'manipulation',
-                        backgroundColor: 'var(--surface-inset)',
-                        borderColor: 'var(--border-control)',
-                        color: 'var(--text-primary)',
-                      }}
-                    >
-                      Reiniciar desafío desde el Día 1
-                    </button>
+                        <button
+                          type="button"
+                          disabled={isSavingCustom}
+                          onClick={handleRestartActiveCustom}
+                          className="w-full min-h-[48px] px-4 rounded-xl font-semibold text-sm border cursor-pointer active:scale-[0.98] transition-transform duration-150 ease-out disabled:opacity-50"
+                          style={{
+                            touchAction: 'manipulation',
+                            backgroundColor: 'var(--surface-inset)',
+                            borderColor: 'var(--border-control)',
+                            color: 'var(--text-primary)',
+                          }}
+                        >
+                          Reiniciar desafío desde el Día 1
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          disabled={isSavingCustom}
+                          onClick={() => void executeStartChallenge(difficulty)}
+                          className="w-full min-h-[48px] px-4 rounded-xl font-semibold text-sm cursor-pointer active:scale-[0.98] transition-transform duration-150 ease-out disabled:opacity-50"
+                          style={{
+                            touchAction: 'manipulation',
+                            backgroundColor: 'var(--accent-fill)',
+                            color: 'var(--on-accent)',
+                          }}
+                        >
+                          {isSavingCustom ? 'Reiniciando...' : 'Reiniciar desafío desde el Día 1'}
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={isSavingCustom}
+                          onClick={() => setShowRestartConfirmView(false)}
+                          className="w-full min-h-[48px] px-4 rounded-xl font-semibold text-sm border cursor-pointer active:scale-[0.98] transition-transform duration-150 ease-out disabled:opacity-50"
+                          style={{
+                            touchAction: 'manipulation',
+                            backgroundColor: 'var(--surface-inset)',
+                            borderColor: 'var(--border-control)',
+                            color: 'var(--text-primary)',
+                          }}
+                        >
+                          Cancelar
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               ) : !onboardingCompleted ? (
@@ -1021,8 +1073,8 @@ export default function PlansModal() {
               )}
             </div>
 
-            {/* Footer (Hidden when inside modify-choice subview since its buttons are inline) */}
-            {!showModifyChoiceView && (
+            {/* Footer (Hidden when inside modify-choice or restart-confirm subview since its buttons are inline) */}
+            {!showModifyChoiceView && !showRestartConfirmView && (
               <div
                 className="px-4 py-3 sm:px-7 sm:py-4 border-t flex items-center justify-between gap-3 shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] sm:pb-4"
                 style={{

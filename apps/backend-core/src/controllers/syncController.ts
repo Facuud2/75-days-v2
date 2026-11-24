@@ -3,6 +3,7 @@ import { AuthRequest } from '../middlewares/auth';
 import { prisma } from '../utils/prisma';
 import { reconcileAndGetActiveChallenge } from '../utils/dailyReset';
 import {
+    deduplicateSerializedQuests,
     fetchCachedAvailableQuestTemplates,
     questInclude,
     serializeQuest,
@@ -35,7 +36,7 @@ export const getCoreSync = async (req: AuthRequest, res: Response) => {
         res.json({
             syncVersion: 1,
             challenge,
-            quests: rawQuests.map(serializeQuest),
+            quests: deduplicateSerializedQuests(rawQuests.map(serializeQuest)),
             availableQuests,
             profile,
         });

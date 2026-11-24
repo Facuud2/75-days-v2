@@ -73,11 +73,22 @@ export const aiSideQuestSuggestionSchema = z.object({
   ideaPrompt: boundedString(500),
 });
 
+export const aiClarificationQuestionSchema = z.object({
+  question: boundedString(400),
+  options: boundedStringList(280, 4),
+  selectionMode: z.enum(['single', 'multiple']).optional().default('single'),
+});
+
 export const aiPlanResponseSchema = z.object({
   status: z.enum(['needs_clarification', 'ready']),
   userTranscript: boundedString(2500),
   assistantMessage: boundedString(3000),
   openQuestions: boundedStringList(400, 10),
+  clarificationQuestions: z
+    .array(aiClarificationQuestionSchema)
+    .optional()
+    .default([])
+    .transform((arr) => arr.slice(0, 8)),
   understoodFacts: boundedStringList(260, 20),
   suggestedQuickReplies: boundedStringList(280, 4),
   quickReplySelectionMode: z.enum(['single', 'multiple']).optional().default('single'),
@@ -122,6 +133,11 @@ export const aiSideQuestResponseSchema = z.object({
   userTranscript: boundedString(2500),
   assistantMessage: boundedString(3000),
   openQuestions: boundedStringList(400, 10),
+  clarificationQuestions: z
+    .array(aiClarificationQuestionSchema)
+    .optional()
+    .default([])
+    .transform((arr) => arr.slice(0, 8)),
   understoodFacts: boundedStringList(260, 20),
   suggestedQuickReplies: boundedStringList(280, 4),
   quickReplySelectionMode: z.enum(['single', 'multiple']).optional().default('single'),
@@ -163,12 +179,52 @@ export const aiUserContextSchema = z.object({
 
 export type AiTask = z.infer<typeof aiTaskSchema>;
 export type AiTaskInput = z.input<typeof aiTaskSchema>;
+export type AiClarificationQuestion = z.infer<typeof aiClarificationQuestionSchema>;
 export type AiSideQuestSuggestion = z.infer<typeof aiSideQuestSuggestionSchema>;
 export type AiPlanResponse = z.infer<typeof aiPlanResponseSchema>;
 export type AiSideQuestTask = z.infer<typeof aiSideQuestTaskSchema>;
 export type AiSideQuestDraft = z.infer<typeof aiSideQuestDraftSchema>;
 export type AiSideQuestResponse = z.infer<typeof aiSideQuestResponseSchema>;
 export type AiUserContext = z.infer<typeof aiUserContextSchema>;
+
+function normalizeClarificationPayload<
+  T extends {
+    openQuestions: string[];
+    clarificationQuestions: AiClarificationQuestion[];
+    suggestedQuickReplies: string[];
+    quickReplySelectionMode: 'single' | 'multiple';
+  },
+>(payload: T): T {
+  const clarificationQuestions =
+    payload.clarificationQuestions.length > 0
+      ? payload.clarificationQuestions
+      : payload.openQuestions.map((question, index) => ({
+          question,
+          options: index === 0 ? payload.suggestedQuickReplies : [],
+          selectionMode: payload.quickReplySelectionMode,
+        }));
+
+  const openQuestions =
+    payload.openQuestions.length > 0
+      ? payload.openQuestions
+      : clarificationQuestions.map((item) => item.question);
+
+  const suggestedQuickReplies =
+    payload.suggestedQuickReplies.length > 0
+      ? payload.suggestedQuickReplies
+      : (clarificationQuestions[0]?.options ?? []).slice(0, 4);
+
+  const quickReplySelectionMode =
+    clarificationQuestions[0]?.selectionMode ?? payload.quickReplySelectionMode;
+
+  return {
+    ...payload,
+    openQuestions,
+    clarificationQuestions,
+    suggestedQuickReplies,
+    quickReplySelectionMode,
+  };
+}
 
 export interface ConversationTurn {
   role: 'user' | 'assistant';
@@ -224,6 +280,33 @@ const CUSTOM_PLAN_JSON_SCHEMA = {
       description:
         'Lista agrupada de TODAS las preguntas abiertas que faltan aclarar para diseñar bien el plan en una sola pasada. Vacía si status es ready.',
       items: { type: 'string' },
+    },
+    clarificationQuestions: {
+      type: 'array',
+      description:
+        'Lista estructurada de preguntas abiertas para el selector paso a paso en móvil. Por cada pregunta en openQuestions, incluí su texto (question), de 2 a 4 respuestas sugeridas cortas y concretas (options, sin incluir "Otra" porque la interfaz la agrega sola) y el modo de selección (selectionMode: "single" o "multiple"). Vacía si status es ready.',
+      items: {
+        type: 'object',
+        properties: {
+          question: {
+            type: 'string',
+            description: 'Pregunta puntual y directa al usuario.',
+          },
+          options: {
+            type: 'array',
+            description: 'De 2 a 4 respuestas sugeridas cortas (máx 70 caracteres) para esta pregunta.',
+            items: { type: 'string' },
+          },
+          selectionMode: {
+            type: 'string',
+            enum: ['single', 'multiple'],
+            description:
+              'Usa "single" cuando las opciones son alternativas mutuamente excluyentes o "multiple" cuando el usuario puede combinar varias.',
+          },
+        },
+        required: ['question', 'options', 'selectionMode'],
+        additionalProperties: false,
+      },
     },
     understoodFacts: {
       type: 'array',
@@ -345,6 +428,33 @@ const SIDE_QUEST_JSON_SCHEMA = {
       description:
         'Todas las dudas abiertas agrupadas en una sola lista para responder en una pasada. Vacía cuando status es ready.',
       items: { type: 'string' },
+    },
+    clarificationQuestions: {
+      type: 'array',
+      description:
+        'Lista estructurada de preguntas abiertas para el selector paso a paso en móvil. Por cada pregunta en openQuestions, incluí su texto (question), de 2 a 4 respuestas sugeridas cortas y concretas (options, sin incluir "Otra" porque la interfaz la agrega sola) y el modo de selección (selectionMode: "single" o "multiple"). Vacía cuando status es ready.',
+      items: {
+        type: 'object',
+        properties: {
+          question: {
+            type: 'string',
+            description: 'Pregunta puntual y directa al usuario.',
+          },
+          options: {
+            type: 'array',
+            description: 'De 2 a 4 respuestas sugeridas cortas (máx 70 caracteres) para esta pregunta.',
+            items: { type: 'string' },
+          },
+          selectionMode: {
+            type: 'string',
+            enum: ['single', 'multiple'],
+            description:
+              'Usa "single" cuando las opciones son alternativas mutuamente excluyentes o "multiple" cuando el usuario puede combinar varias.',
+          },
+        },
+        required: ['question', 'options', 'selectionMode'],
+        additionalProperties: false,
+      },
     },
     understoodFacts: {
       type: 'array',
@@ -494,8 +604,8 @@ PRINCIPIOS CLAVE DE CONVERSACIÓN Y DISEÑO:
    - Si el usuario ya dejó claro un detalle (ej. cantidad de días, tipo de ejercicio, dieta, lectura, agua o meta de peso), asumilo como definido y registralo en \`understoodFacts\`.
 2. **Evaluación de huecos y preguntas agrupadas en UN solo mensaje**:
    - Si el usuario todavía no tiene un borrador de tareas y su idea deja aspectos abiertos que se pueden estructurar de varias maneras (ej. frecuencia/duración/intensidad del ejercicio, reglas exactas de alimentación o permitidos, hidratación diaria, hábitos mentales/lectura, horarios o restricciones reales), devolvé \`status: "needs_clarification"\`.
-   - Agrupá **TODAS** las dudas abiertas relevantes en el array \`openQuestions\` (claras, concisas y directas) para que el usuario pueda responder todo de una sola pasada.
-   - ${forceProposal ? 'IMPORTANTE: El usuario pidió explícitamente generar ya la propuesta con lo hablado hasta ahora (`forceProposal = true`). Debés devolver `status: "ready"` con el mejor plan concreto posible usando la información disponible.' : 'Cuando ya tengas claridad suficiente sobre lo que quiere el usuario (o ya haya respondido tus preguntas), devolvé `status: "ready"` con las tareas concretas y `openQuestions: []`.'}
+   - Agrupá **TODAS** las dudas abiertas relevantes en \`openQuestions\` y además devolvé \`clarificationQuestions\` con cada pregunta individual acompañada de 2 a 4 \`options\` cortas y concretas (sin agregar "Otra", porque la interfaz móvil ya la suma automáticamente) y su \`selectionMode\` (\`"single"\` o \`"multiple"\`).
+   - ${forceProposal ? 'IMPORTANTE: El usuario pidió explícitamente generar ya la propuesta con lo hablado hasta ahora (`forceProposal = true`). Debés devolver `status: "ready"` con el mejor plan concreto posible usando la información disponible.' : 'Cuando ya tengas claridad suficiente sobre lo que quiere el usuario (o ya haya respondido tus preguntas), devolvé `status: "ready"` con las tareas concretas, `openQuestions: []` y `clarificationQuestions: []`.'}
 3. **Complementariedad con Misiones Secundarias**:
    - Si en el contexto figuran misiones secundarias ya elegidas/activas (ej. "Detox de Azúcar", "Caminante Constante 8K", "Ayuno 12/12"), las tareas del plan principal deben ser **complementarias** a ellas: NO dupliques exactamente la misma tarea ni contradigas sus reglas.
    - Cuando devuelvas \`status: "ready"\`, podés incluir \`sideQuestSuggestion\` con UNA idea breve de misión secundaria complementaria (de 14 a 30 días) que potencie el plan principal sin repetir sus metas ni las misiones ya activas.
@@ -538,8 +648,8 @@ PRINCIPIOS CLAVE:
    - Revisá el contexto del usuario (datos físicos, tareas del plan principal de 75 días y otras misiones secundarias ya activas).
    - NO repitas tareas que ya existen tal cual en su plan principal ni preguntes cosas obvias que ya figuran en el contexto.
 2. **Dudas abiertas agrupadas en UN solo mensaje**:
-   - Si faltan definiciones clave para diseñar bien la misión (ej. duración en días, dificultad Easy/Medium/Hard, frecuencia daily/weekly/once, objetivo numérico concreto o reglas específicas), devolvé \`status: "needs_clarification"\` y agrupá TODAS las preguntas abiertas en \`openQuestions\` para que responda de una sola pasada.
-   - ${forceProposal ? 'IMPORTANTE: El usuario pidió generar ya la propuesta (`forceProposal = true`). Debés devolver `status: "ready"` con el objeto `quest` completo usando la mejor estructura posible.' : 'Cuando ya tengas suficiente claridad, devolvé `status: "ready"` con el objeto `quest` completo y `openQuestions: []`.'}
+   - Si faltan definiciones clave para diseñar bien la misión (ej. duración en días, dificultad Easy/Medium/Hard, frecuencia daily/weekly/once, objetivo numérico concreto o reglas específicas), devolvé \`status: "needs_clarification"\`, agrupá TODAS las preguntas abiertas en \`openQuestions\` y completá \`clarificationQuestions\` con 2 a 4 \`options\` sugeridas por cada pregunta (sin incluir "Otra") y su \`selectionMode\` (\`"single"\` o \`"multiple"\`).
+   - ${forceProposal ? 'IMPORTANTE: El usuario pidió generar ya la propuesta (`forceProposal = true`). Debés devolver `status: "ready"` con el objeto `quest` completo usando la mejor estructura posible.' : 'Cuando ya tengas suficiente claridad, devolvé `status: "ready"` con el objeto `quest` completo, `openQuestions: []` y `clarificationQuestions: []`.'}
 3. **Estructura de la Misión Secundaria**:
    - \`title\`: Nombre claro y memorable.
    - \`description\`: Resumen breve del objetivo y las reglas clave.
@@ -676,7 +786,7 @@ export async function processCustomPlanTurn(
       input.textInput?.trim() || (forceProposal ? 'Generar propuesta con lo hablado' : 'Mensaje de voz');
   }
 
-  const validated = aiPlanResponseSchema.parse(parsedJson);
+  const validated = normalizeClarificationPayload(aiPlanResponseSchema.parse(parsedJson));
 
   // Salvaguarda: si el usuario pidió generar propuesta ahora, garantizar al menos tareas si ya existían o exigir ready
   if (forceProposal && validated.status === 'needs_clarification' && validated.tasks.length === 0) {
@@ -794,7 +904,7 @@ export async function processSideQuestTurn(
       input.textInput?.trim() || (forceProposal ? 'Generar misión con lo hablado' : 'Mensaje de voz');
   }
 
-  return aiSideQuestResponseSchema.parse(parsedJson);
+  return normalizeClarificationPayload(aiSideQuestResponseSchema.parse(parsedJson));
 }
 
 const TRANSCRIBE_JSON_SCHEMA = {

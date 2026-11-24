@@ -73,11 +73,22 @@ export const aiSideQuestSuggestionSchema = z.object({
   ideaPrompt: boundedString(500),
 });
 
+export const aiClarificationQuestionSchema = z.object({
+  question: boundedString(400),
+  options: boundedStringList(280, 4),
+  selectionMode: z.enum(['single', 'multiple']).optional().default('single'),
+});
+
 export const aiPlanResponseSchema = z.object({
   status: z.enum(['needs_clarification', 'ready']),
   userTranscript: boundedString(2500),
   assistantMessage: boundedString(3000),
   openQuestions: boundedStringList(400, 10),
+  clarificationQuestions: z
+    .array(aiClarificationQuestionSchema)
+    .optional()
+    .default([])
+    .transform((arr) => arr.slice(0, 8)),
   understoodFacts: boundedStringList(260, 20),
   suggestedQuickReplies: boundedStringList(280, 4),
   quickReplySelectionMode: z.enum(['single', 'multiple']).optional().default('single'),
@@ -122,6 +133,11 @@ export const aiSideQuestResponseSchema = z.object({
   userTranscript: boundedString(2500),
   assistantMessage: boundedString(3000),
   openQuestions: boundedStringList(400, 10),
+  clarificationQuestions: z
+    .array(aiClarificationQuestionSchema)
+    .optional()
+    .default([])
+    .transform((arr) => arr.slice(0, 8)),
   understoodFacts: boundedStringList(260, 20),
   suggestedQuickReplies: boundedStringList(280, 4),
   quickReplySelectionMode: z.enum(['single', 'multiple']).optional().default('single'),
@@ -163,12 +179,52 @@ export const aiUserContextSchema = z.object({
 
 export type AiTask = z.infer<typeof aiTaskSchema>;
 export type AiTaskInput = z.input<typeof aiTaskSchema>;
+export type AiClarificationQuestion = z.infer<typeof aiClarificationQuestionSchema>;
 export type AiSideQuestSuggestion = z.infer<typeof aiSideQuestSuggestionSchema>;
 export type AiPlanResponse = z.infer<typeof aiPlanResponseSchema>;
 export type AiSideQuestTask = z.infer<typeof aiSideQuestTaskSchema>;
 export type AiSideQuestDraft = z.infer<typeof aiSideQuestDraftSchema>;
 export type AiSideQuestResponse = z.infer<typeof aiSideQuestResponseSchema>;
 export type AiUserContext = z.infer<typeof aiUserContextSchema>;
+
+function normalizeClarificationPayload<
+  T extends {
+    openQuestions: string[];
+    clarificationQuestions: AiClarificationQuestion[];
+    suggestedQuickReplies: string[];
+    quickReplySelectionMode: 'single' | 'multiple';
+  },
+>(payload: T): T {
+  const clarificationQuestions =
+    payload.clarificationQuestions.length > 0
+      ? payload.clarificationQuestions
+      : payload.openQuestions.map((question, index) => ({
+          question,
+          options: index === 0 ? payload.suggestedQuickReplies : [],
+          selectionMode: payload.quickReplySelectionMode,
+        }));
+
+  const openQuestions =
+    payload.openQuestions.length > 0
+      ? payload.openQuestions
+      : clarificationQuestions.map((item) => item.question);
+
+  const suggestedQuickReplies =
+    payload.suggestedQuickReplies.length > 0
+      ? payload.suggestedQuickReplies
+      : (clarificationQuestions[0]?.options ?? []).slice(0, 4);
+
+  const quickReplySelectionMode =
+    clarificationQuestions[0]?.selectionMode ?? payload.quickReplySelectionMode;
+
+  return {
+    ...payload,
+    openQuestions,
+    clarificationQuestions,
+    suggestedQuickReplies,
+    quickReplySelectionMode,
+  };
+}
 
 export interface ConversationTurn {
   role: 'user' | 'assistant';
@@ -224,6 +280,33 @@ const CUSTOM_PLAN_JSON_SCHEMA = {
       description:
         'Lista agrupada de TODAS las preguntas abiertas que faltan aclarar para diseñar bien el plan en una sola pasada. Vacía si status es ready.',
       items: { type: 'string' },
+    },
+    clarificationQuestions: {
+      type: 'array',
+      description:
+        'Lista estructurada de preguntas abiertas para el selector paso a paso en móvil. Por cada pregunta en openQuestions, incluí su texto (question), de 2 a 4 respuestas sugeridas cortas y concretas (options, sin incluir "Otra" porque la interfaz la agrega sola) y el modo de selección (selectionMode: "single" o "multiple"). Vacía si status es ready.',
+      items: {
+        type: 'object',
+        properties: {
+          question: {
+            type: 'string',
+            description: 'Pregunta puntual y directa al usuario.',
+          },
+          options: {
+            type: 'array',
+            description: 'De 2 a 4 respuestas sugeridas cortas (máx 70 caracteres) para esta pregunta.',
+            items: { type: 'string' },
+          },
+          selectionMode: {
+            type: 'string',
+            enum: ['single', 'multiple'],
+            description:
+              'Usa "single" cuando las opciones son alternativas mutuamente excluyentes o "multiple" cuando el usuario puede combinar varias.',
+          },
+        },
+        required: ['question', 'options', 'selectionMode'],
+        additionalProperties: false,
+      },
     },
     understoodFacts: {
       type: 'array',
@@ -323,6 +406,33 @@ const SIDE_QUEST_JSON_SCHEMA = {
       description:
         'Todas las dudas abiertas agrupadas en una sola lista para responder en una pasada. Vacía cuando status es ready.',
       items: { type: 'string' },
+    },
+    clarificationQuestions: {
+      type: 'array',
+      description:
+        'Lista estructurada de preguntas abiertas para el selector paso a paso en móvil. Por cada pregunta en openQuestions, incluí su texto (question), de 2 a 4 respuestas sugeridas cortas y concretas (options, sin incluir "Otra" porque la interfaz la agrega sola) y el modo de selección (selectionMode: "single" o "multiple"). Vacía si status es ready.',
+      items: {
+        type: 'object',
+        properties: {
+          question: {
+            type: 'string',
+            description: 'Pregunta puntual y directa al usuario.',
+          },
+          options: {
+            type: 'array',
+            description: 'De 2 a 4 respuestas sugeridas cortas (máx 70 caracteres) para esta pregunta.',
+            items: { type: 'string' },
+          },
+          selectionMode: {
+            type: 'string',
+            enum: ['single', 'multiple'],
+            description:
+              'Usa "single" cuando las opciones son alternativas mutuamente excluyentes o "multiple" cuando el usuario puede combinar varias.',
+          },
+        },
+        required: ['question', 'options', 'selectionMode'],
+        additionalProperties: false,
+      },
     },
     understoodFacts: {
       type: 'array',

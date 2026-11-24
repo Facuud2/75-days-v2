@@ -190,9 +190,11 @@ export default function SideQuestsModal({ onClose }: SideQuestsModalProps) {
     return () => window.clearTimeout(focusTimer);
   }, [creating, isAiSideQuestOpen]);
 
-  const activeQuestTitles = (quests || []).filter((q) => !q.completed).map((q) => q.title);
+  const existingQuestTitles = new Set(
+    (quests || []).map((q) => q.title.trim().toLowerCase())
+  );
   const availableToSubscribe = (availableQuests || []).filter(
-    (q) => !activeQuestTitles.includes(q.title)
+    (q) => !existingQuestTitles.has(q.title.trim().toLowerCase())
   );
 
   const handleSubscribe = (quest: SideQuestTemplate) => {
@@ -212,7 +214,11 @@ export default function SideQuestsModal({ onClose }: SideQuestsModalProps) {
 
   const handleCreate = (event: React.FormEvent) => {
     event.preventDefault();
-    void createCustomQuest(customQuest);
+    if (saveLockRef.current) return;
+    saveLockRef.current = true;
+    void createCustomQuest(customQuest).finally(() => {
+      saveLockRef.current = false;
+    });
     onClose();
   };
 

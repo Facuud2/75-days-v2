@@ -249,7 +249,7 @@ test.describe('Mobile AI Plan Studio, Gemini Voice Overlay & Multi/Single Quick 
     await page.route('**/api/ai/custom-plan', async (route) => {
       customPlanCallCount += 1;
       if (customPlanCallCount === 1) {
-        // Turn 1: Single-select clarification
+        // Turn 1: Antigravity multi-question clarification (2 questions in one card with chevrons + "Otra")
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
@@ -260,6 +260,23 @@ test.describe('Mobile AI Plan Studio, Gemini Voice Overlay & Multi/Single Quick 
             assistantMessage: '¡Buenísimo enfoque! Antes de actualizar tus metas, confirmame esto:',
             openQuestions: [
               '¿Querés reemplazar por completo las 5 metas anteriores o mantener Lectura y Menos celular?',
+              '¿En qué momento del día preferís estudiar o programar?',
+            ],
+            clarificationQuestions: [
+              {
+                question:
+                  '¿Querés reemplazar por completo las 5 metas anteriores o mantener Lectura y Menos celular?',
+                options: [
+                  'Reemplazar todo por mis nuevas metas',
+                  'Mantener lectura y menos celular + sumar las nuevas',
+                ],
+                selectionMode: 'single',
+              },
+              {
+                question: '¿En qué momento del día preferís estudiar o programar?',
+                options: ['Por la mañana temprano', 'A la tarde después del trabajo'],
+                selectionMode: 'single',
+              },
             ],
             understoodFacts: ['Estudiar 20 min', '10.000 pasos diarios', 'Autoconcepto 5 min'],
             suggestedQuickReplies: [
@@ -434,8 +451,9 @@ test.describe('Mobile AI Plan Studio, Gemini Voice Overlay & Multi/Single Quick 
 
     await page.screenshot({ path: testInfo.outputPath('verify_03_transcribed_autogrow_composer.png') });
 
-    // 4. Send message -> Verify Single-Select Quick Replies ("Selección única") & unclipped open question
+    // 4. Send message -> Verify Antigravity Multi-Question Stepper ("Pregunta 1 de 2", chevrons, and "Otra" inline input)
     await aiDialog.getByRole('button', { name: 'Enviar mensaje' }).click();
+    await expect(aiDialog.getByText('Pregunta 1 de 2')).toBeVisible();
     await expect(aiDialog.getByText('Selección única')).toBeVisible();
     await expect(
       aiDialog.getByText('¡Buenísimo enfoque! Antes de actualizar tus metas, confirmame esto:')
@@ -443,9 +461,49 @@ test.describe('Mobile AI Plan Studio, Gemini Voice Overlay & Multi/Single Quick 
 
     await page.screenshot({ path: testInfo.outputPath('verify_04_single_select_quick_replies.png') });
 
-    // Pick single option & click Responder
+    // Pick single option on Pregunta 1
     await aiDialog.getByRole('radio', { name: 'Reemplazar todo por mis nuevas metas' }).click();
-    await aiDialog.getByRole('button', { name: 'Responder' }).click();
+
+    // Advance to Pregunta 2 via right chevron ("Siguiente pregunta")
+    await aiDialog.getByRole('button', { name: 'Siguiente pregunta' }).click();
+    await expect(aiDialog.getByText('Pregunta 2 de 2')).toBeVisible();
+    await expect(
+      aiDialog.getByText('¿En qué momento del día preferís estudiar o programar?')
+    ).toBeVisible();
+
+    // Select "Otra" option -> opens inline 16px auto-growing textarea inside the same box!
+    await aiDialog.getByRole('radio', { name: /Otra/i }).click();
+    const customAnswerInput = aiDialog.getByRole('textbox', { name: 'Escribir otra respuesta' });
+    await expect(customAnswerInput).toBeVisible();
+    const initialMetrics = await customAnswerInput.evaluate((el) => ({
+      fontSize: getComputedStyle(el).fontSize,
+      height: el.getBoundingClientRect().height,
+    }));
+    expect(initialMetrics.fontSize).toBe('16px');
+    expect(initialMetrics.height).toBeGreaterThanOrEqual(44);
+
+    // Fill multiline text with line breaks + long lines and verify auto-expansion & newline retention
+    await customAnswerInput.fill('A las 19:30 al volver a casa');
+    await customAnswerInput.press('Enter');
+    await customAnswerInput.type(
+      'Y los fines de semana estudiar 45 min por la mañana temprano sin distracciones'
+    );
+    await expect(customAnswerInput).toHaveValue(
+      'A las 19:30 al volver a casa\nY los fines de semana estudiar 45 min por la mañana temprano sin distracciones'
+    );
+    const expandedHeight = await customAnswerInput.evaluate(
+      (el) => el.getBoundingClientRect().height
+    );
+    expect(expandedHeight).toBeGreaterThan(initialMetrics.height + 20);
+
+    // Verify left chevron returns to Pregunta 1 and right chevron goes back to Pregunta 2 preserving both answers
+    await aiDialog.getByRole('button', { name: 'Pregunta anterior' }).click();
+    await expect(aiDialog.getByText('Pregunta 1 de 2')).toBeVisible();
+    await aiDialog.getByRole('button', { name: 'Siguiente pregunta' }).click();
+    await expect(aiDialog.getByText('Pregunta 2 de 2')).toBeVisible();
+
+    // Submit combined answers
+    await aiDialog.getByRole('button', { name: /Responder \(2\)/ }).click();
 
     // 5. Verify Multi-Select Quick Replies ("Selección múltiple") -> Pick 2 options -> Responder (2)
     await expect(aiDialog.getByText('Selección múltiple')).toBeVisible();
