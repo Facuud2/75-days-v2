@@ -4,6 +4,7 @@ import { useChallengeStore } from '../store/useChallengeStore';
 import {
   processCustomPlanTurn,
   processSideQuestTurn,
+  transcribeUserAudio,
   type GeminiClientLike,
 } from '../lib/server/services/geminiService';
 
@@ -321,5 +322,191 @@ describe('AI Custom Plan, Side Quest & Challenge Store', () => {
       expect.stringContaining('/challenges/current/custom-goals'),
       expect.objectContaining({ method: 'PATCH' })
     );
+  });
+
+  it('processCustomPlanTurn supports quickReplySelectionMode single and multiple', async () => {
+    const mockClient: GeminiClientLike = {
+      interactions: {
+        create: async () => ({
+          output_text: JSON.stringify({
+            status: 'needs_clarification',
+            userTranscript: 'Quiero sumar buenos hábitos diarios',
+            assistantMessage: '¿Cuáles de estos bloques querés incluir en tu reto?',
+            openQuestions: ['Elegí los ejes que quieras combinar:'],
+            understoodFacts: ['Busca hábitos integrales'],
+            suggestedQuickReplies: [
+              'Hidratación 3L diarios',
+              'Caminata exterior 30 min',
+              'Lectura 15 min',
+            ],
+            quickReplySelectionMode: 'multiple',
+            tasks: [],
+          }),
+        }),
+      },
+    };
+
+    const res = await processCustomPlanTurn(
+      { textInput: 'Quiero sumar buenos hábitos diarios' },
+      mockClient
+    );
+
+    expect(res.quickReplySelectionMode).toBe('multiple');
+    expect(res.suggestedQuickReplies).toHaveLength(3);
+  });
+
+  it('transcribeUserAudio transcribes speech cleanly and handles silent audio', async () => {
+    const speechClient: GeminiClientLike = {
+      interactions: {
+        create: async () => ({
+          output_text: JSON.stringify({
+            hasSpeech: true,
+            transcript: 'Quiero estudiar programación mínimo 20 minutos y caminar 10 mil pasos.',
+          }),
+        }),
+      },
+    };
+
+    const speechRes = await transcribeUserAudio(
+      { audioBase64: 'ZmFrZQ==', mimeType: 'audio/webm;codecs=opus' },
+      speechClient
+    );
+    expect(speechRes.hasSpeech).toBe(true);
+    expect(speechRes.transcript).toBe(
+      'Quiero estudiar programación mínimo 20 minutos y caminar 10 mil pasos.'
+    );
+
+    const silentClient: GeminiClientLike = {
+      interactions: {
+        create: async () => ({
+          output_text: JSON.stringify({
+            hasSpeech: false,
+            transcript: 'Ruido de fondo',
+          }),
+        }),
+      },
+    };
+
+    const silentRes = await transcribeUserAudio(
+      { audioBase64: 'c2lsZW5jZQ==', mimeType: 'audio/webm' },
+      silentClient
+    );
+    expect(silentRes.hasSpeech).toBe(false);
+    expect(silentRes.transcript).toBe('');
+  });
+
+  it('aiService.transcribeAudio posts to /ai/transcribe', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        hasSpeech: true,
+        transcript: 'Texto transcrito listo para revisar',
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await aiService.transcribeAudio({
+      audioBase64: 'ZmFrZQ==',
+      mimeType: 'audio/webm',
+    });
+
+    expect(res.hasSpeech).toBe(true);
+    expect(res.transcript).toBe('Texto transcrito listo para revisar');
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/ai/transcribe'),
+      expect.objectContaining({ method: 'POST' })
+    );
+  });
+
+  it('forwards an AbortSignal to fetch and aborts the underlying request', async () => {
+    let receivedSignal: AbortSignal | undefined;
+    const fetchMock = vi.fn((_url: string, init?: RequestInit) => {
+      receivedSignal = init?.signal ?? undefined;
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const controller = new AbortController();
+    const pending = aiService.generateCustomPlan({ textInput: 'Plan' }, controller.signal);
+    controller.abort(new DOMException('The operation was aborted.', 'AbortError'));
+
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    expect(receivedSignal?.aborted).toBe(true);
+  });
+
+  it('passes an already-aborted signal through so fetch rejects immediately', async () => {
+    let receivedSignal: AbortSignal | undefined;
+    const fetchMock = vi.fn((_url: string, init?: RequestInit) => {
+      receivedSignal = init?.signal ?? undefined;
+      return Promise.reject(init?.signal?.reason ?? new Error('missing abort reason'));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const controller = new AbortController();
+    controller.abort(new DOMException('The operation was aborted.', 'AbortError'));
+
+    await expect(
+      aiService.generateSideQuest({ textInput: 'Misión' }, controller.signal)
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(receivedSignal?.aborted).toBe(true);
+  });
+
+  it('turns a request timeout into a human readable error', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchMock = vi.fn((_url: string, init?: RequestInit) => {
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
+        });
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const pending = aiService.generateCustomPlan({ textInput: 'Plan lento' });
+      const assertion = expect(pending).rejects.toThrow(
+        'La solicitud tardó demasiado. Intenta de nuevo.'
+      );
+      await vi.advanceTimersByTimeAsync(45_000);
+      await assertion;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('surfaces backend error messages and status codes', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 429,
+      json: async () => ({ message: 'Demasiadas solicitudes. Probá en un momento.' }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(aiService.generateSideQuest({ textInput: 'Misión' })).rejects.toMatchObject({
+      message: 'Demasiadas solicitudes. Probá en un momento.',
+      status: 429,
+    });
+  });
+
+  it('normalizes an incomplete side-quest response without inventing a draft', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        status: 'needs_clarification',
+        userTranscript: 'Quiero dormir mejor',
+        assistantMessage: '¿Cuántas horas querés dormir?',
+        openQuestions: ['¿Cuántas horas querés dormir?'],
+        quest: null,
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await aiService.generateSideQuest({ textInput: 'Dormir mejor' });
+
+    expect(res.status).toBe('needs_clarification');
+    expect(res.quest).toBeNull();
+    expect(res.quickReplySelectionMode).toBeUndefined();
   });
 });

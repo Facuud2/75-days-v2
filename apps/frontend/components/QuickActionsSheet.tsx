@@ -143,6 +143,19 @@ export default function QuickActionsSheet({
                       <span className="mt-0.5 block text-sm text-white/50">Guarda tu actividad física</span>
                     </span>
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAction(onPlans)}
+                    className="quick-action-item flex min-h-14 items-center gap-4 rounded-2xl px-4 text-left text-white/75 transition-colors active:scale-[0.99] active:bg-white/[0.07] active:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
+                  >
+                    <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-white/60">
+                      <Target size={22} strokeWidth={2} />
+                    </span>
+                    <span>
+                      <span className="block font-semibold">Cambiar plan</span>
+                      <span className="mt-0.5 block text-sm text-white/45">Revisa o ajusta tu desafío actual</span>
+                    </span>
+                  </button>
                 </>
               ) : (
                 <button

@@ -151,24 +151,30 @@ export async function blobToBase64(blob: Blob): Promise<string> {
 }
 
 export const aiService = {
-  generateCustomPlan: (payload: AiCustomPlanRequest) => {
+  generateCustomPlan: (payload: AiCustomPlanRequest, signal?: AbortSignal) => {
     return apiClient<AiCustomPlanResponse>('/ai/custom-plan', {
       method: 'POST',
       body: JSON.stringify(payload),
+      signal,
       timeoutMs: 45_000,
     });
   },
-  generateSideQuest: (payload: AiSideQuestRequest) => {
+  generateSideQuest: (payload: AiSideQuestRequest, signal?: AbortSignal) => {
     return apiClient<AiSideQuestResponse>('/ai/side-quest', {
       method: 'POST',
       body: JSON.stringify(payload),
+      signal,
       timeoutMs: 45_000,
     });
   },
-  transcribeAudio: (payload: { audioBase64: string; mimeType?: string }) => {
+  transcribeAudio: (
+    payload: { audioBase64: string; mimeType?: string },
+    signal?: AbortSignal
+  ) => {
     return apiClient<AiTranscribeResponse>('/ai/transcribe', {
       method: 'POST',
       body: JSON.stringify(payload),
+      signal,
       timeoutMs: 30_000,
     });
   },

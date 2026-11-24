@@ -60,9 +60,12 @@ export default function AutoGrowComposer({
   );
 
   const isVoiceModeActive =
+    voiceStatus === 'requesting-permission' ||
     voiceStatus === 'recording' ||
     voiceStatus === 'paused' ||
-    voiceStatus === 'transcribing';
+    voiceStatus === 'stopping' ||
+    voiceStatus === 'transcribing' ||
+    voiceStatus === 'processing';
 
   const syncHeight = useCallback(() => {
     const el = internalRef.current;

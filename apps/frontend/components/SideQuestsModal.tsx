@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { animate, motion, useDragControls, useMotionValue, useReducedMotion } from 'motion/react';
 import {
   Apple,
   Book,
@@ -23,6 +24,11 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { useChallengeStore } from '@/store/useChallengeStore';
 import type { AiSideQuestDraft, AiUserContext } from '@/lib/api/ai';
 import AISideQuestSheet from '@/components/onboarding/AISideQuestSheet';
+import { SHEET_SNAP_SPRING, shouldDismissSheet } from '@/lib/motion/sheetPhysics';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
+
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 interface SideQuestsModalProps {
   onClose: () => void;
@@ -50,6 +56,14 @@ export default function SideQuestsModal({ onClose }: SideQuestsModalProps) {
   const [creating, setCreating] = useState(false);
   const [isAiSideQuestOpen, setIsAiSideQuestOpen] = useState(false);
   const [isSavingAiQuest, setIsSavingAiQuest] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const saveLockRef = useRef(false);
+  const dragControls = useDragControls();
+  const sheetY = useMotionValue(0);
+  const reduceMotion = useReducedMotion();
+  const isMobileSheet = useMediaQuery('(max-width: 639px)');
+  const titleId = isAiSideQuestOpen ? 'ai-side-quest-title' : 'side-quests-modal-title';
   const [customQuest, setCustomQuest] = useState<CreateQuestInput>({
     title: '',
     description: '',
@@ -90,6 +104,91 @@ export default function SideQuestsModal({ onClose }: SideQuestsModalProps) {
     }),
     [user?.age, user?.height, user?.weight, user?.targetWeight, quests, customGoalsTemplate]
   );
+
+  const handleBack = useCallback(() => {
+    if (isSavingAiQuest || saveLockRef.current) return;
+    if (isAiSideQuestOpen) {
+      setIsAiSideQuestOpen(false);
+      return;
+    }
+    if (creating) {
+      setCreating(false);
+      return;
+    }
+    onClose();
+  }, [creating, isAiSideQuestOpen, isSavingAiQuest, onClose]);
+
+  useEffect(() => {
+    previousFocusRef.current = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const focusTimer = window.setTimeout(() => {
+      const dialog = dialogRef.current;
+      if (!dialog?.contains(document.activeElement)) {
+        dialog?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)?.focus();
+      }
+    }, 0);
+
+    return () => {
+      window.clearTimeout(focusTimer);
+      document.body.style.overflow = previousOverflow;
+      previousFocusRef.current?.focus?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    sheetY.set(0);
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        handleBack();
+        return;
+      }
+
+      if (event.key !== 'Tab') return;
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+      const focusable = Array.from(
+        dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
+      ).filter((element) => element.offsetParent !== null || element === document.activeElement);
+
+      if (focusable.length === 0) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const activeInDialog = dialog.contains(document.activeElement);
+      if (
+        event.shiftKey &&
+        (!activeInDialog || document.activeElement === first || document.activeElement === dialog)
+      ) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (!activeInDialog || document.activeElement === last)) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [handleBack, sheetY]);
+
+  useEffect(() => {
+    const focusTimer = window.setTimeout(() => {
+      const dialog = dialogRef.current;
+      if (!dialog?.contains(document.activeElement)) {
+        dialog?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)?.focus();
+      }
+    }, 0);
+    return () => window.clearTimeout(focusTimer);
+  }, [creating, isAiSideQuestOpen]);
 
   const activeQuestTitles = (quests || []).filter((q) => !q.completed).map((q) => q.title);
   const availableToSubscribe = (availableQuests || []).filter(
@@ -134,6 +233,8 @@ export default function SideQuestsModal({ onClose }: SideQuestsModalProps) {
   });
 
   const handleApplyAiQuest = async (draft: AiSideQuestDraft) => {
+    if (saveLockRef.current) return;
+    saveLockRef.current = true;
     setIsSavingAiQuest(true);
     try {
       const ok = await createCustomQuest(toCreateQuestInput(draft));
@@ -142,35 +243,84 @@ export default function SideQuestsModal({ onClose }: SideQuestsModalProps) {
         onClose();
       }
     } finally {
+      saveLockRef.current = false;
       setIsSavingAiQuest(false);
     }
   };
 
   const handleEditAiQuestManually = (draft: AiSideQuestDraft) => {
+    if (isSavingAiQuest || saveLockRef.current) return;
     setCustomQuest(toCreateQuestInput(draft));
     setIsAiSideQuestOpen(false);
     setCreating(true);
   };
 
-  return (
-    <>
-      {!isAiSideQuestOpen && (
-        <div
-          className="mobile-sheet-root fixed inset-0 z-[100] flex items-center justify-center p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="side-quests-modal-title"
-        >
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-[3px]" onClick={onClose} />
+  const closeAiDesigner = useCallback(() => {
+    if (isSavingAiQuest || saveLockRef.current) return;
+    setIsAiSideQuestOpen(false);
+  }, [isSavingAiQuest]);
 
+  return (
+    <div
+      className="mobile-sheet-root fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-[3px]"
+      onClick={handleBack}
+    >
+      <motion.div
+        ref={dialogRef}
+        tabIndex={-1}
+        className="relative w-full max-w-2xl h-[92dvh] max-h-[min(92dvh,100%)] overflow-hidden border border-b-0 rounded-t-3xl pb-[env(safe-area-inset-bottom,0px)] flex flex-col shadow-2xl sm:h-auto sm:max-h-[86dvh] sm:rounded-3xl sm:border-b sm:pb-0"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        style={{
+          y: sheetY,
+          backgroundColor: 'var(--surface-card)',
+          borderColor: 'var(--border-subtle)',
+          color: 'var(--text-primary)',
+        }}
+        drag={isMobileSheet && !reduceMotion ? 'y' : false}
+        dragListener={false}
+        dragControls={dragControls}
+        dragConstraints={{ top: 0 }}
+        dragElastic={{ top: 0, bottom: 0.25 }}
+        dragMomentum={false}
+        onDragEnd={(_, info) => {
+          if (shouldDismissSheet(info.offset.y, info.velocity.y)) {
+            handleBack();
+          } else {
+            animate(sheetY, 0, {
+              ...SHEET_SNAP_SPRING,
+              velocity: info.velocity.y,
+            });
+          }
+        }}
+        onClick={(event) => event.stopPropagation()}
+      >
+        {isMobileSheet && (
           <div
-            className="mobile-sheet-panel relative border rounded-3xl w-full max-w-2xl max-h-[92dvh] sm:max-h-[86dvh] overflow-hidden flex flex-col shadow-2xl"
-            style={{
-              backgroundColor: 'var(--surface-card)',
-              borderColor: 'var(--border-subtle)',
-              color: 'var(--text-primary)',
-            }}
+            className="flex h-6 shrink-0 items-center justify-center cursor-grab touch-none active:cursor-grabbing"
+            aria-hidden="true"
+            onPointerDown={(event) => dragControls.start(event)}
           >
+            <span className="h-1 w-10 rounded-full bg-[var(--border-control)]" />
+          </div>
+        )}
+
+        {isAiSideQuestOpen ? (
+          <AISideQuestSheet
+            isOpen
+            embedded
+            onBack={closeAiDesigner}
+            backButtonLabel="Volver a misiones secundarias"
+            userContext={aiUserContext}
+            saveButtonLabel="Crear y empezar misión"
+            isSaving={isSavingAiQuest}
+            onApplyQuest={handleApplyAiQuest}
+            onEditManually={handleEditAiQuestManually}
+            onClose={closeAiDesigner}
+          />
+        ) : (
+          <>
             {/* Header */}
             <div
               className="px-4 py-3.5 sm:px-6 sm:py-4 border-b flex justify-between items-center gap-3 shrink-0"
@@ -241,7 +391,7 @@ export default function SideQuestsModal({ onClose }: SideQuestsModalProps) {
 
                 <button
                   type="button"
-                  onClick={onClose}
+                  onClick={handleBack}
                   aria-label="Cerrar misiones secundarias"
                   className="size-9 rounded-full flex items-center justify-center shrink-0 cursor-pointer active:scale-95 transition-transform duration-150 ease-out"
                   style={{
@@ -684,19 +834,9 @@ export default function SideQuestsModal({ onClose }: SideQuestsModalProps) {
                 )}
               </div>
             )}
-          </div>
-        </div>
-      )}
-
-      <AISideQuestSheet
-        isOpen={isAiSideQuestOpen}
-        userContext={aiUserContext}
-        saveButtonLabel="Crear y empezar misión"
-        isSaving={isSavingAiQuest}
-        onApplyQuest={handleApplyAiQuest}
-        onEditManually={handleEditAiQuestManually}
-        onClose={() => setIsAiSideQuestOpen(false)}
-      />
-    </>
+          </>
+        )}
+      </motion.div>
+    </div>
   );
 }

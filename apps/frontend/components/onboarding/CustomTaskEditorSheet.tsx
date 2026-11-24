@@ -129,6 +129,8 @@ export function createEmptyCustomTask(): CustomTask {
 
 type CustomTaskEditorSheetProps = {
   isOpen: boolean;
+  /** Render only the editor content inside a parent-owned dialog shell. */
+  embedded?: boolean;
   tasks: CustomTask[];
   onChange: (tasks: CustomTask[]) => void;
   onClose: () => void;
@@ -138,6 +140,7 @@ type CustomTaskEditorSheetProps = {
 
 export default function CustomTaskEditorSheet({
   isOpen,
+  embedded = false,
   tasks,
   onChange,
   onClose,
@@ -151,13 +154,13 @@ export default function CustomTaskEditorSheet({
   const [openIconTaskId, setOpenIconTaskId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || embedded) return;
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [isOpen, onClose]);
+  }, [isOpen, embedded, onClose]);
 
   const patchTask = (id: string, patch: Partial<CustomTask>) => {
     onChange(
@@ -181,73 +184,8 @@ export default function CustomTaskEditorSheet({
     (t) => t.cadence === 'weekly' || t.cadence === 'monthly'
   );
 
-  return (
-    <AnimatePresence>
-      {isOpen && (
-        <div
-          className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center sm:p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="custom-editor-title"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <motion.button
-            type="button"
-            aria-label="Cerrar editor personalizado"
-            onClick={onClose}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18, ease: 'easeOut' }}
-            className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
-          />
-
-          <motion.div
-            initial={
-              reduceMotion
-                ? { opacity: 0 }
-                : isDesktop
-                  ? { opacity: 0, y: 20, scale: 0.96 }
-                  : { y: '100%' }
-            }
-            animate={
-              reduceMotion
-                ? { opacity: 1 }
-                : isDesktop
-                  ? { opacity: 1, y: 0, scale: 1 }
-                  : { y: 0 }
-            }
-            exit={
-              reduceMotion
-                ? { opacity: 0 }
-                : isDesktop
-                  ? { opacity: 0, y: 12, scale: 0.96, transition: SHEET_EXIT_TRANSITION }
-                  : { y: '100%', transition: SHEET_EXIT_TRANSITION }
-            }
-            transition={
-              reduceMotion ? REDUCED_MOTION_TRANSITION : SHEET_ENTER_SPRING
-            }
-            drag={isDesktop ? false : 'y'}
-            dragListener={false}
-            dragControls={dragControls}
-            dragConstraints={{ top: 0, bottom: 0 }}
-            dragElastic={{ top: 0.04, bottom: 0.42 }}
-            dragTransition={{ bounceStiffness: 420, bounceDamping: 34 }}
-            onDragEnd={(_, info) => {
-              if (shouldDismissSheet(info.offset.y, info.velocity.y)) onClose();
-            }}
-            className="relative w-full max-w-lg max-h-[88dvh] flex flex-col overflow-hidden rounded-t-3xl sm:rounded-3xl border shadow-2xl"
-            style={{
-              backgroundColor: 'var(--surface-card)',
-              borderColor: 'var(--border-subtle)',
-              color: 'var(--text-primary)',
-            }}
-          >
-            <div
-              className="mx-auto mt-2.5 h-1.5 w-10 shrink-0 cursor-grab touch-none rounded-full bg-[var(--border-control)]/50 active:cursor-grabbing sm:hidden"
-              aria-hidden="true"
-              onPointerDown={(event) => dragControls.start(event)}
-            />
+  const editorBody = (
+    <div className="relative w-full h-full min-h-0 flex flex-col overflow-hidden">
             <header
               className="shrink-0 flex items-start justify-between gap-3 px-5 pt-5 pb-4 border-b"
               style={{ borderColor: 'var(--divider)' }}
@@ -704,6 +642,81 @@ export default function CustomTaskEditorSheet({
                 Listo
               </button>
             </footer>
+    </div>
+  );
+
+  if (embedded) {
+    return isOpen ? editorBody : null;
+  }
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <div
+          className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="custom-editor-title"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <motion.button
+            type="button"
+            aria-label="Cerrar editor personalizado"
+            onClick={onClose}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
+            className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
+          />
+
+          <motion.div
+            initial={
+              reduceMotion
+                ? { opacity: 0 }
+                : isDesktop
+                  ? { opacity: 0, y: 20, scale: 0.96 }
+                  : { y: '100%' }
+            }
+            animate={
+              reduceMotion
+                ? { opacity: 1 }
+                : isDesktop
+                  ? { opacity: 1, y: 0, scale: 1 }
+                  : { y: 0 }
+            }
+            exit={
+              reduceMotion
+                ? { opacity: 0 }
+                : isDesktop
+                  ? { opacity: 0, y: 12, scale: 0.96, transition: SHEET_EXIT_TRANSITION }
+                  : { y: '100%', transition: SHEET_EXIT_TRANSITION }
+            }
+            transition={reduceMotion ? REDUCED_MOTION_TRANSITION : SHEET_ENTER_SPRING}
+            drag={!isDesktop ? 'y' : false}
+            dragListener={false}
+            dragControls={dragControls}
+            dragConstraints={{ top: 0, bottom: 0 }}
+            dragElastic={{ top: 0.04, bottom: 0.42 }}
+            dragTransition={{ bounceStiffness: 420, bounceDamping: 34 }}
+            onDragEnd={(_, info) => {
+              if (shouldDismissSheet(info.offset.y, info.velocity.y)) onClose();
+            }}
+            className="relative w-full max-w-lg max-h-[88dvh] flex flex-col overflow-hidden rounded-t-3xl sm:rounded-3xl border shadow-2xl"
+            style={{
+              backgroundColor: 'var(--surface-card)',
+              borderColor: 'var(--border-subtle)',
+              color: 'var(--text-primary)',
+            }}
+          >
+            {!isDesktop && (
+              <div
+                className="mx-auto mt-2.5 h-1.5 w-10 shrink-0 cursor-grab touch-none rounded-full bg-[var(--border-control)]/50 active:cursor-grabbing sm:hidden"
+                aria-hidden="true"
+                onPointerDown={(event) => dragControls.start(event)}
+              />
+            )}
+            {editorBody}
           </motion.div>
         </div>
       )}

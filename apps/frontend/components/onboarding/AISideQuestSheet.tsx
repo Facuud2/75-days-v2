@@ -11,8 +11,6 @@ import {
   Droplet,
   Dumbbell,
   Footprints,
-  MessageSquare,
-  Mic,
   Moon,
   Pencil,
   RefreshCw,
@@ -49,6 +47,13 @@ import {
   SHEET_SNAP_SPRING,
   shouldDismissSheet,
 } from '@/lib/motion/sheetPhysics';
+import {
+  AIConversationStreamItem,
+  AIStudioTabs,
+  DraftChangeBadge,
+  DraftSelectionIndicator,
+  isAbortError,
+} from './AIConversationalStudio';
 import AIThinkingStatus from './AIThinkingStatus';
 import AutoGrowComposer from './AutoGrowComposer';
 import QuickReplyOptionsCard from './QuickReplyOptionsCard';
@@ -98,6 +103,11 @@ const REFINEMENT_THINKING_STATES = [
   'Actualizando tareas de la misión...',
 ] as const;
 
+type AsyncActionLock = 'ai' | 'voice' | 'save' | 'manual' | null;
+
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 interface QuestProposalSummary {
   title: string;
   durationDays: number;
@@ -119,8 +129,10 @@ interface ChatMessageItem {
 
 export type AISideQuestSheetProps = {
   isOpen: boolean;
-  /** When true, renders inline inside a parent sheet (zero stacked modals) with a Back button */
+  /** When true, renders only the studio body inside a parent-owned dialog shell. */
   embedded?: boolean;
+  /** Accessible label for the embedded back action. */
+  backButtonLabel?: string;
   onBack?: () => void;
   initialQuest?: AiSideQuestDraft | null;
   initialIdeaPrompt?: string;
@@ -153,6 +165,7 @@ function normalizeQuestDraft(quest: AiSideQuestDraft): AiSideQuestDraft {
 export default function AISideQuestSheet({
   isOpen,
   embedded = false,
+  backButtonLabel = 'Volver al plan principal',
   onBack,
   initialQuest = null,
   initialIdeaPrompt = '',
@@ -196,16 +209,62 @@ export default function AISideQuestSheet({
   const [apiError, setApiError] = useState<string | null>(null);
   const [textInput, setTextInput] = useState('');
   const [showScrollBottom, setShowScrollBottom] = useState(false);
+  const [isApplying, setIsApplying] = useState(false);
 
+  const dialogRef = useRef<HTMLDivElement>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const lastMsgRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const wasOpenRef = useRef(false);
+  const mountedRef = useRef(true);
+  const openGenerationRef = useRef(0);
+  const requestSequenceRef = useRef(0);
+  const activeAbortRef = useRef<AbortController | null>(null);
+  const actionLockRef = useRef<AsyncActionLock>(null);
 
   const selectedTaskSet = useMemo(() => new Set(selectedTaskIds), [selectedTaskIds]);
   const hasMainPlan = Boolean(userContext?.mainPlanTasks && userContext.mainPlanTasks.length > 0);
 
+  const invalidateActiveWork = useCallback(() => {
+    requestSequenceRef.current += 1;
+    activeAbortRef.current?.abort();
+    activeAbortRef.current = null;
+    actionLockRef.current = null;
+    cancelRecording();
+    resetStatus();
+    setIsApplying(false);
+  }, [cancelRecording, resetStatus]);
+
   useEffect(() => {
-    if (!isOpen) return;
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      openGenerationRef.current += 1;
+      requestSequenceRef.current += 1;
+      activeAbortRef.current?.abort();
+      activeAbortRef.current = null;
+      actionLockRef.current = null;
+      cancelRecording();
+    };
+  }, [cancelRecording]);
+
+  // Initialize only on a false → true boundary. Parent prop identity changes must
+  // not wipe an active conversation or let work from an older opening commit here.
+  useEffect(() => {
+    if (!isOpen) {
+      if (wasOpenRef.current) {
+        wasOpenRef.current = false;
+        openGenerationRef.current += 1;
+        invalidateActiveWork();
+      }
+      return;
+    }
+    if (wasOpenRef.current) return;
+
+    wasOpenRef.current = true;
+    openGenerationRef.current += 1;
+    invalidateActiveWork();
     sheetY.set(0);
     setActiveTab('chat');
     setApiError(null);
@@ -214,7 +273,6 @@ export default function AISideQuestSheet({
     setSelectedTaskIds([]);
     setHasAiUpdatedDraft(false);
     setTextInput(initialIdeaPrompt.trim());
-    resetStatus();
 
     const normalizedInitial = initialQuest ? normalizeQuestDraft(initialQuest) : null;
     setQuestDraft(normalizedInitial);
@@ -222,8 +280,8 @@ export default function AISideQuestSheet({
     const introText = normalizedInitial
       ? 'Ya tenés tu borrador disponible en la pestaña "Misión". Contame acá qué querés ajustar o marcá tareas puntuales para editarlas.'
       : hasMainPlan
-      ? 'Contame qué misión secundaria te gustaría crear (por texto o voz). Tengo en cuenta tu plan principal para que sea 100% complementaria.'
-      : 'Contame qué misión secundaria querés diseñar (ej. 21 días sin azúcar, dormir mejor o sumar pasos). Si queda algo abierto, te lo agrupo en un solo mensaje.';
+        ? 'Contame qué misión secundaria te gustaría crear (por texto o voz). Tengo en cuenta tu plan principal para que sea 100% complementaria.'
+        : 'Contame qué misión secundaria querés diseñar (ej. 21 días sin azúcar, dormir mejor o sumar pasos). Si queda algo abierto, te lo agrupo en un solo mensaje.';
 
     setMessages([
       {
@@ -232,19 +290,82 @@ export default function AISideQuestSheet({
         text: introText,
       },
     ]);
-  }, [isOpen, initialQuest, initialIdeaPrompt, hasMainPlan, resetStatus, sheetY]);
+  }, [hasMainPlan, initialIdeaPrompt, initialQuest, invalidateActiveWork, isOpen, sheetY]);
+
+  const handleRequestClose = useCallback(() => {
+    if (isSaving || actionLockRef.current === 'save') return;
+    openGenerationRef.current += 1;
+    invalidateActiveWork();
+    onClose();
+  }, [invalidateActiveWork, isSaving, onClose]);
+
+  const handleEmbeddedBack = useCallback(() => {
+    if (isSaving || actionLockRef.current === 'save') return;
+    openGenerationRef.current += 1;
+    invalidateActiveWork();
+    (onBack ?? onClose)();
+  }, [invalidateActiveWork, isSaving, onBack, onClose]);
 
   useEffect(() => {
     if (!isOpen || embedded) return;
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onClose();
+
+    previousFocusRef.current = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const focusTimer = window.setTimeout(() => {
+      const dialog = dialogRef.current;
+      if (!dialog?.contains(document.activeElement)) {
+        dialog?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)?.focus();
+      }
+    }, 0);
+
+    return () => {
+      window.clearTimeout(focusTimer);
+      document.body.style.overflow = previousOverflow;
+      previousFocusRef.current?.focus?.();
+    };
+  }, [embedded, isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || embedded) return;
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        handleRequestClose();
+        return;
+      }
+
+      if (event.key !== 'Tab') return;
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+      const focusable = Array.from(
+        dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
+      ).filter((element) => element.offsetParent !== null || element === document.activeElement);
+      if (focusable.length === 0) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const activeInDialog = dialog.contains(document.activeElement);
+      if (
+        event.shiftKey &&
+        (!activeInDialog || document.activeElement === first || document.activeElement === dialog)
+      ) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (!activeInDialog || document.activeElement === last)) {
+        event.preventDefault();
+        first.focus();
       }
     };
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
-  }, [isOpen, embedded, onClose]);
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [embedded, handleRequestClose, isOpen]);
 
   const scrollToLatestMessage = useCallback(
     (behavior: ScrollBehavior = reduceMotion ? 'auto' : 'smooth') => {
@@ -284,7 +405,14 @@ export default function AISideQuestSheet({
     recStatus === 'unsupported' ||
     recStatus === 'error';
 
-  const isBusy = recStatus === 'processing' || recStatus === 'transcribing' || isSaving;
+  const isVoiceLifecycleActive =
+    recStatus === 'requesting-permission' ||
+    recStatus === 'recording' ||
+    recStatus === 'paused' ||
+    recStatus === 'stopping' ||
+    recStatus === 'transcribing' ||
+    recStatus === 'processing';
+  const isBusy = isVoiceLifecycleActive || isSaving || isApplying;
   const isAiThinking = recStatus === 'processing';
 
   const toggleTaskSelection = (taskId: string) => {
@@ -299,11 +427,25 @@ export default function AISideQuestSheet({
     text?: string;
     forceProposal?: boolean;
   }) => {
+    if (!isOpen || isSaving || actionLockRef.current !== null) return;
+
+    const generation = openGenerationRef.current;
+    const requestId = ++requestSequenceRef.current;
+    const controller = new AbortController();
+    activeAbortRef.current?.abort();
+    activeAbortRef.current = controller;
+    actionLockRef.current = 'ai';
+    const isCurrent = () =>
+      mountedRef.current &&
+      openGenerationRef.current === generation &&
+      requestSequenceRef.current === requestId &&
+      !controller.signal.aborted;
+
     setApiError(null);
     setActiveTab('chat');
     setProcessing(true);
 
-    const optimisticMsgId = `sq-user-${Date.now()}`;
+    const optimisticMsgId = `sq-user-${generation}-${requestId}`;
     const isVoice = Boolean(opts.audioBase64);
     const optimisticText = opts.forceProposal
       ? 'Armá la propuesta de misión con lo que hablamos.'
@@ -320,17 +462,21 @@ export default function AISideQuestSheet({
     ]);
 
     try {
-      const res = await aiService.generateSideQuest({
-        audioBase64: opts.audioBase64,
-        mimeType: opts.mimeType,
-        textInput: opts.text,
-        history,
-        currentQuest: questDraft,
-        selectedTaskIds: selectedTaskIds.length > 0 ? selectedTaskIds : undefined,
-        understoodFacts: understoodFacts.length > 0 ? understoodFacts : undefined,
-        userContext,
-        forceProposal: opts.forceProposal,
-      });
+      const res = await aiService.generateSideQuest(
+        {
+          audioBase64: opts.audioBase64,
+          mimeType: opts.mimeType,
+          textInput: opts.text,
+          history,
+          currentQuest: questDraft,
+          selectedTaskIds: selectedTaskIds.length > 0 ? selectedTaskIds : undefined,
+          understoodFacts: understoodFacts.length > 0 ? understoodFacts : undefined,
+          userContext,
+          forceProposal: opts.forceProposal,
+        },
+        controller.signal
+      );
+      if (!isCurrent()) return;
 
       const resolvedUserText = res.userTranscript?.trim() || optimisticText;
       const assistantHistorySummary =
@@ -358,7 +504,7 @@ export default function AISideQuestSheet({
       setMessages((prev) => [
         ...prev.map((m) => (m.id === optimisticMsgId ? { ...m, text: resolvedUserText } : m)),
         {
-          id: `sq-ai-${Date.now()}`,
+          id: `sq-ai-${generation}-${requestId}`,
           role: 'assistant',
           text: res.assistantMessage,
           openQuestions: res.openQuestions ?? [],
@@ -377,32 +523,59 @@ export default function AISideQuestSheet({
       if (res.understoodFacts && res.understoodFacts.length > 0) {
         setUnderstoodFacts(res.understoodFacts);
       }
-    } catch (err: any) {
-      setMessages((prev) => prev.filter((m) => m.id !== optimisticMsgId));
+    } catch (error: unknown) {
+      if (!isCurrent()) return;
+      setMessages((prev) => prev.filter((message) => message.id !== optimisticMsgId));
+      if (isAbortError(error)) return;
       setApiError(
-        err?.message ||
-          'No pudimos comunicarnos con la IA para la misión secundaria. Tu borrador sigue intacto.'
+        error instanceof Error && error.message
+          ? error.message
+          : 'No pudimos comunicarnos con la IA para la misión secundaria. Tu borrador sigue intacto.'
       );
     } finally {
-      setProcessing(false);
+      if (activeAbortRef.current === controller) activeAbortRef.current = null;
+      if (
+        mountedRef.current &&
+        openGenerationRef.current === generation &&
+        requestSequenceRef.current === requestId
+      ) {
+        actionLockRef.current = null;
+        setProcessing(false);
+      }
     }
   };
 
   const handleStopAndTranscribe = async () => {
-    const result = await stopRecording();
-    if (!result || result.blob.size === 0) {
-      resetStatus();
-      return;
-    }
-    setApiError(null);
-    setTranscribing(true);
+    if (!isOpen || isSaving || actionLockRef.current !== null) return;
+    const generation = openGenerationRef.current;
+    const requestId = ++requestSequenceRef.current;
+    actionLockRef.current = 'voice';
+    let controller: AbortController | null = null;
+    const isCurrent = () =>
+      mountedRef.current &&
+      openGenerationRef.current === generation &&
+      requestSequenceRef.current === requestId &&
+      !controller?.signal.aborted;
+
     try {
+      const result = await stopRecording();
+      if (!isCurrent()) return;
+      if (result.kind !== 'success' || result.blob.size === 0) {
+        if (result.kind === 'empty' || result.kind === 'success') resetStatus();
+        return;
+      }
+      setApiError(null);
+      setTranscribing(true);
       const base64 = await blobToBase64(result.blob);
-      const res = await aiService.transcribeAudio({
-        audioBase64: base64,
-        mimeType: result.mimeType,
-      });
-      setTranscribing(false);
+      if (!isCurrent()) return;
+
+      controller = new AbortController();
+      activeAbortRef.current = controller;
+      const res = await aiService.transcribeAudio(
+        { audioBase64: base64, mimeType: result.mimeType },
+        controller.signal
+      );
+      if (!isCurrent()) return;
       if (!res.hasSpeech || !res.transcript.trim()) {
         setApiError('No detectamos voz clara en el audio. Probá hablar más cerca del micrófono.');
         return;
@@ -411,36 +584,167 @@ export default function AISideQuestSheet({
         prev.trim() ? `${prev.trim()} ${res.transcript.trim()}` : res.transcript.trim()
       );
       requestAnimationFrame(() => {
-        textareaRef.current?.focus();
+        if (isCurrent()) textareaRef.current?.focus();
       });
-    } catch (err: any) {
-      setTranscribing(false);
-      setApiError(err?.message || 'No pudimos transcribir el audio. Intentá de nuevo.');
+    } catch (error: unknown) {
+      if (!isCurrent() || isAbortError(error)) return;
+      setApiError(
+        error instanceof Error && error.message
+          ? error.message
+          : 'No pudimos transcribir el audio. Intentá de nuevo.'
+      );
+    } finally {
+      if (controller && activeAbortRef.current === controller) activeAbortRef.current = null;
+      if (
+        mountedRef.current &&
+        openGenerationRef.current === generation &&
+        requestSequenceRef.current === requestId
+      ) {
+        actionLockRef.current = null;
+        setTranscribing(false);
+      }
     }
   };
 
   const handleSendVoiceDirect = async () => {
-    const result = await stopRecording();
-    if (!result || result.blob.size === 0) {
-      resetStatus();
-      return;
+    if (!isOpen || isSaving || actionLockRef.current !== null) return;
+    const generation = openGenerationRef.current;
+    const requestId = ++requestSequenceRef.current;
+    actionLockRef.current = 'voice';
+    let handedOff = false;
+
+    try {
+      const result = await stopRecording();
+      if (
+        !mountedRef.current ||
+        openGenerationRef.current !== generation ||
+        requestSequenceRef.current !== requestId
+      ) {
+        return;
+      }
+      if (result.kind !== 'success' || result.blob.size === 0) {
+        if (result.kind === 'empty' || result.kind === 'success') resetStatus();
+        return;
+      }
+      const base64 = await blobToBase64(result.blob);
+      if (
+        !mountedRef.current ||
+        openGenerationRef.current !== generation ||
+        requestSequenceRef.current !== requestId
+      ) {
+        return;
+      }
+      actionLockRef.current = null;
+      handedOff = true;
+      const aiRequestId = requestId + 1;
+      await sendToAi({ audioBase64: base64, mimeType: result.mimeType });
+      if (
+        !mountedRef.current ||
+        openGenerationRef.current !== generation ||
+        requestSequenceRef.current !== aiRequestId
+      ) {
+        return;
+      }
+    } catch (error: unknown) {
+      if (
+        mountedRef.current &&
+        openGenerationRef.current === generation &&
+        requestSequenceRef.current === requestId &&
+        !isAbortError(error)
+      ) {
+        setApiError(
+          error instanceof Error && error.message
+            ? error.message
+            : 'No pudimos preparar el audio. Intentá de nuevo.'
+        );
+      }
+    } finally {
+      if (
+        !handedOff &&
+        mountedRef.current &&
+        openGenerationRef.current === generation &&
+        requestSequenceRef.current === requestId
+      ) {
+        actionLockRef.current = null;
+      }
     }
-    const base64 = await blobToBase64(result.blob);
-    await sendToAi({ audioBase64: base64, mimeType: result.mimeType });
+  };
+
+  const handleStartVoice = () => {
+    if (!isOpen || isBusy || actionLockRef.current !== null) return;
+
+    const generation = openGenerationRef.current;
+    const requestId = ++requestSequenceRef.current;
+    actionLockRef.current = 'voice';
+
+    void startRecording().finally(() => {
+      if (
+        mountedRef.current &&
+        openGenerationRef.current === generation &&
+        requestSequenceRef.current === requestId
+      ) {
+        actionLockRef.current = null;
+      }
+    });
   };
 
   const handleTextSubmit = async () => {
     const trimmed = textInput.trim();
-    if (!trimmed || isBusy) return;
+    if (!trimmed || isBusy || actionLockRef.current !== null) return;
+    const generation = openGenerationRef.current;
+    const nextRequestId = requestSequenceRef.current + 1;
     setTextInput('');
     await sendToAi({ text: trimmed });
+    if (
+      !mountedRef.current ||
+      openGenerationRef.current !== generation ||
+      requestSequenceRef.current !== nextRequestId
+    ) {
+      return;
+    }
   };
 
-  const QuestIcon = questDraft ? getSideQuestIcon(questDraft.icon) : Trophy;
+  const handleSelectDraftTab = () => {
+    if (isSaving || actionLockRef.current === 'save') return;
+    invalidateActiveWork();
+    setActiveTab('draft');
+    setHasAiUpdatedDraft(false);
+  };
+
+  const handleEditManually = () => {
+    if (!questDraft || !onEditManually || isBusy || actionLockRef.current !== null) return;
+    openGenerationRef.current += 1;
+    invalidateActiveWork();
+    actionLockRef.current = 'manual';
+    onEditManually(questDraft);
+  };
+
+  const handleApplyQuest = async () => {
+    if (!questDraft || isBusy || actionLockRef.current !== null) return;
+    invalidateActiveWork();
+    const generation = openGenerationRef.current;
+    actionLockRef.current = 'save';
+    setIsApplying(true);
+    try {
+      await onApplyQuest(questDraft);
+      if (!mountedRef.current || openGenerationRef.current !== generation) return;
+    } catch (error: unknown) {
+      if (!mountedRef.current || openGenerationRef.current !== generation) return;
+      setApiError(
+        error instanceof Error && error.message ? error.message : 'No pudimos guardar la misión.'
+      );
+    } finally {
+      if (mountedRef.current && openGenerationRef.current === generation) {
+        actionLockRef.current = null;
+        setIsApplying(false);
+      }
+    }
+  };
+
   const lastAssistantId = [...messages].reverse().find((m) => m.role === 'assistant')?.id;
 
   const studioBody = (
-    <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+    <div className="h-full flex-1 min-h-0 flex flex-col overflow-hidden">
       {/* Header */}
       <header
         className="px-4 sm:px-5 pt-2.5 pb-3 border-b shrink-0 flex flex-col gap-2.5"
@@ -451,8 +755,8 @@ export default function AISideQuestSheet({
             {embedded && onBack ? (
               <button
                 type="button"
-                onClick={onBack}
-                aria-label="Volver al plan principal"
+                onClick={handleEmbeddedBack}
+                aria-label={backButtonLabel}
                 className="size-9 rounded-xl border flex items-center justify-center shrink-0 cursor-pointer active:scale-95 transition-transform duration-150 ease-out"
                 style={{
                   touchAction: 'manipulation',
@@ -499,7 +803,7 @@ export default function AISideQuestSheet({
               <button
                 type="button"
                 disabled={isBusy}
-                onClick={() => onApplyQuest(questDraft)}
+                onClick={() => void handleApplyQuest()}
                 className="min-h-[36px] px-3 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer active:scale-95 transition-transform duration-150 ease-out disabled:opacity-50"
                 style={{
                   touchAction: 'manipulation',
@@ -514,7 +818,7 @@ export default function AISideQuestSheet({
 
             <button
               type="button"
-              onClick={embedded && onBack ? onBack : onClose}
+              onClick={embedded && onBack ? handleEmbeddedBack : handleRequestClose}
               aria-label="Cerrar diseñador de misión"
               className="size-9 rounded-full flex items-center justify-center shrink-0 cursor-pointer active:scale-95 transition-transform duration-150 ease-out"
               style={{
@@ -530,56 +834,15 @@ export default function AISideQuestSheet({
 
         {/* Segmented Control: Conversación vs Misión (only when draft exists) */}
         {questDraft && (
-          <div
-            role="tablist"
-            aria-label="Vista del diseñador de misión"
-            className="grid grid-cols-2 gap-1 p-1 rounded-xl border"
-            style={{
-              backgroundColor: 'var(--surface-inset)',
-              borderColor: 'var(--border-subtle)',
-            }}
-          >
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeTab === 'chat'}
-              onClick={() => setActiveTab('chat')}
-              className="min-h-[34px] rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 cursor-pointer transition-colors duration-150 ease-out"
-              style={{
-                touchAction: 'manipulation',
-                backgroundColor: activeTab === 'chat' ? 'var(--surface-card)' : 'transparent',
-                color: activeTab === 'chat' ? 'var(--text-primary)' : 'var(--text-muted)',
-              }}
-            >
-              <MessageSquare className="size-3.5" />
-              <span>Conversación</span>
-            </button>
-
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeTab === 'draft'}
-              onClick={() => {
-                setActiveTab('draft');
-                setHasAiUpdatedDraft(false);
-              }}
-              className="min-h-[34px] rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 cursor-pointer transition-colors duration-150 ease-out"
-              style={{
-                touchAction: 'manipulation',
-                backgroundColor: activeTab === 'draft' ? 'var(--surface-card)' : 'transparent',
-                color: activeTab === 'draft' ? 'var(--text-primary)' : 'var(--text-muted)',
-              }}
-            >
-              <Trophy className="size-3.5" />
-              <span>Misión ({questDraft.tasks.length})</span>
-              {hasAiUpdatedDraft && activeTab !== 'draft' && (
-                <span
-                  className="size-2 rounded-full"
-                  style={{ backgroundColor: 'var(--accent-fill)' }}
-                />
-              )}
-            </button>
-          </div>
+          <AIStudioTabs
+            ariaLabel="Vista del diseñador de misión"
+            activeTab={activeTab}
+            draftIcon={Trophy}
+            draftLabel={<>Misión ({questDraft.tasks.length})</>}
+            hasUnreadDraftChanges={hasAiUpdatedDraft}
+            onChatSelect={() => setActiveTab('chat')}
+            onDraftSelect={handleSelectDraftTab}
+          />
         )}
       </header>
 
@@ -602,77 +865,14 @@ export default function AISideQuestSheet({
                 !isAiThinking;
 
               return (
-                <div
+                <AIConversationStreamItem
                   key={msg.id}
                   ref={isLast ? lastMsgRef : undefined}
-                  className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}
+                  role={msg.role}
+                  text={msg.text}
+                  viaVoice={msg.viaVoice}
+                  openQuestions={msg.openQuestions}
                 >
-                  <div
-                    className={`max-w-[90%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed border ${
-                      isUser ? 'rounded-br-md' : 'rounded-bl-md'
-                    }`}
-                    style={
-                      isUser
-                        ? {
-                            backgroundColor:
-                              'color-mix(in srgb, var(--accent-fill) 16%, var(--surface-raised))',
-                            borderColor:
-                              'color-mix(in srgb, var(--accent-fill) 38%, var(--border-subtle))',
-                            color: 'var(--text-primary)',
-                          }
-                        : {
-                            backgroundColor: 'var(--surface-inset)',
-                            borderColor: 'var(--border-subtle)',
-                            color: 'var(--text-primary)',
-                          }
-                    }
-                  >
-                    {!isUser && (
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <Sparkles className="size-3" style={{ color: 'var(--accent-text)' }} />
-                        <span
-                          className="text-[11px] font-semibold"
-                          style={{ color: 'var(--text-muted)' }}
-                        >
-                          Asistente IA
-                        </span>
-                      </div>
-                    )}
-
-                    <p className="whitespace-pre-line break-words">{msg.text}</p>
-
-                    {isUser && msg.viaVoice && (
-                      <span
-                        className="mt-1 inline-flex items-center gap-1 text-[10px]"
-                        style={{ color: 'var(--text-muted)' }}
-                      >
-                        <Mic className="size-3" />
-                        Audio enviado
-                      </span>
-                    )}
-
-                    {!isUser && msg.openQuestions && msg.openQuestions.length > 0 && (
-                      <ol
-                        className="mt-2.5 pt-2.5 border-t flex flex-col gap-2 text-xs"
-                        style={{ borderColor: 'var(--divider)', color: 'var(--text-secondary)' }}
-                      >
-                        {msg.openQuestions.map((question, qIdx) => (
-                          <li key={qIdx} className="flex items-start gap-2">
-                            <span
-                              className="size-4.5 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5 tabular-nums"
-                              style={{
-                                backgroundColor: 'var(--surface-raised)',
-                                color: 'var(--accent-text)',
-                              }}
-                            >
-                              {qIdx + 1}
-                            </span>
-                            <span className="leading-snug">{question}</span>
-                          </li>
-                        ))}
-                      </ol>
-                    )}
-                  </div>
 
                   {/* Compact Inline Proposal Card when AI creates/updates the quest */}
                   {!isUser && msg.proposalSummary && (
@@ -698,10 +898,7 @@ export default function AISideQuestSheet({
 
                       <button
                         type="button"
-                        onClick={() => {
-                          setActiveTab('draft');
-                          setHasAiUpdatedDraft(false);
-                        }}
+                        onClick={handleSelectDraftTab}
                         className="min-h-[36px] px-3 rounded-xl border text-xs font-semibold shrink-0 cursor-pointer active:scale-95 transition-transform duration-150 ease-out"
                         style={{
                           touchAction: 'manipulation',
@@ -728,7 +925,7 @@ export default function AISideQuestSheet({
                       }}
                     />
                   )}
-                </div>
+                </AIConversationStreamItem>
               );
             })}
 
@@ -828,7 +1025,9 @@ export default function AISideQuestSheet({
                       color: 'var(--accent-text)',
                     }}
                   >
-                    <QuestIcon className="size-4" />
+                    {React.createElement(getSideQuestIcon(questDraft.icon), {
+                      className: 'size-4',
+                    })}
                   </div>
                   <div className="min-w-0 flex-1">
                     <h3
@@ -899,25 +1098,7 @@ export default function AISideQuestSheet({
                             : 'transparent',
                         }}
                       >
-                        <span
-                          className="t-check mt-0.5 size-5 rounded-md border flex items-center justify-center shrink-0"
-                          aria-checked={isChecked}
-                          style={{
-                            backgroundColor: isChecked ? 'var(--accent-fill)' : 'transparent',
-                            borderColor: isChecked ? 'var(--accent-fill)' : 'var(--border-control)',
-                            color: 'var(--on-accent)',
-                          }}
-                        >
-                          <svg
-                            viewBox="0 0 10.1668 10.1668"
-                            className="size-3 fill-none stroke-current"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <path d="M1 5.52L3.92 9.17L9.17 1" />
-                          </svg>
-                        </span>
+                        <DraftSelectionIndicator checked={isChecked} />
 
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5 flex-wrap">
@@ -928,30 +1109,7 @@ export default function AISideQuestSheet({
                             >
                               {task.title}
                             </span>
-                            {task.changeType === 'added' && (
-                              <span
-                                className="text-[10px] font-semibold px-1.5 py-0.5 rounded"
-                                style={{
-                                  backgroundColor:
-                                    'color-mix(in srgb, var(--status-success) 16%, transparent)',
-                                  color: 'var(--status-success)',
-                                }}
-                              >
-                                Nueva
-                              </span>
-                            )}
-                            {task.changeType === 'modified' && (
-                              <span
-                                className="text-[10px] font-semibold px-1.5 py-0.5 rounded"
-                                style={{
-                                  backgroundColor:
-                                    'color-mix(in srgb, var(--status-info) 16%, transparent)',
-                                  color: 'var(--status-info)',
-                                }}
-                              >
-                                Editada
-                              </span>
-                            )}
+                            <DraftChangeBadge changeType={task.changeType} />
                           </div>
 
                           {task.description && (
@@ -1035,7 +1193,7 @@ export default function AISideQuestSheet({
               isSpeaking={isSpeaking}
               elapsedSeconds={elapsedSeconds}
               subscribeAudioMetrics={subscribeAudioMetrics}
-              onStartVoice={() => void startRecording()}
+              onStartVoice={handleStartVoice}
               onCancelVoice={cancelRecording}
               onPauseVoice={pauseRecording}
               onResumeVoice={resumeRecording}
@@ -1089,7 +1247,7 @@ export default function AISideQuestSheet({
                   <button
                     type="button"
                     disabled={isBusy}
-                    onClick={() => onEditManually(questDraft)}
+                    onClick={handleEditManually}
                     className="min-h-[44px] px-3.5 rounded-xl font-semibold text-xs border inline-flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-transform duration-150 ease-out disabled:opacity-50"
                     style={{
                       touchAction: 'manipulation',
@@ -1106,7 +1264,7 @@ export default function AISideQuestSheet({
                 <button
                   type="button"
                   disabled={isBusy}
-                  onClick={() => onApplyQuest(questDraft)}
+                  onClick={() => void handleApplyQuest()}
                   className="flex-1 min-h-[44px] px-4 rounded-xl font-semibold text-sm inline-flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98] transition-transform duration-150 ease-out disabled:opacity-50"
                   style={{
                     touchAction: 'manipulation',
@@ -1134,6 +1292,8 @@ export default function AISideQuestSheet({
     <AnimatePresence>
       {isOpen && (
         <div
+          ref={dialogRef}
+          tabIndex={-1}
           className="fixed inset-0 z-[140] flex items-end sm:items-center justify-center sm:p-4"
           role="dialog"
           aria-modal="true"
@@ -1143,7 +1303,7 @@ export default function AISideQuestSheet({
           <motion.button
             type="button"
             aria-label="Cerrar asistente de misión secundaria"
-            onClick={onClose}
+            onClick={handleRequestClose}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -1203,7 +1363,7 @@ export default function AISideQuestSheet({
             dragMomentum={false}
             onDragEnd={(_, info) => {
               if (shouldDismissSheet(info.offset.y, info.velocity.y)) {
-                onClose();
+                handleRequestClose();
               } else {
                 animate(sheetY, 0, {
                   ...SHEET_SNAP_SPRING,

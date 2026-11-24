@@ -60,6 +60,10 @@ export const aiTaskSchema = z.object({
   title: boundedString(120),
   description: boundedString(500),
   icon: z.enum(ALLOWED_ICONS),
+  cadence: z.enum(['daily', 'weekly', 'monthly']).optional().default('daily'),
+  measurementType: z.enum(['boolean', 'count', 'numeric']).optional().default('boolean'),
+  targetValue: z.number().positive().optional().default(1),
+  targetUnit: optionalBoundedString(30),
   changeType: z.enum(['kept', 'modified', 'added']).optional(),
 });
 
@@ -158,6 +162,7 @@ export const aiUserContextSchema = z.object({
 });
 
 export type AiTask = z.infer<typeof aiTaskSchema>;
+export type AiTaskInput = z.input<typeof aiTaskSchema>;
 export type AiSideQuestSuggestion = z.infer<typeof aiSideQuestSuggestionSchema>;
 export type AiPlanResponse = z.infer<typeof aiPlanResponseSchema>;
 export type AiSideQuestTask = z.infer<typeof aiSideQuestTaskSchema>;
@@ -175,7 +180,7 @@ export interface ProcessCustomPlanInput {
   mimeType?: string;
   textInput?: string;
   history?: ConversationTurn[];
-  currentTasks?: AiTask[];
+  currentTasks?: AiTaskInput[];
   selectedTaskIds?: string[];
   understoodFacts?: string[];
   userContext?: AiUserContext;

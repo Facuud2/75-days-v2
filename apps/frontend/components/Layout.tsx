@@ -20,6 +20,31 @@ const LogWorkoutModal = dynamic(() => import('@/components/LogWorkoutModal'), { 
 const QuickActionsSheet = dynamic(() => import('@/components/QuickActionsSheet'), { ssr: false });
 const LogoutConfirmSheet = dynamic(() => import('@/components/profile/LogoutConfirmSheet'), { ssr: false });
 
+/**
+ * Custom palettes can pick an arbitrarily bright accent. In dark appearance the
+ * accent fill is used raw, so pick the text colour that keeps WCAG AA contrast
+ * instead of assuming white.
+ */
+function relativeLuminance(color: string): number | null {
+  const match = /^#([0-9a-f]{6})$/i.exec(color.trim());
+  if (!match) return null;
+  const value = Number.parseInt(match[1], 16);
+  const channels = [(value >> 16) & 255, (value >> 8) & 255, value & 255].map((channel) => {
+    const normalized = channel / 255;
+    return normalized <= 0.03928
+      ? normalized / 12.92
+      : Math.pow((normalized + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+}
+
+function pickOnAccent(accentFill: string): string {
+  const luminance = relativeLuminance(accentFill);
+  if (luminance === null) return '#ffffff';
+  const contrastWithWhite = 1.05 / (luminance + 0.05);
+  return contrastWithWhite >= 4.5 ? '#ffffff' : '#111111';
+}
+
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, logout, user } = useAuthStore();
   const { appearance, colorPalette, customPalette, setAppearance, resetTheme } = useThemeStore();
@@ -87,6 +112,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       roseShades.forEach((s) => root.style.removeProperty(`--color-rose-${s}`));
     }
   }, [colorPalette, customPalette]);
+
+  // Custom palettes bypass the static --on-accent overrides, so derive the
+  // readable label colour for the resolved appearance at runtime.
+  useEffect(() => {
+    const root = document.documentElement;
+    const isDark = root.getAttribute('data-appearance') === 'dark';
+    if (colorPalette === 'custom' && isDark) {
+      root.style.setProperty('--on-accent', pickOnAccent(customPalette.secondary));
+    } else {
+      root.style.removeProperty('--on-accent');
+    }
+  }, [appearance, colorPalette, customPalette]);
 
   // Auth surfaces own the full viewport (safe areas, status bar, scroll) and
   // must not inherit the app header or the padded content shell.

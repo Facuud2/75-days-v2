@@ -38,10 +38,32 @@ export default function VoiceSessionOverlay({
 }: VoiceSessionOverlayProps) {
   const barRefs = useRef<Array<HTMLSpanElement | null>>([]);
   const isPaused = status === 'paused';
-  const isTranscribing = status === 'transcribing';
+  const isRecorderVisual = status === 'recording' || isPaused;
+  const pendingCopy =
+    status === 'requesting-permission'
+      ? {
+          title: 'Solicitando acceso al micrófono...',
+          description: 'Aceptá el permiso del navegador para empezar a grabar',
+        }
+      : status === 'stopping'
+        ? {
+            title: 'Cerrando la grabación...',
+            description: 'Estamos preparando el audio de forma segura',
+          }
+        : status === 'processing'
+          ? {
+              title: 'Enviando tu mensaje a la IA...',
+              description: 'Podés cerrar esta vista; no enviaremos respuestas a otra sesión',
+            }
+          : status === 'transcribing'
+            ? {
+                title: 'Transcribiendo a texto...',
+                description: 'Vas a poder revisarlo y editarlo antes de enviar',
+              }
+            : null;
 
   useEffect(() => {
-    if (isTranscribing) return;
+    if (!isRecorderVisual) return;
     return subscribeAudioMetrics(({ bands, isSpeaking: active }) => {
       for (let i = 0; i < VISUAL_BARS; i++) {
         const el = barRefs.current[i];
@@ -55,13 +77,14 @@ export default function VoiceSessionOverlay({
         el.style.opacity = active ? '1' : '0.38';
       }
     });
-  }, [subscribeAudioMetrics, isTranscribing]);
+  }, [isRecorderVisual, subscribeAudioMetrics]);
 
-  if (isTranscribing) {
+  if (pendingCopy) {
     return (
       <div
         role="status"
         aria-live="polite"
+        aria-busy="true"
         className="rounded-2xl border p-3.5 flex items-center justify-between gap-3"
         style={{
           backgroundColor: 'var(--surface-inset)',
@@ -81,11 +104,11 @@ export default function VoiceSessionOverlay({
             <Loader2 className="size-4 animate-spin" />
           </div>
           <div className="min-w-0">
-            <p className="text-xs font-semibold truncate" style={{ color: 'var(--text-primary)' }}>
-              Transcribiendo a texto...
+            <p className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
+              {pendingCopy.title}
             </p>
-            <p className="text-[11px] truncate" style={{ color: 'var(--text-muted)' }}>
-              Vas a poder revisarlo y editarlo antes de enviar
+            <p className="text-[11px] leading-snug" style={{ color: 'var(--text-muted)' }}>
+              {pendingCopy.description}
             </p>
           </div>
         </div>

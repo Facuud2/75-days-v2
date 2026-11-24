@@ -6,7 +6,7 @@ const email = 'p@a.com';
 const password = '123456';
 
 test.describe('75 Days Challenge — pilares críticos', () => {
-  test('recorre activación, dashboard, registros y progreso', async ({ page }) => {
+  test('recorre activación, dashboard, registros y progreso', async ({ page }, testInfo) => {
     test.setTimeout(120_000);
     const consoleMessages: Array<{ type: string; text: string }> = [];
     const failedRequests: Array<{ status: number; url: string }> = [];
@@ -23,18 +23,27 @@ test.describe('75 Days Challenge — pilares críticos', () => {
     });
 
     await page.goto('/login');
-    await page.screenshot({ path: 'test-results/audit-login-before.png', fullPage: true });
+    await page.screenshot({
+      path: testInfo.outputPath('audit-login-before.png'),
+      fullPage: true,
+    });
 
     await page.getByRole('button', { name: /Continuar con email/i }).click();
     await page.locator('input[type="email"]').fill(email);
     await page.locator('input[type="password"]').fill(password);
-    await page.screenshot({ path: 'test-results/audit-login-filled.png', fullPage: true });
+    await page.screenshot({
+      path: testInfo.outputPath('audit-login-filled.png'),
+      fullPage: true,
+    });
     await page.getByRole('button', { name: /iniciar sesión/i }).click();
     await page.waitForLoadState('networkidle');
 
     if (page.url().includes('/onboarding')) {
       await expect(page.getByRole('heading', { name: 'Sobre Vos' })).toBeVisible();
-      await page.screenshot({ path: 'test-results/audit-onboarding-step-1.png', fullPage: true });
+      await page.screenshot({
+        path: testInfo.outputPath('audit-onboarding-step-1.png'),
+        fullPage: true,
+      });
 
       await page.locator('input[type="number"]').nth(0).fill('32');
       await page.locator('select').nth(0).selectOption('75');
@@ -43,7 +52,10 @@ test.describe('75 Days Challenge — pilares críticos', () => {
       await page.getByRole('button', { name: /siguiente/i }).click();
 
       await expect(page.getByRole('heading', { name: 'Actividades Dinámicas' })).toBeVisible();
-      await page.screenshot({ path: 'test-results/audit-onboarding-step-2.png', fullPage: true });
+      await page.screenshot({
+        path: testInfo.outputPath('audit-onboarding-step-2.png'),
+        fullPage: true,
+      });
       await page.getByRole('button', { name: /saltar/i }).click();
 
       await expect(page.getByRole('heading', { name: 'Elegí la Dificultad' })).toBeVisible();
@@ -52,7 +64,10 @@ test.describe('75 Days Challenge — pilares críticos', () => {
 
     await expect(page).toHaveURL(/\/dashboard$/);
     await expect(page.getByText('Tareas de Hoy')).toBeVisible();
-    await page.screenshot({ path: 'test-results/audit-dashboard-before.png', fullPage: true });
+    await page.screenshot({
+      path: testInfo.outputPath('audit-dashboard-before.png'),
+      fullPage: true,
+    });
 
     // Primary daily action: complete one goal and verify the visible state changes.
     const firstGoal = page.locator('div.group').filter({ has: page.locator('h3') }).first();
@@ -64,21 +79,33 @@ test.describe('75 Days Challenge — pilares críticos', () => {
     } else {
       await expect(firstGoal.locator('h3')).toHaveClass(/line-through/);
     }
-    await page.screenshot({ path: 'test-results/audit-dashboard-after-goal.png', fullPage: true });
+    await page.screenshot({
+      path: testInfo.outputPath('audit-dashboard-after-goal.png'),
+      fullPage: true,
+    });
 
     // Detail surface: open the first available calendar day.
     await page.locator('.aspect-square.cursor-pointer').first().click();
-    await page.screenshot({ path: 'test-results/audit-day-detail.png', fullPage: true });
+    await page.screenshot({
+      path: testInfo.outputPath('audit-day-detail.png'),
+      fullPage: true,
+    });
     await page.locator('div.fixed').last().getByRole('button').first().click();
 
     // Primary health actions exposed in the application navigation.
     await page.getByRole('button', { name: 'Abrir acciones rápidas' }).click();
     await page.getByRole('button', { name: 'Registrar comida' }).click();
-    await page.screenshot({ path: 'test-results/audit-food-modal.png', fullPage: true });
+    await page.screenshot({
+      path: testInfo.outputPath('audit-food-modal.png'),
+      fullPage: true,
+    });
     await page.locator('div.fixed').last().getByRole('button').first().click();
     await page.getByRole('button', { name: 'Abrir acciones rápidas' }).click();
     await page.getByRole('button', { name: 'Registrar entrenamiento' }).click();
-    await page.screenshot({ path: 'test-results/audit-workout-modal.png', fullPage: true });
+    await page.screenshot({
+      path: testInfo.outputPath('audit-workout-modal.png'),
+      fullPage: true,
+    });
     await page.locator('div.fixed').last().getByRole('button').first().click();
 
     const axeByRoute: Record<string, Array<{ id: string; impact: string | null; nodes: number }>> = {};
@@ -91,14 +118,20 @@ test.describe('75 Days Challenge — pilares críticos', () => {
         impact: violation.impact ?? null,
         nodes: violation.nodes.length,
       }));
-      await page.screenshot({ path: `test-results/audit-${route.slice(1)}.png`, fullPage: true });
+      await page.screenshot({
+        path: testInfo.outputPath(`audit-${route.slice(1)}.png`),
+        fullPage: true,
+      });
     }
 
     await test.info().attach('axe-summary.json', {
       body: JSON.stringify(axeByRoute, null, 2),
       contentType: 'application/json',
     });
-    await writeFile('test-results/axe-summary.json', JSON.stringify(axeByRoute, null, 2));
+    await writeFile(
+      testInfo.outputPath('axe-summary.json'),
+      JSON.stringify(axeByRoute, null, 2)
+    );
 
     const hardAxeViolations = Object.values(axeByRoute)
       .flat()
@@ -107,7 +140,10 @@ test.describe('75 Days Challenge — pilares críticos', () => {
       body: JSON.stringify({ consoleMessages, failedRequests, hardAxeViolations }, null, 2),
       contentType: 'application/json',
     });
-    await writeFile('test-results/runtime-summary.json', JSON.stringify({ consoleMessages, failedRequests, hardAxeViolations }, null, 2));
+    await writeFile(
+      testInfo.outputPath('runtime-summary.json'),
+      JSON.stringify({ consoleMessages, failedRequests, hardAxeViolations }, null, 2)
+    );
     expect(hardAxeViolations, `axe critical/serious summary: ${JSON.stringify(hardAxeViolations)}`).toEqual([]);
 
     expect(consoleMessages, `console errors/warnings: ${JSON.stringify(consoleMessages)}`).toEqual([]);

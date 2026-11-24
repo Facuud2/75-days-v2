@@ -1,12 +1,17 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { animate, motion, useDragControls, useMotionValue, useReducedMotion } from 'motion/react';
 import { useUIStore } from '@/store/useUIStore';
 import { useChallengeStore, Difficulty } from '@/store/useChallengeStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useQuestStore } from '@/store/useQuestStore';
 import type { AiSideQuestDraft, AiUserContext } from '@/lib/api/ai';
+import {
+  SHEET_SNAP_SPRING,
+  shouldDismissSheet,
+} from '@/lib/motion/sheetPhysics';
 import {
   ArrowLeft,
   Calendar,
@@ -27,6 +32,17 @@ import CustomTaskEditorSheet, {
   type CustomTask,
 } from '@/components/onboarding/CustomTaskEditorSheet';
 import AICustomPlanSheet from '@/components/onboarding/AICustomPlanSheet';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
+
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+type PlansModalView = 'plans' | 'modify' | 'custom-editor' | 'ai-plan';
+type PlansModalTitleId =
+  | 'plans-modal-title'
+  | 'custom-editor-title'
+  | 'ai-plan-sheet-title'
+  | 'ai-side-quest-title';
 
 export const PLANS: {
   difficulty: Difficulty;
@@ -116,13 +132,53 @@ export default function PlansModal() {
   const { user } = useAuthStore();
   const { quests, createCustomQuest } = useQuestStore();
 
-  const [difficulty, setDifficulty] = useState<Difficulty>(currentDifficulty || 'Hard');
-  const [customTasks, setCustomTasks] = useState<CustomTask[]>(DEFAULT_CUSTOM_TASKS);
+  const [difficulty, setDifficulty] = useState<Difficulty>(() => currentDifficulty || 'Hard');
+  const [customTasks, setCustomTasks] = useState<CustomTask[]>(() =>
+    currentDifficulty === 'Custom' && customGoalsTemplate.length > 0
+      ? customGoalsTemplate.map((goal, index) => ({
+          id: goal.id || `existing-${index}-${goal.title}`,
+          title: goal.title,
+          description: goal.description || '',
+          icon: goal.icon || 'dumbbell',
+          cadence: goal.cadence || 'daily',
+          measurementType: goal.measurementType || 'boolean',
+          targetValue: goal.targetValue ?? 1,
+          targetUnit: goal.targetUnit ?? '',
+        }))
+      : DEFAULT_CUSTOM_TASKS
+  );
   const [pendingAiSideQuests, setPendingAiSideQuests] = useState<AiSideQuestDraft[]>([]);
   const [isCustomEditorOpen, setIsCustomEditorOpen] = useState(false);
   const [isAiPlanSheetOpen, setIsAiPlanSheetOpen] = useState(false);
   const [showModifyChoiceView, setShowModifyChoiceView] = useState(false);
   const [isSavingCustom, setIsSavingCustom] = useState(false);
+  const [aiTitleId, setAiTitleId] =
+    useState<Extract<PlansModalTitleId, 'ai-plan-sheet-title' | 'ai-side-quest-title'>>(
+      'ai-plan-sheet-title'
+    );
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const aiBackHandlerRef = useRef<(() => boolean) | null>(null);
+  const aiDismissLockedRef = useRef(false);
+  const rootActionLockRef = useRef(false);
+  const dragControls = useDragControls();
+  const sheetY = useMotionValue(0);
+  const reduceMotion = useReducedMotion();
+  const isMobileSheet = useMediaQuery('(max-width: 639px)');
+
+  const currentView: PlansModalView = isCustomEditorOpen
+    ? 'custom-editor'
+    : isAiPlanSheetOpen
+      ? 'ai-plan'
+      : showModifyChoiceView
+        ? 'modify'
+        : 'plans';
+  const titleId: PlansModalTitleId =
+    currentView === 'custom-editor'
+      ? 'custom-editor-title'
+      : currentView === 'ai-plan'
+        ? aiTitleId
+        : 'plans-modal-title';
 
   const plansModalUserContext = useMemo<AiUserContext>(
     () => ({
@@ -151,68 +207,171 @@ export default function PlansModal() {
     difficulty === currentDifficulty &&
     difficulty !== 'Custom';
 
-  useEffect(() => {
-    if (!isPlansModalOpen) return;
-    setDifficulty(currentDifficulty || 'Hard');
-    setShowModifyChoiceView(false);
-    setPendingAiSideQuests([]);
-    if (currentDifficulty === 'Custom' && customGoalsTemplate.length > 0) {
-      setCustomTasks(
-        customGoalsTemplate.map((g, idx) => ({
-          id: `existing-${idx}-${g.title}`,
-          title: g.title,
-          description: g.description || '',
-          icon: g.icon || 'dumbbell',
-        }))
-      );
-    } else {
-      setCustomTasks(DEFAULT_CUSTOM_TASKS);
-    }
-  }, [isPlansModalOpen, currentDifficulty, customGoalsTemplate]);
-
   const handleClose = useCallback(() => {
+    if (isSavingCustom || aiDismissLockedRef.current || rootActionLockRef.current) return;
+    aiBackHandlerRef.current = null;
+    aiDismissLockedRef.current = false;
     setIsCustomEditorOpen(false);
     setIsAiPlanSheetOpen(false);
     setShowModifyChoiceView(false);
+    setAiTitleId('ai-plan-sheet-title');
     closePlansModal();
-  }, [closePlansModal]);
+  }, [closePlansModal, isSavingCustom]);
+
+  const handleAiBackHandlerChange = useCallback((handler: (() => boolean) | null) => {
+    aiBackHandlerRef.current = handler;
+  }, []);
+
+  const handleAiDismissLockChange = useCallback((locked: boolean) => {
+    aiDismissLockedRef.current = locked;
+  }, []);
+
+  const closeCustomEditor = useCallback(() => {
+    const validTasks = customTasks.filter((task) => task.title.trim() !== '');
+    setCustomTasks(validTasks);
+    setIsCustomEditorOpen(false);
+    if (isActiveCustom && validTasks.length > 0) {
+      setShowModifyChoiceView(true);
+    }
+  }, [customTasks, isActiveCustom]);
+
+  const handleBack = useCallback(() => {
+    if (isSavingCustom || aiDismissLockedRef.current || rootActionLockRef.current) return;
+    if (isCustomEditorOpen) {
+      closeCustomEditor();
+      return;
+    }
+    if (isAiPlanSheetOpen) {
+      if (aiBackHandlerRef.current?.()) return;
+      aiBackHandlerRef.current = null;
+      setIsAiPlanSheetOpen(false);
+      setAiTitleId('ai-plan-sheet-title');
+      return;
+    }
+    if (showModifyChoiceView) {
+      setShowModifyChoiceView(false);
+      return;
+    }
+    handleClose();
+  }, [
+    closeCustomEditor,
+    handleClose,
+    isAiPlanSheetOpen,
+    isCustomEditorOpen,
+    isSavingCustom,
+    showModifyChoiceView,
+  ]);
 
   useEffect(() => {
     if (!isPlansModalOpen) return;
+
+    previousFocusRef.current = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const focusTimer = window.setTimeout(() => {
+      const dialog = dialogRef.current;
+      if (!dialog?.contains(document.activeElement)) {
+        dialog?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)?.focus();
+      }
+    }, 0);
+
+    return () => {
+      window.clearTimeout(focusTimer);
+      document.body.style.overflow = previousOverflow;
+      previousFocusRef.current?.focus?.();
+    };
+  }, [isPlansModalOpen]);
+
+  useEffect(() => {
+    if (!isPlansModalOpen) return;
+    const focusTimer = window.setTimeout(() => {
+      const dialog = dialogRef.current;
+      if (!dialog?.contains(document.activeElement)) {
+        dialog?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)?.focus();
+      }
+    }, 0);
+    return () => window.clearTimeout(focusTimer);
+  }, [aiTitleId, currentView, isPlansModalOpen]);
+
+  useEffect(() => {
+    if (!isPlansModalOpen) {
+      aiBackHandlerRef.current = null;
+    }
+  }, [isPlansModalOpen]);
+
+  useEffect(() => {
+    if (!isPlansModalOpen) return;
+    sheetY.set(0);
+
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      if (isCustomEditorOpen || isAiPlanSheetOpen) return;
-      if (showModifyChoiceView) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
         event.stopPropagation();
-        if (!isSavingCustom) setShowModifyChoiceView(false);
+        handleBack();
         return;
       }
-      event.stopPropagation();
-      handleClose();
+
+      if (event.key !== 'Tab') return;
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+      const focusable = Array.from(
+        dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
+      ).filter((element) => element.offsetParent !== null || element === document.activeElement);
+      if (focusable.length === 0) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const activeInDialog = dialog.contains(document.activeElement);
+      if (
+        event.shiftKey &&
+        (!activeInDialog || document.activeElement === first || document.activeElement === dialog)
+      ) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (!activeInDialog || document.activeElement === last)) {
+        event.preventDefault();
+        first.focus();
+      }
     };
+
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [
-    isPlansModalOpen,
-    isCustomEditorOpen,
-    isAiPlanSheetOpen,
-    showModifyChoiceView,
-    isSavingCustom,
-    handleClose,
-  ]);
+  }, [handleBack, isPlansModalOpen, sheetY]);
 
   if (!isPlansModalOpen) return null;
 
   const formatCustomGoals = (tasksToFormat: CustomTask[]) =>
     tasksToFormat
       .filter((task) => task.title.trim())
-      .map(({ title, description, icon }) => ({
-        title: title.trim(),
-        description: description.trim(),
-        icon,
-      }));
+      .map(
+        ({
+          id,
+          title,
+          description,
+          icon,
+          cadence,
+          measurementType,
+          targetValue,
+          targetUnit,
+        }) => ({
+          id,
+          title: title.trim(),
+          description: description.trim(),
+          icon,
+          cadence: cadence || 'daily',
+          measurementType: measurementType || 'boolean',
+          targetValue: targetValue ?? 1,
+          targetUnit: targetUnit?.trim() || null,
+        })
+      );
 
   const handleStart = async () => {
+    if (rootActionLockRef.current || isSavingCustom) return;
     if (isActive) {
       if (isCurrentPlan) return;
       if (difficulty === 'Custom' && isActiveCustom) {
@@ -228,9 +387,15 @@ export default function PlansModal() {
       }
     }
     const formattedCustomGoals = formatCustomGoals(customTasks);
-    await startChallenge(difficulty, difficulty === 'Custom' ? formattedCustomGoals : undefined);
-    handleClose();
-    router.push('/dashboard');
+    rootActionLockRef.current = true;
+    try {
+      await startChallenge(difficulty, difficulty === 'Custom' ? formattedCustomGoals : undefined);
+      rootActionLockRef.current = false;
+      handleClose();
+      router.push('/dashboard');
+    } finally {
+      rootActionLockRef.current = false;
+    }
   };
 
   const persistPendingSideQuests = async (sideQuestsToCreate: AiSideQuestDraft[]) => {
@@ -257,31 +422,39 @@ export default function PlansModal() {
   };
 
   const handleContinueActiveCustom = async () => {
+    if (rootActionLockRef.current || isSavingCustom) return;
     const formattedCustomGoals = formatCustomGoals(customTasks);
     if (formattedCustomGoals.length === 0) return;
+    rootActionLockRef.current = true;
     setIsSavingCustom(true);
     try {
       await updateCustomGoals(formattedCustomGoals);
       await persistPendingSideQuests(pendingAiSideQuests);
       setPendingAiSideQuests([]);
+      rootActionLockRef.current = false;
       handleClose();
       router.push('/dashboard');
     } finally {
+      rootActionLockRef.current = false;
       setIsSavingCustom(false);
     }
   };
 
   const handleRestartActiveCustom = async () => {
+    if (rootActionLockRef.current || isSavingCustom) return;
     const formattedCustomGoals = formatCustomGoals(customTasks);
     if (formattedCustomGoals.length === 0) return;
+    rootActionLockRef.current = true;
     setIsSavingCustom(true);
     try {
       await startChallenge('Custom', formattedCustomGoals);
       await persistPendingSideQuests(pendingAiSideQuests);
       setPendingAiSideQuests([]);
+      rootActionLockRef.current = false;
       handleClose();
       router.push('/dashboard');
     } finally {
+      rootActionLockRef.current = false;
       setIsSavingCustom(false);
     }
   };
@@ -294,6 +467,7 @@ export default function PlansModal() {
   };
 
   const openAiDesigner = () => {
+    setAiTitleId('ai-plan-sheet-title');
     setIsAiPlanSheetOpen(true);
   };
 
@@ -312,28 +486,122 @@ export default function PlansModal() {
           })
       : fallbackTasks.map((t) => ({ ...t, description: '' }));
 
-  // Hide parent sheet shell while child AI / Manual sheet is active so zero stacked sheets fight on mobile
-  const hideParentShell = isCustomEditorOpen || isAiPlanSheetOpen;
-
   return (
-    <>
-      {!hideParentShell && (
-        <div
-          className="mobile-sheet-root fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/75 backdrop-blur-[3px]"
-          onClick={handleClose}
-        >
+    <div
+      className="mobile-sheet-root fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/75 backdrop-blur-[3px]"
+      onClick={handleBack}
+    >
+      <motion.div
+        ref={dialogRef}
+        tabIndex={-1}
+        className="relative w-full max-w-5xl overflow-hidden border border-b-0 rounded-t-3xl pb-[env(safe-area-inset-bottom,0px)] shadow-2xl flex flex-col h-[92dvh] max-h-[min(92dvh,100%)] sm:h-auto sm:max-h-[92dvh] sm:rounded-2xl sm:border-b sm:pb-0"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        style={{
+          y: sheetY,
+          backgroundColor: 'var(--surface-card)',
+          borderColor: 'var(--border-subtle)',
+          color: 'var(--text-primary)',
+        }}
+        drag={isMobileSheet && !reduceMotion ? 'y' : false}
+        dragListener={false}
+        dragControls={dragControls}
+        dragConstraints={{ top: 0 }}
+        dragElastic={{ top: 0, bottom: 0.25 }}
+        dragMomentum={false}
+        onDragEnd={(_, info) => {
+          if (shouldDismissSheet(info.offset.y, info.velocity.y)) {
+            handleBack();
+          } else {
+            animate(sheetY, 0, {
+              ...SHEET_SNAP_SPRING,
+              velocity: info.velocity.y,
+            });
+          }
+        }}
+        onClick={(event) => event.stopPropagation()}
+      >
+        {isMobileSheet && (
           <div
-            className="mobile-sheet-panel border rounded-2xl w-full max-w-5xl overflow-hidden shadow-2xl flex flex-col max-h-[92dvh]"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="plans-modal-title"
-            style={{
-              backgroundColor: 'var(--surface-card)',
-              borderColor: 'var(--border-subtle)',
-              color: 'var(--text-primary)',
-            }}
-            onClick={(e) => e.stopPropagation()}
+            className="flex h-6 shrink-0 items-center justify-center cursor-grab touch-none active:cursor-grabbing"
+            aria-hidden="true"
+            onPointerDown={(event) => dragControls.start(event)}
           >
+            <span className="h-1 w-10 rounded-full bg-[var(--border-control)]" />
+          </div>
+        )}
+
+        {currentView === 'custom-editor' ? (
+          <CustomTaskEditorSheet
+            isOpen
+            embedded
+            tasks={customTasks}
+            onChange={setCustomTasks}
+            onClose={closeCustomEditor}
+          />
+        ) : currentView === 'ai-plan' ? (
+          <AICustomPlanSheet
+            isOpen
+            embedded
+            onTitleIdChange={setAiTitleId}
+            onBackHandlerChange={handleAiBackHandlerChange}
+            onDismissLockChange={handleAiDismissLockChange}
+            initialTasks={customTasks}
+            userContext={plansModalUserContext}
+            saveButtonLabel={
+              isActiveCustom ? 'Guardar cambios del plan' : 'Guardar todo y comenzar plan'
+            }
+            isSaving={isSavingCustom}
+            onApplyPlan={async (tasks, createdSideQuests = []) => {
+              const validTasks = tasks.filter((task) => task.title.trim() !== '');
+              setCustomTasks(validTasks);
+              if (validTasks.length === 0) {
+                setIsAiPlanSheetOpen(false);
+                setAiTitleId('ai-plan-sheet-title');
+                return;
+              }
+
+              if (isActiveCustom) {
+                setPendingAiSideQuests(createdSideQuests);
+                setIsAiPlanSheetOpen(false);
+                setAiTitleId('ai-plan-sheet-title');
+                setShowModifyChoiceView(true);
+                return;
+              }
+
+              if (
+                isActive &&
+                !confirm(
+                  'Ya tienes un desafío activo. ¿Estás seguro de que quieres reiniciarlo con este nuevo plan Custom? Perderás tu racha actual.'
+                )
+              ) {
+                return;
+              }
+
+              setIsSavingCustom(true);
+              try {
+                await startChallenge('Custom', formatCustomGoals(validTasks));
+                await persistPendingSideQuests(createdSideQuests);
+                handleClose();
+                router.push('/dashboard');
+              } finally {
+                setIsSavingCustom(false);
+              }
+            }}
+            onEditManually={(tasks) => {
+              setCustomTasks(tasks);
+              setIsAiPlanSheetOpen(false);
+              setAiTitleId('ai-plan-sheet-title');
+              setIsCustomEditorOpen(true);
+            }}
+            onClose={() => {
+              setIsAiPlanSheetOpen(false);
+              setAiTitleId('ai-plan-sheet-title');
+            }}
+          />
+        ) : (
+          <>
             {/* Header */}
             <div
               className="flex items-center justify-between gap-3 px-4 py-3.5 sm:px-7 sm:py-4 border-b shrink-0"
@@ -814,73 +1082,9 @@ export default function PlansModal() {
                 </div>
               </div>
             )}
-          </div>
-        </div>
-      )}
-
-      <CustomTaskEditorSheet
-        isOpen={isCustomEditorOpen}
-        tasks={customTasks}
-        onChange={setCustomTasks}
-        onClose={() => {
-          const validTasks = customTasks.filter((t) => t.title.trim() !== '');
-          setCustomTasks(validTasks);
-          setIsCustomEditorOpen(false);
-          if (isActiveCustom && validTasks.length > 0) {
-            setShowModifyChoiceView(true);
-          }
-        }}
-      />
-
-      <AICustomPlanSheet
-        isOpen={isAiPlanSheetOpen}
-        initialTasks={customTasks}
-        userContext={plansModalUserContext}
-        saveButtonLabel={
-          isActiveCustom ? 'Guardar cambios del plan' : 'Guardar todo y comenzar plan'
-        }
-        isSaving={isSavingCustom}
-        onApplyPlan={async (tasks, createdSideQuests = []) => {
-          const validTasks = tasks.filter((t) => t.title.trim() !== '');
-          setCustomTasks(validTasks);
-          if (validTasks.length === 0) {
-            setIsAiPlanSheetOpen(false);
-            return;
-          }
-
-          if (isActiveCustom) {
-            setPendingAiSideQuests(createdSideQuests);
-            setIsAiPlanSheetOpen(false);
-            setShowModifyChoiceView(true);
-            return;
-          }
-
-          if (
-            isActive &&
-            !confirm(
-              'Ya tienes un desafío activo. ¿Estás seguro de que quieres reiniciarlo con este nuevo plan Custom? Perderás tu racha actual.'
-            )
-          ) {
-            return;
-          }
-
-          setIsSavingCustom(true);
-          try {
-            await startChallenge('Custom', formatCustomGoals(validTasks));
-            await persistPendingSideQuests(createdSideQuests);
-            handleClose();
-            router.push('/dashboard');
-          } finally {
-            setIsSavingCustom(false);
-          }
-        }}
-        onEditManually={(tasks) => {
-          setCustomTasks(tasks);
-          setIsAiPlanSheetOpen(false);
-          setIsCustomEditorOpen(true);
-        }}
-        onClose={() => setIsAiPlanSheetOpen(false)}
-      />
-    </>
+          </>
+        )}
+      </motion.div>
+    </div>
   );
 }

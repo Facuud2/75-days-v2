@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 test.describe('mobile platform baseline', () => {
-  test('phone and tablet have no horizontal overflow', async ({ page }) => {
+  test('phone and tablet have no horizontal overflow', async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto('/login');
     await page.getByRole('button', { name: /Continuar con email/i }).click();
@@ -45,7 +45,10 @@ test.describe('mobile platform baseline', () => {
       } else {
         await expect(page.locator('.mobile-bottom-nav')).toBeHidden();
       }
-      await page.screenshot({ path: `test-results/mobile-${viewport.name}.png`, fullPage: true });
+      await page.screenshot({
+        path: testInfo.outputPath(`mobile-${viewport.name}.png`),
+        fullPage: true,
+      });
     }
   });
 });

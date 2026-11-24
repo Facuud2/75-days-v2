@@ -1,0 +1,33 @@
+chore: finish mobile AI refactor for Gemini-style voice input
+
+- Voice UX: mic, pause/resume, square stop, cancel, editable transcript review, direct-send, audio-reactive visuals, safe areas, race-safe cleanup
+- Quick replies: AI-selected single/multiple modes with visible mode label
+- Shared conversation UI preserves standalone onboarding behavior and accessible names
+- PlansModal/SideQuestsModal retain one persistent outer role="dialog" with parent ownership of Escape, backdrop, drag, naming, focus trap, external focus restoration
+- false→true init, per-open generations, owned AbortControllers, stale post-await/catch/finally guards, synchronous voice/AI/save locks
+- Cancel voice/network work on close, unmount, manual-edit, chat→draft, embedded transition; duplicate terminal actions receive cancelled
+- Verify 360×740 light/dark across pink-neon, fitness, bamboo-green, custom incl. overflow, worst-case data, Axe, keyboard, reduced motion, gestures, failures, close/reopen races, safe areas
+- Preserve /api/sync with syncVersion: 1, tutorial key 75days:tutorial-seen:u-mobile-1, IDs plans-modal-title, custom-editor-title, ai-plan-sheet-title, ai-side-quest-title, side-quests-modal-title
+- Playwright artifacts under testInfo.outputPath(); discovery limited to **/*.spec.ts
+- Production must fail with Missing required environment variable: JWT_SECRET
+- Keep active-state “Cambiar plan” in QuickActionsSheet for direct E2E entry to plan flow
+- Use time-domain RMS, low/mid/high aggregation, adaptive thresholds, hysteresis, voiceActivity, isSpeaking compatibility
+- Host sheets retain domain state/persistence; shared components own presentation/mechanics
+- Embedded child sheets render body-only; onboarding keeps standalone dialogs
+- Persistent parents dynamically switch aria-labelledby to visible required title ID
+- Establish recorder stop ownership before recorder.stop(); concurrent terminal actions receive cancelled
+- Preserve pink-neon default, alternate palettes, non-shadcn stack, PlansModal lazy initial state
+- Avoid .mobile-sheet-panel transform conflicts with Motion dragging; use deterministic Playwright media harness
+- Add optional onDismissLockChange prop on AICustomPlanSheet for parent to block dismissal during save/apply
+- Duplicate-save coverage uses active-Custom path (/challenges/current/custom-goals) rather than /challenges/start
+- Suppress Next.js dev overlay portal (nextjs-portal{display:none}) in mobile tests
+- Duplicate "Guardar" buttons: click .first(); modify-choice view dialog name is ¿Cómo aplicar los cambios?
+- Dark + fitness/bamboo-green use --on-accent: #111111; custom palettes derive --on-accent at runtime via pickOnAccent (relative luminance) in Layout.tsx
+- Cleanup: next-env.d.ts and tsconfig.tsbuildinfo restored to HEAD; test-results/ deleted
+
+All mobile-ai lifecycle tests pass (7/7), theme tests pass (8/8), plan-studio test passes (1/1). Unit suite: 115/115 tests pass. Frontend build passes. Backend: 11/11 tests pass. Lint passes with 11 pre-existing React Compiler errors in unrelated files. JWT_SECRET fail-fast verified in production.
+
+Next Move:
+1. Commit all uncommitted changes
+2. Verify full suite one final time
+3. Push to main

@@ -53,6 +53,10 @@ export default function QuickReplyOptionsCard({
       .join(' · ');
   };
 
+  const clearSelection = () => {
+    setSelection({ key: optionsKey, indices: [] });
+  };
+
   const hasSelection = selectedIndices.length > 0;
 
   return (
@@ -181,7 +185,7 @@ export default function QuickReplyOptionsCard({
               const text = buildCombinedReply();
               if (text) {
                 onInsertIntoComposer(text);
-                setSelectedIndices([]);
+                clearSelection();
               }
             }}
             className="min-h-[36px] px-2.5 rounded-xl border text-[11px] font-semibold inline-flex items-center gap-1.5 cursor-pointer active:scale-95 transition-transform duration-150 ease-out"
@@ -203,7 +207,7 @@ export default function QuickReplyOptionsCard({
               const text = buildCombinedReply();
               if (text) {
                 onSendSelected(text);
-                setSelectedIndices([]);
+                clearSelection();
               }
             }}
             className="min-h-[36px] px-3 rounded-xl text-[11px] font-semibold inline-flex items-center gap-1.5 cursor-pointer active:scale-95 transition-transform duration-150 ease-out"

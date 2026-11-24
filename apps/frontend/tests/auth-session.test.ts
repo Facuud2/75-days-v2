@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAuthStore, User } from '@/store/useAuthStore';
 import { authService } from '@/lib/api/auth';
 import { baseRequest } from '@/lib/api/base';
@@ -14,6 +14,7 @@ const mockUser: User = {
 describe('useAuthStore session & logout race safety', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     useAuthStore.setState({
       user: null,
       token: null,
@@ -21,6 +22,10 @@ describe('useAuthStore session & logout race safety', () => {
       isLoading: false,
       error: null,
     });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('logout clears isLoading, error, token, user, and isAuthenticated', () => {
@@ -140,6 +145,103 @@ describe('useAuthStore session & logout race safety', () => {
     await expect(baseRequest('/auth/me', { timeoutMs: 25 })).rejects.toThrow(
       'La solicitud tardó demasiado'
     );
+  });
+
+  it('baseRequest preserves an externally-triggered AbortError', async () => {
+    const externalController = new AbortController();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (_url: string, init?: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () => {
+              const abortErr = new Error('Aborted');
+              abortErr.name = 'AbortError';
+              reject(abortErr);
+            });
+          })
+      )
+    );
+
+    const request = baseRequest('/auth/me', {
+      signal: externalController.signal,
+      timeoutMs: 1_000,
+    });
+    externalController.abort();
+
+    const error = await request.catch((reason: unknown) => reason);
+    expect(error).toMatchObject({ name: 'AbortError' });
+    expect(error).not.toMatchObject({
+      message: expect.stringContaining('La solicitud tardó demasiado'),
+    });
+  });
+
+  it('baseRequest forwards a pre-aborted signal as an AbortError', async () => {
+    const externalController = new AbortController();
+    externalController.abort();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init?: RequestInit) => {
+        const signal = init?.signal;
+        if (signal?.aborted) {
+          return Promise.reject(signal.reason);
+        }
+        return Promise.resolve(new Response(null, { status: 204 }));
+      })
+    );
+
+    const request = baseRequest('/auth/me', {
+      signal: externalController.signal,
+      timeoutMs: 1_000,
+    });
+
+    await expect(request).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  it('baseRequest removes its external abort listener after completion', async () => {
+    const externalController = new AbortController();
+    const removeEventListener = vi.spyOn(externalController.signal, 'removeEventListener');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      )
+    );
+
+    await baseRequest('/auth/me', {
+      signal: externalController.signal,
+      timeoutMs: 1_000,
+    });
+
+    expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+  });
+
+  it('baseRequest removes its external abort listener after cancellation', async () => {
+    const externalController = new AbortController();
+    const removeEventListener = vi.spyOn(externalController.signal, 'removeEventListener');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (_url: string, init?: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () => {
+              reject(init.signal?.reason);
+            });
+          })
+      )
+    );
+
+    const request = baseRequest('/auth/me', {
+      signal: externalController.signal,
+      timeoutMs: 1_000,
+    });
+    externalController.abort();
+    await request.catch(() => undefined);
+
+    expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
   });
 
   it('loginWithGoogle handles link confirmation and cancelAuth aborts in-flight Google auth', async () => {

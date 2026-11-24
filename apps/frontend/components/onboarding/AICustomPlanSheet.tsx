@@ -6,8 +6,6 @@ import {
   Check,
   ChevronRight,
   ListChecks,
-  MessageSquare,
-  Mic,
   Pencil,
   Plus,
   RefreshCw,
@@ -44,8 +42,19 @@ import {
   SHEET_SNAP_SPRING,
   shouldDismissSheet,
 } from '@/lib/motion/sheetPhysics';
-import { getCustomTaskIcon, type CustomTask } from './CustomTaskEditorSheet';
+import {
+  formatTaskBadge,
+  getCustomTaskIcon,
+  type CustomTask,
+} from './CustomTaskEditorSheet';
 import AISideQuestSheet, { getSideQuestIcon } from './AISideQuestSheet';
+import {
+  AIConversationStreamItem,
+  AIStudioTabs,
+  DraftChangeBadge,
+  DraftSelectionIndicator,
+  isAbortError,
+} from './AIConversationalStudio';
 import AIThinkingStatus from './AIThinkingStatus';
 import AutoGrowComposer from './AutoGrowComposer';
 import QuickReplyOptionsCard from './QuickReplyOptionsCard';
@@ -53,6 +62,11 @@ import QuickReplyOptionsCard from './QuickReplyOptionsCard';
 type DraftCustomTask = CustomTask & {
   changeType?: 'kept' | 'modified' | 'added';
 };
+
+type AsyncActionLock = 'ai' | 'voice' | 'save' | 'manual' | null;
+
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 interface PlanProposalSummary {
   totalCount: number;
@@ -74,6 +88,14 @@ interface ChatMessageItem {
 
 export type AICustomPlanSheetProps = {
   isOpen: boolean;
+  /** Render only the studio content inside a parent-owned dialog shell. */
+  embedded?: boolean;
+  /** Report the title ID for the currently rendered embedded subview. */
+  onTitleIdChange?: (titleId: 'ai-plan-sheet-title' | 'ai-side-quest-title') => void;
+  /** Register a parent-owned back action for an active nested embedded view. */
+  onBackHandlerChange?: (handler: (() => boolean) | null) => void;
+  /** Report whether a synchronous terminal action is blocking parent dismissal. */
+  onDismissLockChange?: (locked: boolean) => void;
   initialTasks?: CustomTask[];
   userContext?: AiUserContext;
   saveButtonLabel?: string;
@@ -116,6 +138,10 @@ function toDraftCustomTasks(aiTasks: AiCustomTask[]): DraftCustomTask[] {
     title: t.title,
     description: t.description,
     icon: ALLOWED_ICON_SET.has(t.icon) ? t.icon : 'dumbbell',
+    cadence: t.cadence ?? 'daily',
+    measurementType: t.measurementType ?? 'boolean',
+    targetValue: t.targetValue ?? 1,
+    targetUnit: t.targetUnit ?? '',
     changeType: t.changeType,
   }));
 }
@@ -128,16 +154,26 @@ function toAiTasks(tasks: DraftCustomTask[]): AiCustomTask[] {
       title: t.title.trim(),
       description: t.description.trim() || t.title.trim(),
       icon: (ALLOWED_ICON_SET.has(t.icon) ? t.icon : 'dumbbell') as AiCustomTask['icon'],
+      cadence: t.cadence ?? 'daily',
+      measurementType: t.measurementType ?? 'boolean',
+      targetValue: t.targetValue ?? 1,
+      targetUnit: t.targetUnit ?? '',
     }));
 }
 
 function stripChangeTypes(tasks: DraftCustomTask[]): CustomTask[] {
-  return tasks.map(({ id, title, description, icon }) => ({
-    id,
-    title,
-    description,
-    icon,
-  }));
+  return tasks.map(
+    ({ id, title, description, icon, cadence, measurementType, targetValue, targetUnit }) => ({
+      id,
+      title,
+      description,
+      icon,
+      cadence,
+      measurementType,
+      targetValue,
+      targetUnit,
+    })
+  );
 }
 
 function summarizeContextChips(userContext?: AiUserContext): string[] {
@@ -159,6 +195,10 @@ function summarizeContextChips(userContext?: AiUserContext): string[] {
 
 export default function AICustomPlanSheet({
   isOpen,
+  embedded = false,
+  onTitleIdChange,
+  onBackHandlerChange,
+  onDismissLockChange,
   initialTasks = [],
   userContext,
   saveButtonLabel = 'Guardar plan',
@@ -208,10 +248,19 @@ export default function AICustomPlanSheet({
   const [apiError, setApiError] = useState<string | null>(null);
   const [textInput, setTextInput] = useState('');
   const [showScrollBottom, setShowScrollBottom] = useState(false);
+  const [isApplying, setIsApplying] = useState(false);
 
+  const dialogRef = useRef<HTMLDivElement>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const lastMsgRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const wasOpenRef = useRef(false);
+  const mountedRef = useRef(true);
+  const openGenerationRef = useRef(0);
+  const requestSequenceRef = useRef(0);
+  const activeAbortRef = useRef<AbortController | null>(null);
+  const actionLockRef = useRef<AsyncActionLock>(null);
 
   const selectedTaskSet = useMemo(() => new Set(selectedTaskIds), [selectedTaskIds]);
   const contextChips = useMemo(() => summarizeContextChips(userContext), [userContext]);
@@ -238,9 +287,45 @@ export default function AICustomPlanSheet({
     };
   }, [userContext, sessionSideQuests, generatedTasks]);
 
-  // Reset conversation state when sheet opens
+  const invalidateActiveWork = useCallback(() => {
+    requestSequenceRef.current += 1;
+    activeAbortRef.current?.abort();
+    activeAbortRef.current = null;
+    actionLockRef.current = null;
+    cancelRecording();
+    resetStatus();
+    setIsApplying(false);
+  }, [cancelRecording, resetStatus]);
+
   useEffect(() => {
-    if (!isOpen) return;
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      openGenerationRef.current += 1;
+      requestSequenceRef.current += 1;
+      activeAbortRef.current?.abort();
+      activeAbortRef.current = null;
+      actionLockRef.current = null;
+      cancelRecording();
+    };
+  }, [cancelRecording]);
+
+  // Initialize only on a false → true boundary. Parent context updates must not
+  // wipe an active conversation or let an older request populate a new session.
+  useEffect(() => {
+    if (!isOpen) {
+      if (wasOpenRef.current) {
+        wasOpenRef.current = false;
+        openGenerationRef.current += 1;
+        invalidateActiveWork();
+      }
+      return;
+    }
+    if (wasOpenRef.current) return;
+
+    wasOpenRef.current = true;
+    openGenerationRef.current += 1;
+    invalidateActiveWork();
     sheetY.set(0);
     setSubView('plan');
     setActiveTab('chat');
@@ -255,7 +340,6 @@ export default function AICustomPlanSheet({
     setSessionSideQuests([]);
     setSideQuestInitialPrompt('');
     setTextInput('');
-    resetStatus();
 
     const validInitial = initialTasks
       .filter((t) => t.title.trim() !== '')
@@ -270,8 +354,8 @@ export default function AICustomPlanSheet({
       validInitial.length > 0
         ? 'Contame acá abajo (por texto o voz) cómo querés armar o modificar tu plan. Si querés editar tareas puntuales de tu base actual, podés tocarlas en la pestaña "Metas".'
         : hasContext
-        ? 'Contame tu idea para el reto de 75 días (por texto o voz). Ya tengo en cuenta tus datos y misiones activas para no preguntarte lo obvio.'
-        : 'Contame tu idea para tu plan de 75 días (por texto o voz). Te agrupo cualquier duda abierta en un solo mensaje antes de armar tus metas.';
+          ? 'Contame tu idea para el reto de 75 días (por texto o voz). Ya tengo en cuenta tus datos y misiones activas para no preguntarte lo obvio.'
+          : 'Contame tu idea para tu plan de 75 días (por texto o voz). Te agrupo cualquier duda abierta en un solo mensaje antes de armar tus metas.';
 
     setMessages([
       {
@@ -280,22 +364,121 @@ export default function AICustomPlanSheet({
         text: welcomeMessage,
       },
     ]);
-  }, [isOpen, initialTasks, userContext, resetStatus, sheetY]);
+  }, [isOpen, initialTasks, invalidateActiveWork, sheetY, userContext]);
+
+  const handleRequestClose = useCallback(() => {
+    if (isSaving || actionLockRef.current === 'save') return;
+    openGenerationRef.current += 1;
+    invalidateActiveWork();
+    onClose();
+  }, [invalidateActiveWork, isSaving, onClose]);
+
+  const handleLeaveSideQuest = useCallback(() => {
+    if (isSaving || actionLockRef.current === 'save') return;
+    invalidateActiveWork();
+    setSubView('plan');
+  }, [invalidateActiveWork, isSaving]);
 
   useEffect(() => {
-    if (!isOpen) return;
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      if (subView === 'side-quest') {
-        e.stopPropagation();
-        setSubView('plan');
+    if (!isOpen || embedded) return;
+
+    previousFocusRef.current = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const focusTimer = window.setTimeout(() => {
+      const dialog = dialogRef.current;
+      if (!dialog?.contains(document.activeElement)) {
+        dialog?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)?.focus();
+      }
+    }, 0);
+
+    return () => {
+      window.clearTimeout(focusTimer);
+      document.body.style.overflow = previousOverflow;
+      previousFocusRef.current?.focus?.();
+    };
+  }, [embedded, isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || embedded) return;
+    const focusTimer = window.setTimeout(() => {
+      const dialog = dialogRef.current;
+      if (!dialog?.contains(document.activeElement)) {
+        dialog?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)?.focus();
+      }
+    }, 0);
+    return () => window.clearTimeout(focusTimer);
+  }, [embedded, isOpen, subView]);
+
+  useEffect(() => {
+    if (!isOpen || embedded) return;
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        if (subView === 'side-quest') {
+          handleLeaveSideQuest();
+          return;
+        }
+        handleRequestClose();
         return;
       }
-      onClose();
+
+      if (event.key !== 'Tab') return;
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+      const focusable = Array.from(
+        dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
+      ).filter((element) => element.offsetParent !== null || element === document.activeElement);
+      if (focusable.length === 0) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const activeInDialog = dialog.contains(document.activeElement);
+      if (
+        event.shiftKey &&
+        (!activeInDialog || document.activeElement === first || document.activeElement === dialog)
+      ) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (!activeInDialog || document.activeElement === last)) {
+        event.preventDefault();
+        first.focus();
+      }
     };
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
-  }, [isOpen, subView, onClose]);
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [embedded, handleLeaveSideQuest, handleRequestClose, isOpen, subView]);
+
+  useEffect(() => {
+    if (!isOpen || !embedded) return;
+    onTitleIdChange?.(
+      subView === 'side-quest' ? 'ai-side-quest-title' : 'ai-plan-sheet-title'
+    );
+  }, [isOpen, embedded, subView, onTitleIdChange]);
+
+  const handleEmbeddedBack = useCallback(() => {
+    if (subView !== 'side-quest') return false;
+    handleLeaveSideQuest();
+    return true;
+  }, [handleLeaveSideQuest, subView]);
+
+  useEffect(() => {
+    if (!isOpen || !embedded || !onBackHandlerChange) return;
+    onBackHandlerChange(handleEmbeddedBack);
+    return () => onBackHandlerChange(null);
+  }, [embedded, handleEmbeddedBack, isOpen, onBackHandlerChange]);
+
+  useEffect(() => {
+    if (!embedded || !onDismissLockChange) return;
+    onDismissLockChange(isOpen && (isSaving || isApplying));
+    return () => onDismissLockChange(false);
+  }, [embedded, isApplying, isOpen, isSaving, onDismissLockChange]);
 
   const scrollToLatestMessage = useCallback(
     (behavior: ScrollBehavior = reduceMotion ? 'auto' : 'smooth') => {
@@ -335,7 +518,14 @@ export default function AICustomPlanSheet({
     recStatus === 'unsupported' ||
     recStatus === 'error';
 
-  const isBusy = recStatus === 'processing' || recStatus === 'transcribing' || isSaving;
+  const isVoiceLifecycleActive =
+    recStatus === 'requesting-permission' ||
+    recStatus === 'recording' ||
+    recStatus === 'paused' ||
+    recStatus === 'stopping' ||
+    recStatus === 'transcribing' ||
+    recStatus === 'processing';
+  const isBusy = isVoiceLifecycleActive || isSaving || isApplying;
   const isAiThinking = recStatus === 'processing';
 
   const toggleTaskSelection = (taskId: string) => {
@@ -350,11 +540,25 @@ export default function AICustomPlanSheet({
     text?: string;
     forceProposal?: boolean;
   }) => {
+    if (!isOpen || isSaving || actionLockRef.current !== null) return;
+
+    const generation = openGenerationRef.current;
+    const requestId = ++requestSequenceRef.current;
+    const controller = new AbortController();
+    activeAbortRef.current?.abort();
+    activeAbortRef.current = controller;
+    actionLockRef.current = 'ai';
+    const isCurrent = () =>
+      mountedRef.current &&
+      openGenerationRef.current === generation &&
+      requestSequenceRef.current === requestId &&
+      !controller.signal.aborted;
+
     setApiError(null);
     setActiveTab('chat');
     setProcessing(true);
 
-    const optimisticMsgId = `plan-user-${Date.now()}`;
+    const optimisticMsgId = `plan-user-${generation}-${requestId}`;
     const isVoice = Boolean(opts.audioBase64);
     const optimisticText = opts.forceProposal
       ? 'Armá la propuesta de tareas con lo que hablamos.'
@@ -391,17 +595,21 @@ export default function AICustomPlanSheet({
             }
           : undefined;
 
-      const res = await aiService.generateCustomPlan({
-        audioBase64: opts.audioBase64,
-        mimeType: opts.mimeType,
-        textInput: opts.text,
-        history,
-        currentTasks: currentAiTasks,
-        selectedTaskIds: selectedTaskIds.length > 0 ? selectedTaskIds : undefined,
-        understoodFacts: understoodFacts.length > 0 ? understoodFacts : undefined,
-        userContext: contextWithSessionQuests,
-        forceProposal: opts.forceProposal,
-      });
+      const res = await aiService.generateCustomPlan(
+        {
+          audioBase64: opts.audioBase64,
+          mimeType: opts.mimeType,
+          textInput: opts.text,
+          history,
+          currentTasks: currentAiTasks,
+          selectedTaskIds: selectedTaskIds.length > 0 ? selectedTaskIds : undefined,
+          understoodFacts: understoodFacts.length > 0 ? understoodFacts : undefined,
+          userContext: contextWithSessionQuests,
+          forceProposal: opts.forceProposal,
+        },
+        controller.signal
+      );
+      if (!isCurrent()) return;
 
       const resolvedUserText = res.userTranscript?.trim() || optimisticText;
       const assistantHistorySummary =
@@ -437,7 +645,7 @@ export default function AICustomPlanSheet({
           m.id === optimisticMsgId ? { ...m, text: resolvedUserText } : m
         ),
         {
-          id: `plan-ai-${Date.now()}`,
+          id: `plan-ai-${generation}-${requestId}`,
           role: 'assistant',
           text: res.assistantMessage,
           openQuestions: res.openQuestions ?? [],
@@ -456,32 +664,59 @@ export default function AICustomPlanSheet({
       if (res.understoodFacts && res.understoodFacts.length > 0) {
         setUnderstoodFacts(res.understoodFacts);
       }
-    } catch (err: any) {
-      setMessages((prev) => prev.filter((m) => m.id !== optimisticMsgId));
+    } catch (error: unknown) {
+      if (!isCurrent()) return;
+      setMessages((prev) => prev.filter((message) => message.id !== optimisticMsgId));
+      if (isAbortError(error)) return;
       setApiError(
-        err?.message ||
-          'No pudimos comunicarnos con la IA en este momento. Tu borrador sigue intacto.'
+        error instanceof Error && error.message
+          ? error.message
+          : 'No pudimos comunicarnos con la IA en este momento. Tu borrador sigue intacto.'
       );
     } finally {
-      setProcessing(false);
+      if (activeAbortRef.current === controller) activeAbortRef.current = null;
+      if (
+        mountedRef.current &&
+        openGenerationRef.current === generation &&
+        requestSequenceRef.current === requestId
+      ) {
+        actionLockRef.current = null;
+        setProcessing(false);
+      }
     }
   };
 
   const handleStopAndTranscribe = async () => {
-    const result = await stopRecording();
-    if (!result || result.blob.size === 0) {
-      resetStatus();
-      return;
-    }
-    setApiError(null);
-    setTranscribing(true);
+    if (!isOpen || isSaving || actionLockRef.current !== null) return;
+    const generation = openGenerationRef.current;
+    const requestId = ++requestSequenceRef.current;
+    actionLockRef.current = 'voice';
+    let controller: AbortController | null = null;
+    const isCurrent = () =>
+      mountedRef.current &&
+      openGenerationRef.current === generation &&
+      requestSequenceRef.current === requestId &&
+      !controller?.signal.aborted;
+
     try {
+      const result = await stopRecording();
+      if (!isCurrent()) return;
+      if (result.kind !== 'success' || result.blob.size === 0) {
+        if (result.kind === 'empty' || result.kind === 'success') resetStatus();
+        return;
+      }
+      setApiError(null);
+      setTranscribing(true);
       const base64 = await blobToBase64(result.blob);
-      const res = await aiService.transcribeAudio({
-        audioBase64: base64,
-        mimeType: result.mimeType,
-      });
-      setTranscribing(false);
+      if (!isCurrent()) return;
+
+      controller = new AbortController();
+      activeAbortRef.current = controller;
+      const res = await aiService.transcribeAudio(
+        { audioBase64: base64, mimeType: result.mimeType },
+        controller.signal
+      );
+      if (!isCurrent()) return;
       if (!res.hasSpeech || !res.transcript.trim()) {
         setApiError('No detectamos voz clara en el audio. Probá hablar más cerca del micrófono.');
         return;
@@ -490,37 +725,112 @@ export default function AICustomPlanSheet({
         prev.trim() ? `${prev.trim()} ${res.transcript.trim()}` : res.transcript.trim()
       );
       requestAnimationFrame(() => {
-        textareaRef.current?.focus();
+        if (isCurrent()) textareaRef.current?.focus();
       });
-    } catch (err: any) {
-      setTranscribing(false);
-      setApiError(err?.message || 'No pudimos transcribir el audio. Intentá de nuevo.');
+    } catch (error: unknown) {
+      if (!isCurrent() || isAbortError(error)) return;
+      setApiError(
+        error instanceof Error && error.message
+          ? error.message
+          : 'No pudimos transcribir el audio. Intentá de nuevo.'
+      );
+    } finally {
+      if (controller && activeAbortRef.current === controller) activeAbortRef.current = null;
+      if (
+        mountedRef.current &&
+        openGenerationRef.current === generation &&
+        requestSequenceRef.current === requestId
+      ) {
+        actionLockRef.current = null;
+        setTranscribing(false);
+      }
     }
   };
 
   const handleSendVoiceDirect = async () => {
-    const result = await stopRecording();
-    if (!result || result.blob.size === 0) {
-      resetStatus();
-      return;
+    if (!isOpen || isSaving || actionLockRef.current !== null) return;
+    const generation = openGenerationRef.current;
+    const requestId = ++requestSequenceRef.current;
+    actionLockRef.current = 'voice';
+    let handedOff = false;
+
+    try {
+      const result = await stopRecording();
+      if (
+        !mountedRef.current ||
+        openGenerationRef.current !== generation ||
+        requestSequenceRef.current !== requestId
+      ) {
+        return;
+      }
+      if (result.kind !== 'success' || result.blob.size === 0) {
+        if (result.kind === 'empty' || result.kind === 'success') resetStatus();
+        return;
+      }
+      const base64 = await blobToBase64(result.blob);
+      if (
+        !mountedRef.current ||
+        openGenerationRef.current !== generation ||
+        requestSequenceRef.current !== requestId
+      ) {
+        return;
+      }
+      actionLockRef.current = null;
+      handedOff = true;
+      await sendToAi({ audioBase64: base64, mimeType: result.mimeType });
+    } catch (error: unknown) {
+      if (
+        mountedRef.current &&
+        openGenerationRef.current === generation &&
+        requestSequenceRef.current === requestId &&
+        !isAbortError(error)
+      ) {
+        setApiError(
+          error instanceof Error && error.message
+            ? error.message
+            : 'No pudimos preparar el audio. Intentá de nuevo.'
+        );
+      }
+    } finally {
+      if (
+        !handedOff &&
+        mountedRef.current &&
+        openGenerationRef.current === generation &&
+        requestSequenceRef.current === requestId
+      ) {
+        actionLockRef.current = null;
+      }
     }
-    const base64 = await blobToBase64(result.blob);
-    await sendToAi({ audioBase64: base64, mimeType: result.mimeType });
+  };
+
+  const handleStartVoice = () => {
+    if (!isOpen || isBusy || actionLockRef.current !== null) return;
+    void startRecording();
   };
 
   const handleTextSubmit = async () => {
     const trimmed = textInput.trim();
-    if (!trimmed || isBusy) return;
+    if (!trimmed || isBusy || actionLockRef.current !== null) return;
     setTextInput('');
     await sendToAi({ text: trimmed });
   };
 
+  const handleSelectDraftTab = () => {
+    if (isSaving || actionLockRef.current === 'save') return;
+    invalidateActiveWork();
+    setActiveTab('draft');
+    setHasUnreadDraftChanges(false);
+  };
+
   const handleOpenSideQuestDesigner = (ideaPrompt?: string) => {
+    if (isSaving || actionLockRef.current === 'save') return;
+    invalidateActiveWork();
     setSideQuestInitialPrompt(ideaPrompt ?? '');
     setSubView('side-quest');
   };
 
-  const handleAddSessionSideQuest = (quest: AiSideQuestDraft) => {
+  const handleAddSessionSideQuest = async (quest: AiSideQuestDraft) => {
+    if (actionLockRef.current === 'save') return;
     setSessionSideQuests((prev) => [...prev, quest]);
     setSubView('plan');
     setActiveTab('chat');
@@ -534,118 +844,55 @@ export default function AICustomPlanSheet({
     ]);
   };
 
+  const handleEditManually = () => {
+    if (isBusy || actionLockRef.current !== null) return;
+    openGenerationRef.current += 1;
+    invalidateActiveWork();
+    actionLockRef.current = 'manual';
+    onDismissLockChange?.(true);
+    onEditManually(stripChangeTypes(generatedTasks));
+  };
+
+  const handleApplyPlan = async () => {
+    if (isBusy || actionLockRef.current !== null) return;
+    invalidateActiveWork();
+    const generation = openGenerationRef.current;
+    actionLockRef.current = 'save';
+    setIsApplying(true);
+    onDismissLockChange?.(true);
+    try {
+      await onApplyPlan(stripChangeTypes(generatedTasks), sessionSideQuests);
+    } catch (error: unknown) {
+      if (mountedRef.current && openGenerationRef.current === generation) {
+        setApiError(error instanceof Error && error.message ? error.message : 'No pudimos guardar el plan.');
+      }
+    } finally {
+      if (mountedRef.current && openGenerationRef.current === generation) {
+        actionLockRef.current = null;
+        setIsApplying(false);
+        onDismissLockChange?.(false);
+      }
+    }
+  };
+
   const hasReadyTasks = generatedTasks.length > 0;
   const canQuickSaveFromHeader =
     hasReadyTasks && (hasAiProposalReady || sessionSideQuests.length > 0);
   const lastAssistantId = [...messages].reverse().find((m) => m.role === 'assistant')?.id;
 
-  return (
-    <AnimatePresence>
-      {isOpen && (
-        <div
-          className="fixed inset-0 z-[125] flex items-end sm:items-center justify-center sm:p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby={subView === 'side-quest' ? 'ai-side-quest-title' : 'ai-plan-sheet-title'}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <motion.button
-            type="button"
-            aria-label="Cerrar asistente de IA"
-            onClick={onClose}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.16, ease: 'easeOut' }}
-            style={isDesktop ? undefined : { opacity: backdropOpacity }}
-            className="absolute inset-0 bg-black/68 backdrop-blur-[3px]"
-          />
-
-          <motion.div
-            style={
-              isDesktop
-                ? {
-                    backgroundColor: 'var(--surface-card)',
-                    borderColor: 'var(--border-subtle)',
-                    color: 'var(--text-primary)',
-                  }
-                : {
-                    y: sheetY,
-                    backgroundColor: 'var(--surface-card)',
-                    borderColor: 'var(--border-subtle)',
-                    color: 'var(--text-primary)',
-                  }
-            }
-            initial={
-              reduceMotion
-                ? { opacity: 0 }
-                : isDesktop
-                ? { opacity: 0, scale: 0.96, y: 8 }
-                : { y: '100%' }
-            }
-            animate={
-              reduceMotion
-                ? { opacity: 1 }
-                : isDesktop
-                ? { opacity: 1, scale: 1, y: 0 }
-                : { y: 0 }
-            }
-            exit={
-              reduceMotion
-                ? { opacity: 0 }
-                : isDesktop
-                ? { opacity: 0, scale: 0.97, y: 6, transition: SHEET_EXIT_TRANSITION }
-                : { y: '100%', transition: SHEET_EXIT_TRANSITION }
-            }
-            transition={
-              reduceMotion
-                ? REDUCED_MOTION_TRANSITION
-                : isDesktop
-                ? { duration: 0.22, ease: [0.22, 1, 0.36, 1] }
-                : SHEET_ENTER_SPRING
-            }
-            drag={!isDesktop && !reduceMotion ? 'y' : false}
-            dragControls={dragControls}
-            dragListener={false}
-            dragConstraints={{ top: 0 }}
-            dragElastic={{ top: 0, bottom: 0.25 }}
-            dragMomentum={false}
-            onDragEnd={(_, info) => {
-              if (shouldDismissSheet(info.offset.y, info.velocity.y)) {
-                onClose();
-              } else {
-                animate(sheetY, 0, {
-                  ...SHEET_SNAP_SPRING,
-                  velocity: info.velocity.y,
-                });
-              }
-            }}
-            className="relative z-10 w-full max-w-xl h-[95dvh] sm:h-[88dvh] max-h-[840px] rounded-t-3xl sm:rounded-3xl border flex flex-col overflow-hidden shadow-2xl"
-          >
-            {/* Drag handle mobile */}
-            {!isDesktop && (
-              <div
-                onPointerDown={(e) => dragControls.start(e)}
-                className="flex justify-center pt-2.5 pb-0.5 cursor-grab active:cursor-grabbing touch-none shrink-0"
-              >
-                <span
-                  className="w-10 h-1 rounded-full"
-                  style={{ backgroundColor: 'var(--border-control)' }}
-                />
-              </div>
-            )}
-
+  const studioBody = (
+    <div className="relative w-full h-full min-h-0 flex flex-col overflow-hidden">
             {/* Embedded Side Quest Designer inside the same sheet (zero modal stacking) */}
             {subView === 'side-quest' ? (
               <AISideQuestSheet
                 isOpen
                 embedded
-                onBack={() => setSubView('plan')}
+                onBack={handleLeaveSideQuest}
                 initialIdeaPrompt={sideQuestInitialPrompt}
                 userContext={enrichedContextForSideQuest}
                 saveButtonLabel="Sumar al plan"
                 onApplyQuest={handleAddSessionSideQuest}
-                onClose={() => setSubView('plan')}
+                onClose={handleLeaveSideQuest}
               />
             ) : (
               <>
@@ -689,9 +936,7 @@ export default function AICustomPlanSheet({
                         <button
                           type="button"
                           disabled={isBusy}
-                          onClick={() =>
-                            onApplyPlan(stripChangeTypes(generatedTasks), sessionSideQuests)
-                          }
+                          onClick={() => void handleApplyPlan()}
                           className="min-h-[36px] px-3 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer active:scale-95 transition-transform duration-150 ease-out disabled:opacity-50"
                           style={{
                             touchAction: 'manipulation',
@@ -706,7 +951,8 @@ export default function AICustomPlanSheet({
 
                       <button
                         type="button"
-                        onClick={onClose}
+                        disabled={isSaving || isApplying}
+                        onClick={handleRequestClose}
                         aria-label="Cerrar"
                         className="size-9 rounded-full flex items-center justify-center shrink-0 cursor-pointer active:scale-95 transition-transform duration-150 ease-out"
                         style={{
@@ -722,62 +968,20 @@ export default function AICustomPlanSheet({
 
                   {/* Segmented Control: Conversación vs Metas (N) */}
                   {hasReadyTasks && (
-                    <div
-                      role="tablist"
-                      aria-label="Secciones del diseñador de plan"
-                      className="grid grid-cols-2 gap-1 p-1 rounded-xl border"
-                      style={{
-                        backgroundColor: 'var(--surface-inset)',
-                        borderColor: 'var(--border-subtle)',
-                      }}
-                    >
-                      <button
-                        type="button"
-                        role="tab"
-                        aria-selected={activeTab === 'chat'}
-                        onClick={() => setActiveTab('chat')}
-                        className="min-h-[34px] rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 cursor-pointer transition-colors duration-150 ease-out"
-                        style={{
-                          touchAction: 'manipulation',
-                          backgroundColor:
-                            activeTab === 'chat' ? 'var(--surface-card)' : 'transparent',
-                          color: activeTab === 'chat' ? 'var(--text-primary)' : 'var(--text-muted)',
-                        }}
-                      >
-                        <MessageSquare className="size-3.5" />
-                        <span>Conversación</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        role="tab"
-                        aria-selected={activeTab === 'draft'}
-                        onClick={() => {
-                          setActiveTab('draft');
-                          setHasUnreadDraftChanges(false);
-                        }}
-                        className="min-h-[34px] rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 cursor-pointer transition-colors duration-150 ease-out"
-                        style={{
-                          touchAction: 'manipulation',
-                          backgroundColor:
-                            activeTab === 'draft' ? 'var(--surface-card)' : 'transparent',
-                          color:
-                            activeTab === 'draft' ? 'var(--text-primary)' : 'var(--text-muted)',
-                        }}
-                      >
-                        <ListChecks className="size-3.5" />
-                        <span>
+                    <AIStudioTabs
+                      ariaLabel="Secciones del diseñador de plan"
+                      activeTab={activeTab}
+                      draftIcon={ListChecks}
+                      draftLabel={
+                        <>
                           Metas ({generatedTasks.length}
                           {sessionSideQuests.length > 0 ? ` + ${sessionSideQuests.length}M` : ''})
-                        </span>
-                        {hasUnreadDraftChanges && activeTab !== 'draft' && (
-                          <span
-                            className="size-2 rounded-full"
-                            style={{ backgroundColor: 'var(--accent-fill)' }}
-                          />
-                        )}
-                      </button>
-                    </div>
+                        </>
+                      }
+                      hasUnreadDraftChanges={hasUnreadDraftChanges}
+                      onChatSelect={() => setActiveTab('chat')}
+                      onDraftSelect={handleSelectDraftTab}
+                    />
                   )}
                 </header>
 
@@ -793,7 +997,7 @@ export default function AICustomPlanSheet({
                       {hasReadyTasks && !hasAiProposalReady && (
                         <button
                           type="button"
-                          onClick={() => setActiveTab('draft')}
+                          onClick={handleSelectDraftTab}
                           className="w-full px-3 py-2 rounded-xl border flex items-center justify-between gap-2 text-left cursor-pointer active:scale-[0.99] transition-transform duration-150 ease-out"
                           style={{
                             touchAction: 'manipulation',
@@ -833,83 +1037,14 @@ export default function AICustomPlanSheet({
                           !isAiThinking;
 
                         return (
-                          <div
+                          <AIConversationStreamItem
                             key={msg.id}
                             ref={isLast ? lastMsgRef : undefined}
-                            className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}
+                            role={msg.role}
+                            text={msg.text}
+                            viaVoice={msg.viaVoice}
+                            openQuestions={msg.openQuestions}
                           >
-                            <div
-                              className={`max-w-[90%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed border ${
-                                isUser ? 'rounded-br-md' : 'rounded-bl-md'
-                              }`}
-                              style={
-                                isUser
-                                  ? {
-                                      backgroundColor:
-                                        'color-mix(in srgb, var(--accent-fill) 16%, var(--surface-raised))',
-                                      borderColor:
-                                        'color-mix(in srgb, var(--accent-fill) 38%, var(--border-subtle))',
-                                      color: 'var(--text-primary)',
-                                    }
-                                  : {
-                                      backgroundColor: 'var(--surface-inset)',
-                                      borderColor: 'var(--border-subtle)',
-                                      color: 'var(--text-primary)',
-                                    }
-                              }
-                            >
-                              {!isUser && (
-                                <div className="flex items-center gap-1.5 mb-1">
-                                  <Sparkles
-                                    className="size-3"
-                                    style={{ color: 'var(--accent-text)' }}
-                                  />
-                                  <span
-                                    className="text-[11px] font-semibold"
-                                    style={{ color: 'var(--text-muted)' }}
-                                  >
-                                    Asistente IA
-                                  </span>
-                                </div>
-                              )}
-
-                              <p className="whitespace-pre-line break-words">{msg.text}</p>
-
-                              {isUser && msg.viaVoice && (
-                                <span
-                                  className="mt-1 inline-flex items-center gap-1 text-[10px]"
-                                  style={{ color: 'var(--text-muted)' }}
-                                >
-                                  <Mic className="size-3" />
-                                  Audio enviado
-                                </span>
-                              )}
-
-                              {!isUser && msg.openQuestions && msg.openQuestions.length > 0 && (
-                                <ol
-                                  className="mt-2.5 pt-2.5 border-t flex flex-col gap-2 text-xs"
-                                  style={{
-                                    borderColor: 'var(--divider)',
-                                    color: 'var(--text-secondary)',
-                                  }}
-                                >
-                                  {msg.openQuestions.map((question, qIdx) => (
-                                    <li key={qIdx} className="flex items-start gap-2">
-                                      <span
-                                        className="size-4.5 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5 tabular-nums"
-                                        style={{
-                                          backgroundColor: 'var(--surface-raised)',
-                                          color: 'var(--accent-text)',
-                                        }}
-                                      >
-                                        {qIdx + 1}
-                                      </span>
-                                      <span className="leading-snug">{question}</span>
-                                    </li>
-                                  ))}
-                                </ol>
-                              )}
-                            </div>
 
                             {/* Compact Inline Proposal Card ONLY when AI delivers ready tasks */}
                             {!isUser && msg.proposalSummary && (
@@ -984,10 +1119,7 @@ export default function AICustomPlanSheet({
                                 <div className="flex items-center gap-2 pt-0.5">
                                   <button
                                     type="button"
-                                    onClick={() => {
-                                      setActiveTab('draft');
-                                      setHasUnreadDraftChanges(false);
-                                    }}
+                                    onClick={handleSelectDraftTab}
                                     className="flex-1 min-h-[38px] px-3 rounded-xl border text-xs font-semibold inline-flex items-center justify-center gap-1.5 cursor-pointer active:scale-[0.98] transition-transform duration-150 ease-out"
                                     style={{
                                       touchAction: 'manipulation',
@@ -1002,12 +1134,7 @@ export default function AICustomPlanSheet({
                                   <button
                                     type="button"
                                     disabled={isBusy}
-                                    onClick={() =>
-                                      onApplyPlan(
-                                        stripChangeTypes(generatedTasks),
-                                        sessionSideQuests
-                                      )
-                                    }
+                                    onClick={() => void handleApplyPlan()}
                                     className="min-h-[38px] px-3.5 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 cursor-pointer active:scale-[0.98] transition-transform duration-150 ease-out disabled:opacity-50"
                                     style={{
                                       touchAction: 'manipulation',
@@ -1035,7 +1162,7 @@ export default function AICustomPlanSheet({
                                 }}
                               />
                             )}
-                          </div>
+                          </AIConversationStreamItem>
                         );
                       })}
 
@@ -1249,27 +1376,7 @@ export default function AICustomPlanSheet({
                                   : 'transparent',
                               }}
                             >
-                              <span
-                                className="t-check mt-0.5 size-5 rounded-md border flex items-center justify-center shrink-0"
-                                aria-checked={isChecked}
-                                style={{
-                                  backgroundColor: isChecked ? 'var(--accent-fill)' : 'transparent',
-                                  borderColor: isChecked
-                                    ? 'var(--accent-fill)'
-                                    : 'var(--border-control)',
-                                  color: 'var(--on-accent)',
-                                }}
-                              >
-                                <svg
-                                  viewBox="0 0 10.1668 10.1668"
-                                  className="size-3 fill-none stroke-current"
-                                  strokeWidth="2"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                >
-                                  <path d="M1 5.52L3.92 9.17L9.17 1" />
-                                </svg>
-                              </span>
+                              <DraftSelectionIndicator checked={isChecked} />
 
                               <div
                                 className="size-8 rounded-lg border flex items-center justify-center shrink-0 mt-0.5"
@@ -1296,30 +1403,7 @@ export default function AICustomPlanSheet({
                                   >
                                     {task.title}
                                   </span>
-                                  {task.changeType === 'added' && (
-                                    <span
-                                      className="text-[10px] font-semibold px-1.5 py-0.5 rounded"
-                                      style={{
-                                        backgroundColor:
-                                          'color-mix(in srgb, var(--status-success) 16%, transparent)',
-                                        color: 'var(--status-success)',
-                                      }}
-                                    >
-                                      Nueva
-                                    </span>
-                                  )}
-                                  {task.changeType === 'modified' && (
-                                    <span
-                                      className="text-[10px] font-semibold px-1.5 py-0.5 rounded"
-                                      style={{
-                                        backgroundColor:
-                                          'color-mix(in srgb, var(--status-info) 16%, transparent)',
-                                        color: 'var(--status-info)',
-                                      }}
-                                    >
-                                      Editada
-                                    </span>
-                                  )}
+                                  <DraftChangeBadge changeType={task.changeType} />
                                   {isChecked && (
                                     <span
                                       className="text-[10px] font-semibold px-1.5 py-0.5 rounded"
@@ -1339,6 +1423,12 @@ export default function AICustomPlanSheet({
                                 >
                                   {task.description}
                                 </p>
+                                <span
+                                  className="mt-1 inline-block text-[11px] font-medium"
+                                  style={{ color: 'var(--text-muted)' }}
+                                >
+                                  {formatTaskBadge(task)}
+                                </span>
                               </div>
                             </button>
                           </li>
@@ -1488,7 +1578,7 @@ export default function AICustomPlanSheet({
                         isSpeaking={isSpeaking}
                         elapsedSeconds={elapsedSeconds}
                         subscribeAudioMetrics={subscribeAudioMetrics}
-                        onStartVoice={() => void startRecording()}
+                        onStartVoice={handleStartVoice}
                         onCancelVoice={cancelRecording}
                         onPauseVoice={pauseRecording}
                         onResumeVoice={resumeRecording}
@@ -1540,7 +1630,7 @@ export default function AICustomPlanSheet({
                         <button
                           type="button"
                           disabled={isBusy}
-                          onClick={() => onEditManually(stripChangeTypes(generatedTasks))}
+                          onClick={handleEditManually}
                           className="min-h-[44px] px-3.5 rounded-xl font-semibold text-xs border inline-flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-transform duration-150 ease-out disabled:opacity-50"
                           style={{
                             touchAction: 'manipulation',
@@ -1556,9 +1646,7 @@ export default function AICustomPlanSheet({
                         <button
                           type="button"
                           disabled={isBusy}
-                          onClick={() =>
-                            onApplyPlan(stripChangeTypes(generatedTasks), sessionSideQuests)
-                          }
+                          onClick={() => void handleApplyPlan()}
                           className="flex-1 min-h-[44px] px-4 rounded-xl font-semibold text-sm inline-flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98] transition-transform duration-150 ease-out disabled:opacity-50"
                           style={{
                             touchAction: 'manipulation',
@@ -1575,6 +1663,114 @@ export default function AICustomPlanSheet({
                 </footer>
               </>
             )}
+    </div>
+  );
+
+  if (embedded) {
+    return isOpen ? studioBody : null;
+  }
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <div
+          ref={dialogRef}
+          tabIndex={-1}
+          className="fixed inset-0 z-[125] flex items-end sm:items-center justify-center sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={subView === 'side-quest' ? 'ai-side-quest-title' : 'ai-plan-sheet-title'}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <motion.button
+            type="button"
+            aria-label="Cerrar asistente de IA"
+            onClick={subView === 'side-quest' ? handleLeaveSideQuest : handleRequestClose}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.16, ease: 'easeOut' }}
+            style={isDesktop ? undefined : { opacity: backdropOpacity }}
+            className="absolute inset-0 bg-black/68 backdrop-blur-[3px]"
+          />
+
+          <motion.div
+            style={
+              isDesktop
+                ? {
+                    backgroundColor: 'var(--surface-card)',
+                    borderColor: 'var(--border-subtle)',
+                    color: 'var(--text-primary)',
+                  }
+                : {
+                    y: sheetY,
+                    backgroundColor: 'var(--surface-card)',
+                    borderColor: 'var(--border-subtle)',
+                    color: 'var(--text-primary)',
+                  }
+            }
+            initial={
+              reduceMotion
+                ? { opacity: 0 }
+                : isDesktop
+                  ? { opacity: 0, scale: 0.96, y: 8 }
+                  : { y: '100%' }
+            }
+            animate={
+              reduceMotion
+                ? { opacity: 1 }
+                : isDesktop
+                  ? { opacity: 1, scale: 1, y: 0 }
+                  : { y: 0 }
+            }
+            exit={
+              reduceMotion
+                ? { opacity: 0 }
+                : isDesktop
+                  ? { opacity: 0, scale: 0.97, y: 6, transition: SHEET_EXIT_TRANSITION }
+                  : { y: '100%', transition: SHEET_EXIT_TRANSITION }
+            }
+            transition={
+              reduceMotion
+                ? REDUCED_MOTION_TRANSITION
+                : isDesktop
+                  ? { duration: 0.22, ease: [0.22, 1, 0.36, 1] }
+                  : SHEET_ENTER_SPRING
+            }
+            drag={!isDesktop && !reduceMotion ? 'y' : false}
+            dragControls={dragControls}
+            dragListener={false}
+            dragConstraints={{ top: 0 }}
+            dragElastic={{ top: 0, bottom: 0.25 }}
+            dragMomentum={false}
+            onDragEnd={(_, info) => {
+              if (shouldDismissSheet(info.offset.y, info.velocity.y)) {
+                if (subView === 'side-quest') {
+                  handleLeaveSideQuest();
+                } else {
+                  handleRequestClose();
+                }
+              } else {
+                animate(sheetY, 0, {
+                  ...SHEET_SNAP_SPRING,
+                  velocity: info.velocity.y,
+                });
+              }
+            }}
+            className="relative z-10 w-full max-w-xl h-[95dvh] sm:h-[88dvh] max-h-[840px] rounded-t-3xl sm:rounded-3xl border flex flex-col overflow-hidden shadow-2xl"
+          >
+            {!isDesktop && (
+              <div
+                onPointerDown={(event) => dragControls.start(event)}
+                className="flex justify-center pt-2.5 pb-0.5 cursor-grab active:cursor-grabbing touch-none shrink-0"
+              >
+                <span
+                  className="w-10 h-1 rounded-full"
+                  style={{ backgroundColor: 'var(--border-control)' }}
+                />
+              </div>
+            )}
+            {studioBody}
           </motion.div>
         </div>
       )}

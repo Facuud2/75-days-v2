@@ -84,21 +84,31 @@ export async function baseRequest<T>(
 
     const controller = new AbortController();
     const externalSignal = options.signal;
+    let abortSource: 'external' | 'timeout' | null = null;
+    const abortFromExternal = () => {
+      if (abortSource !== null) return;
+      abortSource = 'external';
+      const reason = externalSignal?.reason;
+      controller.abort(
+        reason ?? new DOMException('The operation was aborted.', 'AbortError')
+      );
+    };
+
     if (externalSignal) {
       if (externalSignal.aborted) {
-        controller.abort(externalSignal.reason);
+        abortFromExternal();
       } else {
-        externalSignal.addEventListener(
-          'abort',
-          () => controller.abort(externalSignal.reason),
-          { once: true }
-        );
+        externalSignal.addEventListener('abort', abortFromExternal, { once: true });
       }
     }
-    const timeoutId = setTimeout(
-      () => controller.abort(new Error('Request timeout')),
-      timeoutMs
-    );
+    const timeoutId = setTimeout(() => {
+      if (abortSource !== null) return;
+      abortSource = 'timeout';
+      controller.abort(new Error('Request timeout'));
+    }, timeoutMs);
+    if (externalSignal?.aborted) {
+      clearTimeout(timeoutId);
+    }
 
     const config: RequestInit = {
       ...options,
@@ -112,13 +122,14 @@ export async function baseRequest<T>(
     let response: Response;
     try {
       response = await fetch(`${baseUrl}${endpoint}`, config);
-    } catch (err: any) {
-      if (err?.name === 'AbortError' || controller.signal.aborted) {
+    } catch (err: unknown) {
+      if (abortSource === 'timeout') {
         throw new Error('La solicitud tardó demasiado. Intenta de nuevo.');
       }
       throw err;
     } finally {
       clearTimeout(timeoutId);
+      externalSignal?.removeEventListener('abort', abortFromExternal);
     }
 
     if (!response.ok) {

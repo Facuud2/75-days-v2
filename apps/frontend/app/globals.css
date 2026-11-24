@@ -272,6 +272,13 @@ html[data-appearance="light"] {
   --color-white: oklch(0.13 0.003 286);
 }
 
+/* Bright accent fills need dark ink to stay ≥4.5:1 in dark appearance.
+   Light appearance darkens --accent-fill via color-mix, so white still works. */
+html[data-appearance="dark"][data-palette="fitness"],
+html[data-appearance="dark"][data-palette="bamboo-green"] {
+  --on-accent: #111111;
+}
+
 /* Profile roles. Keeping these out of the component prevents light mode from
    inheriting dark-only surfaces while preserving the editorial pink hero. */
 .profile-identity-card {
