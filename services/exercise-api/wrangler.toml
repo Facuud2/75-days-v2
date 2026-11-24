@@ -10,6 +10,10 @@ compatibility_flags = ["nodejs_compat"]
 IMAGE_BASE_URL = "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises"
 ALLOWED_ORIGINS = "http://localhost:3000,http://127.0.0.1:3000,https://*.vercel.app"
 
+[previews.vars]
+IMAGE_BASE_URL = "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises"
+ALLOWED_ORIGINS = "http://localhost:3000,http://127.0.0.1:3000,https://*.vercel.app"
+
 # Descomenta este bloque una vez que crees tu bucket R2 en Cloudflare Dashboard
 # (paso a paso en services/exercise-api/CLOUDFLARE_SETUP.md):
 #
