@@ -34,6 +34,7 @@ export const getCurrentChallenge = async (
 };
 
 const goalTemplateInputSchema = z.object({
+  id: z.string().optional(),
   title: z.string().min(1),
   description: z.string().nullable().optional(),
   icon: z.string().nullable().optional(),
@@ -135,6 +136,16 @@ export const startChallenge = async (
       isSameGoalTemplate(activeChallenge.customGoalsTemplate, templatesToUse)
     ) {
       return res.status(200).json({ ...activeChallenge, unchanged: true });
+    }
+
+    if (!activeChallenge && prisma.user?.findUnique) {
+      const existingUser = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true },
+      });
+      if (!existingUser) {
+        return res.status(401).json({ error: 'User not found' });
+      }
     }
 
     const parsedOffset = parseTimezoneOffset(timezoneOffset);
@@ -271,6 +282,9 @@ export const startChallenge = async (
       return res
         .status(400)
         .json({ error: 'Validation failed', details: error.issues });
+    }
+    if ((error as { code?: string })?.code === 'P2003') {
+      return res.status(401).json({ error: 'User not found' });
     }
     console.error('[challengeController.startChallenge]', error);
     return res.status(500).json({ error: 'Internal server error' });

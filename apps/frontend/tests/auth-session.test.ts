@@ -125,6 +125,18 @@ describe('useAuthStore session & logout race safety', () => {
     expect(useAuthStore.getState().isAuthenticated).toBe(false);
     expect(useAuthStore.getState().token).toBeNull();
     expect(useAuthStore.getState().isLoading).toBe(false);
+
+    useAuthStore.setState({
+      user: mockUser,
+      token: 'jwt-stale-deleted-user',
+      isAuthenticated: true,
+    });
+    const err404 = Object.assign(new Error('User not found'), { status: 404 });
+    vi.spyOn(authService, 'getMe').mockRejectedValueOnce(err404);
+    await useAuthStore.getState().checkAuth();
+    expect(useAuthStore.getState().isAuthenticated).toBe(false);
+    expect(useAuthStore.getState().token).toBeNull();
+    expect(useAuthStore.getState().user).toBeNull();
   });
 
   it('baseRequest rejects on timeout instead of hanging indefinitely', async () => {

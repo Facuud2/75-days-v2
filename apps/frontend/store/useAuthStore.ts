@@ -160,8 +160,8 @@ export const useAuthStore = create<AuthState>()(
         } catch (error: any) {
           if (epoch !== authEpoch) return;
           const status = error?.status;
-          if (status === 401 || status === 403 || !get().isAuthenticated) {
-            // Token is invalid/expired or unverified session failed
+          if (status === 401 || status === 403 || status === 404 || !get().isAuthenticated) {
+            // Token is invalid/expired, user no longer exists, or unverified session failed
             set({ user: null, token: null, isAuthenticated: false, isLoading: false });
           } else {
             // Transient network/timeout error on an already-authenticated session

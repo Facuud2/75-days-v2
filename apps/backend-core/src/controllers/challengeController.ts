@@ -24,15 +24,24 @@ export const getCurrentChallenge = async (req: AuthRequest, res: Response) => {
     }
 };
 
+const goalTemplateInputSchema = z.object({
+    id: z.string().optional(),
+    title: z.string().min(1),
+    description: z.string().nullable().optional(),
+    icon: z.string().nullable().optional(),
+    cadence: z.enum(['daily', 'weekly', 'monthly']).optional(),
+    measurementType: z.enum(['boolean', 'count', 'numeric']).optional(),
+    targetValue: z.number().positive().optional(),
+    targetUnit: z.string().max(30).nullable().optional(),
+    order: z.number().int().optional()
+}).strict();
+
 const startChallengeSchema = z.object({
     difficulty: z.enum(['Soft', 'Medium', 'Hard', 'Custom']),
     // Minutos de `getTimezoneOffset()` del navegador. Ausente = servidor en UTC.
     timezoneOffset: z.number().optional(),
-    customGoalsTemplate: z.array(z.object({
-        title: z.string(),
-        description: z.string().optional(),
-        icon: z.string().optional()
-    }).strict()).optional()
+    breakStreakOnPeriodFail: z.boolean().optional(),
+    customGoalsTemplate: z.array(goalTemplateInputSchema).optional()
 }).strict();
 
 /** Dos listas de metas son el mismo plan si coinciden título e ícono, en orden. */
@@ -111,6 +120,9 @@ export const startChallenge = async (req: AuthRequest, res: Response) => {
         if (error instanceof z.ZodError) {
             return res.status(400).json({ error: 'Validation failed', details: error.issues });
         }
+        if ((error as { code?: string })?.code === 'P2003') {
+            return res.status(401).json({ error: 'User not found' });
+        }
         res.status(500).json({ error: 'Internal server error' });
     }
 };
@@ -153,11 +165,8 @@ export const abandonChallenge = async (req: AuthRequest, res: Response) => {
 
 const updateCustomGoalsSchema = z.object({
     timezoneOffset: z.number().optional(),
-    customGoalsTemplate: z.array(z.object({
-        title: z.string().min(1),
-        description: z.string().optional(),
-        icon: z.string().optional()
-    }).strict()).min(1)
+    breakStreakOnPeriodFail: z.boolean().optional(),
+    customGoalsTemplate: z.array(goalTemplateInputSchema).min(1)
 }).strict();
 
 /**

@@ -261,9 +261,15 @@ const registerSchema = z.object({
   customGoalsTemplate: z
     .array(
       z.object({
+        id: z.string().optional(),
         title: z.string(),
-        description: z.string().optional(),
-        icon: z.string().optional(),
+        description: z.string().nullable().optional(),
+        icon: z.string().nullable().optional(),
+        cadence: z.enum(['daily', 'weekly', 'monthly']).optional(),
+        measurementType: z.enum(['boolean', 'count', 'numeric']).optional(),
+        targetValue: z.number().positive().optional(),
+        targetUnit: z.string().max(30).nullable().optional(),
+        order: z.number().int().optional(),
       }).strict()
     )
     .optional(),
@@ -609,7 +615,7 @@ export const getMe = async (req: ControllerRequest, res: ControllerResponse) => 
       where: { id: userId },
     });
 
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (!user) return res.status(401).json({ error: 'User not found' });
 
     return res.json({ user: serializeAuthUser(user) });
   } catch (error) {
@@ -632,7 +638,7 @@ export const getOnboardingStatus = async (
       select: { onboardingCompleted: true },
     });
 
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (!user) return res.status(401).json({ error: 'User not found' });
 
     return res.json({ onboardingCompleted: user.onboardingCompleted });
   } catch (error) {
@@ -686,6 +692,9 @@ export const completeOnboarding = async (
   } catch (error) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: 'Validation failed', details: error.issues });
+    }
+    if ((error as { code?: string })?.code === 'P2025') {
+      return res.status(401).json({ error: 'User not found' });
     }
     console.error('[authController.completeOnboarding]', error);
     return res.status(500).json({ error: 'Internal server error' });
