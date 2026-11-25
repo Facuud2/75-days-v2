@@ -1,10 +1,15 @@
 'use client';
 
+import { useState } from 'react';
 import { Apple, Coffee, Moon, Utensils, UtensilsCrossed, type LucideIcon } from 'lucide-react';
 
 interface MealThumbnailProps {
   /** Tipo de comida registrado (`breakfast` | `lunch` | `snack` | `dinner`). */
   mealType?: string;
+  /** URL o data URL de la foto de la comida cargada o tomada con cámara. */
+  photoUrl?: string | null;
+  /** Texto alternativo cuando se muestra la foto. */
+  alt?: string;
   /** Diámetro en píxeles. Por defecto 48. */
   size?: number;
   className?: string;
@@ -47,40 +52,61 @@ const FALLBACK_VISUAL: MealVisual = {
 
 export default function MealThumbnail({
   mealType,
+  photoUrl,
+  alt = '',
   size = 48,
   className,
 }: MealThumbnailProps) {
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+
+  const showPhoto = Boolean(photoUrl && failedUrl !== photoUrl);
   const visual = (mealType && MEAL_VISUALS[mealType]) || FALLBACK_VISUAL;
   const Icon = visual.Icon;
   const iconSize = Math.max(14, Math.round(size * 0.44));
 
   return (
     <div
-      aria-hidden="true"
+      aria-hidden={alt ? undefined : true}
       className={`relative shrink-0 overflow-hidden rounded-full ring-1 ring-white/15 ${className ?? ''}`}
-      style={{ width: size, height: size, background: visual.gradient }}
+      style={{
+        width: size,
+        height: size,
+        background: showPhoto ? 'var(--surface-inset)' : visual.gradient,
+      }}
     >
-      {/* Luz superior para que el degradado se lea como una foto y no como un bloque plano. */}
-      <span
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            'radial-gradient(circle at 32% 22%, rgba(255,255,255,0.55), rgba(255,255,255,0) 58%)',
-        }}
-      />
-      {/* Sombra inferior para dar volumen. */}
-      <span
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            'radial-gradient(circle at 70% 105%, rgba(0,0,0,0.35), rgba(0,0,0,0) 60%)',
-        }}
-      />
-      <Icon
-        className="absolute inset-0 m-auto text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.25)]"
-        style={{ width: iconSize, height: iconSize }}
-        strokeWidth={1.9}
-      />
+      {showPhoto ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={photoUrl!}
+          alt={alt}
+          className="h-full w-full object-cover"
+          onError={() => setFailedUrl(photoUrl ?? null)}
+        />
+      ) : (
+        <>
+          {/* Luz superior para que el degradado se lea como una foto y no como un bloque plano. */}
+          <span
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background:
+                'radial-gradient(circle at 32% 22%, rgba(255,255,255,0.55), rgba(255,255,255,0) 58%)',
+            }}
+          />
+          {/* Sombra inferior para dar volumen. */}
+          <span
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background:
+                'radial-gradient(circle at 70% 105%, rgba(0,0,0,0.35), rgba(0,0,0,0) 60%)',
+            }}
+          />
+          <Icon
+            className="absolute inset-0 m-auto text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.25)]"
+            style={{ width: iconSize, height: iconSize }}
+            strokeWidth={1.9}
+          />
+        </>
+      )}
     </div>
   );
 }

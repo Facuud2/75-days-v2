@@ -82,6 +82,14 @@ test.describe('Dedicated /nutrition Section & Calendar Day Meals (375x812)', () 
         });
       });
 
+      await page.route('**/api/nutrition/routines**', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ routines: [] }),
+        });
+      });
+
       let updatedPayload: any = null;
       await page.route('**/api/nutrition/meals/m-breakfast-1', async (route) => {
         if (route.request().method() === 'PUT') {

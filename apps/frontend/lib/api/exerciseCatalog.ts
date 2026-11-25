@@ -175,12 +175,50 @@ export function normalizeSearchText(value: string): string {
     .trim();
 }
 
+export type ExerciseEnvironment = 'all' | 'gym' | 'home' | 'outdoor';
+
+export const HOME_EQUIPMENT_KEYS = new Set<string>([
+  'body only',
+  'none',
+  'bands',
+  'exercise ball',
+  'foam roll',
+  'medicine ball',
+]);
+
+const OUTDOOR_CARDIO_IDS = new Set<string>([
+  'Trail_Running_Walking',
+  'Bicycling',
+  'Skating',
+]);
+
+export function matchesExerciseEnvironment(
+  exercise: CatalogExercise,
+  environment: ExerciseEnvironment
+): boolean {
+  if (environment === 'all') return true;
+  if (environment === 'home') {
+    return exercise.category !== 'cardio' && HOME_EQUIPMENT_KEYS.has(exercise.equipment);
+  }
+  if (environment === 'outdoor') {
+    return (
+      exercise.category === 'cardio' &&
+      (OUTDOOR_CARDIO_IDS.has(exercise.id) ||
+        exercise.equipment === 'none' ||
+        exercise.equipment === 'other')
+    );
+  }
+  // 'gym': machines, cables, weights, and physical/bodyweight exercises, excluding outdoor-only cardio
+  return !(exercise.category === 'cardio' && OUTDOOR_CARDIO_IDS.has(exercise.id));
+}
+
 export interface ExerciseFilterOptions {
   query?: string;
   bodyZone?: string;
   equipment?: string;
   level?: string;
   onlyCustom?: boolean;
+  environment?: ExerciseEnvironment;
 }
 
 /**
@@ -193,6 +231,9 @@ export function filterExercises(
 ): CatalogExercise[] {
   let result = exercises;
 
+  if (filters.environment && filters.environment !== 'all') {
+    result = result.filter((e) => matchesExerciseEnvironment(e, filters.environment!));
+  }
   if (filters.onlyCustom) {
     result = result.filter((e) => e.isCustom);
   }

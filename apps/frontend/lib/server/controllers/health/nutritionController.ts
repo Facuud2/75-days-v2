@@ -12,6 +12,18 @@ const MealEntrySchema = z.object({
   fatG: z.number().min(0).max(2000).default(0),
   fiberG: z.number().min(0).max(1000).default(0),
   sugarG: z.number().min(0).max(2000).default(0),
+  photoUrl: z
+    .string()
+    .max(500_000)
+    .refine(
+      (val) =>
+        /^data:image\/(jpeg|jpg|png|webp|gif);base64,/i.test(val) ||
+        /^https?:\/\//i.test(val),
+      'Invalid photoUrl format'
+    )
+    .nullable()
+    .optional(),
+  routineItemId: z.string().max(120).nullable().optional(),
 }).strict();
 
 const GoalsSchema = z.object({

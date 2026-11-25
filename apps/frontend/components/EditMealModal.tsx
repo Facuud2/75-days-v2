@@ -92,6 +92,7 @@ function EditMealModalContent({
       fatG: Math.max(0, Number(formData.fatG) || 0),
       fiberG: Math.max(0, Number(formData.fiberG) || 0),
       sugarG: Math.max(0, Number(formData.sugarG) || 0),
+      ...(meal.photoUrl ? { photoUrl: meal.photoUrl } : {}),
     };
 
     onSaved();

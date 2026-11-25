@@ -26,6 +26,7 @@ import {
   Minus,
   Plus,
   Scale,
+  Share2,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -34,12 +35,14 @@ import { syncCoreStores } from '@/lib/api/sync';
 import { isTutorialPending, markTutorialSeen } from '@/lib/tutorial';
 import type { DevDataset } from '@/components/dev/DevDatasetPicker';
 import { DEV_DATASETS } from '@/components/dev/DevDatasetPicker';
+import type { ShareCardKind } from '@/lib/utils/shareCardData';
 import DashboardLoading from './loading';
 
 // Lazy-loaded modals for dashboard (vercel-react-best-practices: bundle-dynamic-imports)
 const SideQuestsModal = dynamic(() => import('@/components/SideQuestsModal'), { ssr: false });
 const SideQuestDetailModal = dynamic(() => import('@/components/SideQuestDetailModal'), { ssr: false });
 const OnboardingTutorial = dynamic(() => import('@/components/OnboardingTutorial'), { ssr: false });
+const ShareProgressModal = dynamic(() => import('@/components/ShareProgressModal'), { ssr: false });
 
 type TabView = 'plan' | 'missions';
 
@@ -130,6 +133,10 @@ export default function Dashboard() {
   const [isSideQuestsModalOpen, setIsSideQuestsModalOpen] = useState(false);
   const [selectedSideQuest, setSelectedSideQuest] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<TabView>('plan');
+  const [shareModal, setShareModal] = useState<{ open: boolean; initialKind: ShareCardKind }>({
+    open: false,
+    initialKind: 'daily',
+  });
 
   // ── break-ui · dataset del laboratorio (sólo dev) ──────────────────────────
   // El estado por defecto deja la página exactamente como se diseñó; los demás
@@ -581,13 +588,24 @@ export default function Dashboard() {
               <p className="text-rose-500 text-[10px] font-bold tracking-[0.2em] uppercase">Resumen de hoy</p>
               <h2 id="today-summary-title" className="mt-1 text-sm font-semibold text-white/70">Día actual</h2>
             </div>
-            <Link
-              href="/calendar"
-              className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-white/80 transition-colors hover:bg-white/10 hover:text-white active:scale-95"
-            >
-              <CalendarRange className="h-3.5 w-3.5 text-rose-400" aria-hidden="true" />
-              <span>Calendario</span>
-            </Link>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShareModal({ open: true, initialKind: 'challenge' })}
+                aria-label="Compartir progreso del reto"
+                className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-white/80 transition-colors hover:bg-white/10 hover:text-white active:scale-95"
+              >
+                <Share2 className="h-3.5 w-3.5 text-rose-400" aria-hidden="true" />
+                <span>Compartir</span>
+              </button>
+              <Link
+                href="/calendar"
+                className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-white/80 transition-colors hover:bg-white/10 hover:text-white active:scale-95"
+              >
+                <CalendarRange className="h-3.5 w-3.5 text-rose-400" aria-hidden="true" />
+                <span>Calendario</span>
+              </Link>
+            </div>
           </div>
 
           <div className="mt-3 flex items-baseline gap-1">
@@ -647,6 +665,16 @@ export default function Dashboard() {
                   ? '¡Todas las tareas diarias completadas por hoy! Gran trabajo.'
                   : `${remainingTasks} tareas diarias restantes para terminar el día.`}
             </p>
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={() => setShareModal({ open: true, initialKind: 'daily' })}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3.5 py-2.5 text-xs font-semibold text-white/85 transition-colors hover:bg-white/10 hover:text-white active:scale-[0.98]"
+              >
+                <Share2 className="h-3.5 w-3.5 text-rose-400" aria-hidden="true" />
+                <span>Compartir estado de hoy</span>
+              </button>
+            </div>
             {(currentWeeklyGoals.length > 0 || currentMonthlyGoals.length > 0) && (
               <div className="mt-3 flex flex-wrap gap-2">
                 {currentWeeklyGoals.length > 0 && (
@@ -949,6 +977,18 @@ export default function Dashboard() {
           }}
           onSkip={handleDismissTutorial}
           onComplete={handleDismissTutorial}
+        />
+      )}
+      {shareModal.open && (
+        <ShareProgressModal
+          open={shareModal.open}
+          onClose={() => setShareModal((prev) => ({ ...prev, open: false }))}
+          initialKind={shareModal.initialKind}
+          dailySource={{
+            date: todayStr,
+            dayNumber: Math.max(1, currentDay),
+            goals: devLog?.goals || [],
+          }}
         />
       )}
     </div>

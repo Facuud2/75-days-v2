@@ -18,7 +18,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { healthService, Meal } from '@/lib/api/health';
+import { healthService, Meal, MealRoutineItem, MealRoutineMode } from '@/lib/api/health';
 import { useHealthStore } from '@/store/useHealthStore';
 import { useUIStore } from '@/store/useUIStore';
 import { getLocalDateString } from '@/lib/utils/date';
@@ -30,6 +30,14 @@ import FloatingActionButton from '@/components/FloatingActionButton';
 
 const LogMealModal = dynamic(() => import('@/components/LogMealModal'), { ssr: false });
 const EditMealModal = dynamic(() => import('@/components/EditMealModal'), { ssr: false });
+const MealRoutineBuilderSheet = dynamic(
+  () => import('@/components/nutrition/MealRoutineBuilderSheet'),
+  { ssr: false }
+);
+const MealRecommendationsSheet = dynamic(
+  () => import('@/components/nutrition/MealRecommendationsSheet'),
+  { ssr: false }
+);
 
 type MealSlotId = 'breakfast' | 'lunch' | 'snack' | 'dinner';
 
@@ -65,6 +73,14 @@ function NutritionPageInner() {
   const [logModalSlot, setLogModalSlot] = useState<MealSlotId | undefined>(undefined);
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [editingMeal, setEditingMeal] = useState<Meal | null>(null);
+  const [isRoutineBuilderOpen, setIsRoutineBuilderOpen] = useState(false);
+  const [isAiRecommendationsOpen, setIsAiRecommendationsOpen] = useState(false);
+  const [routineBuilderDraft, setRoutineBuilderDraft] = useState<{
+    name: string;
+    description: string;
+    mode: MealRoutineMode;
+    items: MealRoutineItem[];
+  } | null>(null);
 
   // Inline Nutritional Goals Editor
   const [isEditingGoals, setIsEditingGoals] = useState(false);
@@ -78,7 +94,11 @@ function NutritionPageInner() {
 
   const stats = useHealthStore((s) => s.dailyStatsByDate[selectedDate]);
   const isLoadingStats = useHealthStore((s) => s.isLoadingStats);
+  const mealRoutines = useHealthStore((s) => s.mealRoutines);
   const fetchProfileBundle = useHealthStore((s) => s.fetchProfileBundle);
+  const fetchMealRoutines = useHealthStore((s) => s.fetchMealRoutines);
+  const logMealOptimistic = useHealthStore((s) => s.logMealOptimistic);
+  const applyMealRoutineToDate = useHealthStore((s) => s.applyMealRoutineToDate);
   const openLogWorkoutModal = useUIStore((s) => s.openLogWorkoutModal);
 
   const refreshDateStats = useCallback(
@@ -91,6 +111,10 @@ function NutritionPageInner() {
   useEffect(() => {
     refreshDateStats(selectedDate);
   }, [selectedDate, refreshDateStats]);
+
+  useEffect(() => {
+    void fetchMealRoutines();
+  }, [fetchMealRoutines]);
 
   const consumed = Math.round(stats?.consumed ?? 0);
   const dailyGoal = Math.round(stats?.dailyGoal ?? 2000);
@@ -127,9 +151,64 @@ function NutritionPageInner() {
         calories: Math.round(m.calories),
         prepTimeMin: 5,
         mealType: m.mealType,
+        photoUrl: m.photoUrl,
       })),
     [meals]
   );
+
+  const activeRoutine = useMemo(
+    () => mealRoutines.find((r) => r.isActive) ?? null,
+    [mealRoutines]
+  );
+
+  const pendingPlannedItems = useMemo(() => {
+    if (!activeRoutine) return [];
+    const selectedDayIdx = (parseLocalDate(selectedDate).getDay() + 6) % 7;
+    const loggedIds = new Set(
+      meals.map((m) => m.routineItemId).filter((v): v is string => Boolean(v))
+    );
+    return activeRoutine.items.filter((item) => {
+      const matchesDay =
+        activeRoutine.mode === 'daily'
+          ? item.dayOfWeek === null
+          : item.dayOfWeek === selectedDayIdx;
+      if (!matchesDay) return false;
+      if (item.id && loggedIds.has(item.id)) return false;
+      return true;
+    });
+  }, [activeRoutine, meals, selectedDate]);
+
+  const handleLogPlannedItem = async (item: MealRoutineItem) => {
+    try {
+      await logMealOptimistic({
+        date: selectedDate,
+        mealType: item.mealType,
+        name: item.name,
+        calories: Math.max(1, Math.round(item.calories)),
+        proteinG: item.proteinG,
+        carbG: item.carbG,
+        fatG: item.fatG,
+        fiberG: item.fiberG ?? 0,
+        sugarG: item.sugarG ?? 0,
+        routineItemId: item.id ?? null,
+      });
+      toast.success(`"${item.name}" registrada`);
+    } catch {
+      toast.error('No se pudo registrar la comida');
+    }
+  };
+
+  const handleApplyAllPlanned = async () => {
+    if (!activeRoutine) return;
+    try {
+      const count = await applyMealRoutineToDate(activeRoutine.id, selectedDate);
+      if (count > 0) {
+        toast.success(`Se registraron ${count} comidas del plan`);
+      }
+    } catch {
+      toast.error('No se pudo aplicar la rutina al día');
+    }
+  };
 
   const handleOpenGoalsEditor = () => {
     setGoalsDraft({
@@ -496,6 +575,15 @@ function NutritionPageInner() {
         <div className="relative">
           <MealsPlanCard
             meals={allMealsForPlan}
+            activeRoutine={activeRoutine}
+            pendingPlannedItems={pendingPlannedItems}
+            onLogPlannedItem={(item) => void handleLogPlannedItem(item)}
+            onApplyAllPlanned={() => void handleApplyAllPlanned()}
+            onOpenRoutineBuilder={() => {
+              setRoutineBuilderDraft(null);
+              setIsRoutineBuilderOpen(true);
+            }}
+            onOpenAiRecommendations={() => setIsAiRecommendationsOpen(true)}
             className="pb-16"
             onMealPress={(meal) => setEditingMeal(
               meals.find((m) => m.id === meal.id)!
@@ -510,6 +598,48 @@ function NutritionPageInner() {
           </div>
         </div>
       </div>
+
+      {isRoutineBuilderOpen ? (
+        <MealRoutineBuilderSheet
+          isOpen={isRoutineBuilderOpen}
+          onClose={() => {
+            setIsRoutineBuilderOpen(false);
+            setRoutineBuilderDraft(null);
+          }}
+          onOpenAiPlanner={() => setIsAiRecommendationsOpen(true)}
+          initialDraft={routineBuilderDraft}
+          goals={{
+            dailyCalorieGoal: dailyGoal,
+            proteinGoalG: macros.goals?.proteinG ?? 150,
+            carbGoalG: macros.goals?.carbG ?? 200,
+            fatGoalG: macros.goals?.fatG ?? 65,
+          }}
+        />
+      ) : null}
+
+      {isAiRecommendationsOpen ? (
+        <MealRecommendationsSheet
+          isOpen={isAiRecommendationsOpen}
+          onClose={() => setIsAiRecommendationsOpen(false)}
+          selectedDate={selectedDate}
+          consumedToday={{
+            calories: consumed,
+            proteinG: macros.proteinG,
+            carbG: macros.carbG,
+            fatG: macros.fatG,
+          }}
+          goals={{
+            dailyCalorieGoal: dailyGoal,
+            proteinGoalG: macros.goals?.proteinG ?? 150,
+            carbGoalG: macros.goals?.carbG ?? 200,
+            fatGoalG: macros.goals?.fatG ?? 65,
+          }}
+          onEditDraftInBuilder={(draft) => {
+            setRoutineBuilderDraft(draft);
+            setIsRoutineBuilderOpen(true);
+          }}
+        />
+      ) : null}
 
       {isLogModalOpen ? (
         <LogMealModal

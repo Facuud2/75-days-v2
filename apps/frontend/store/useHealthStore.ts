@@ -8,8 +8,11 @@ import {
   Ingredient,
   LogMealPayload,
   Meal,
+  MealRoutine,
+  MealRoutinePayload,
 } from '@/lib/api/health';
 import { UpdateProfilePayload, UserProfileResponse, userService } from '@/lib/api/users';
+import { useChallengeStore } from './useChallengeStore';
 
 const MET_VALUES: Record<string, number> = {
   strength: 5.0,
@@ -56,6 +59,9 @@ export interface LogWorkoutPayload {
   notes?: string;
   caloriesBurned?: number;
   distanceKm?: number;
+  environment?: 'home' | 'gym' | 'outdoor' | null;
+  linkedGoalId?: string | null;
+  timezoneOffset?: number;
 }
 
 interface HealthStoreState {
@@ -65,17 +71,25 @@ interface HealthStoreState {
   isStravaConnected: boolean;
   customFoods: CustomFood[];
   systemIngredients: Ingredient[];
+  mealRoutines: MealRoutine[];
 
   hasLoadedProfile: boolean;
   hasLoadedStats: boolean;
   isLoadingProfile: boolean;
   isLoadingStats: boolean;
   isLoadingCustomFoods: boolean;
+  isLoadingMealRoutines: boolean;
   profileError: string | null;
   authBlocked: boolean;
 
   fetchProfileBundle: (date: string, options?: { skipCoreProfile?: boolean }) => Promise<void>;
   fetchCatalogIfNeeded: (force?: boolean) => Promise<void>;
+  fetchMealRoutines: () => Promise<void>;
+  createMealRoutine: (payload: MealRoutinePayload) => Promise<MealRoutine>;
+  updateMealRoutine: (id: string, payload: Partial<MealRoutinePayload>) => Promise<MealRoutine>;
+  deleteMealRoutine: (id: string) => Promise<void>;
+  setActiveMealRoutine: (id: string) => Promise<void>;
+  applyMealRoutineToDate: (id: string, date: string) => Promise<number>;
   hydrateProfileFromSync: (profile: UserProfileResponse | null) => void;
 
   logMealOptimistic: (payload: LogMealPayload) => Promise<void>;
@@ -152,11 +166,13 @@ const INITIAL_HEALTH_STATE = {
   isStravaConnected: false,
   customFoods: [] as CustomFood[],
   systemIngredients: [] as Ingredient[],
+  mealRoutines: [] as MealRoutine[],
   hasLoadedProfile: false,
   hasLoadedStats: false,
   isLoadingProfile: false,
   isLoadingStats: false,
   isLoadingCustomFoods: false,
+  isLoadingMealRoutines: false,
   profileError: null as string | null,
   authBlocked: false,
 };
@@ -318,6 +334,7 @@ export const useHealthStore = create<HealthStoreState>()(
           proteinG: Number(payload.proteinG) || 0,
           carbG: Number(payload.carbG) || 0,
           fatG: Number(payload.fatG) || 0,
+          ...(payload.photoUrl !== undefined && { photoUrl: payload.photoUrl }),
         };
 
         const updatedStats = recomputeStatsMeals(baseStats, [...(baseStats.meals || []), optimisticMeal]);
@@ -371,6 +388,7 @@ export const useHealthStore = create<HealthStoreState>()(
                   proteinG: Number(payload.proteinG) || 0,
                   carbG: Number(payload.carbG) || 0,
                   fatG: Number(payload.fatG) || 0,
+                  ...(payload.photoUrl !== undefined && { photoUrl: payload.photoUrl }),
                 }
               : m
           );
@@ -443,6 +461,7 @@ export const useHealthStore = create<HealthStoreState>()(
         const optimisticWorkout = {
           id: tempId,
           date: payload.date,
+          title: payload.title ?? null,
           sport: payload.sport,
           durationMin: payload.durationMin,
           intensity: payload.intensity,
@@ -450,6 +469,8 @@ export const useHealthStore = create<HealthStoreState>()(
           caloriesBurned: estimatedCalories,
           isManualCalories,
           distanceKm: payload.distanceKm ?? null,
+          environment: payload.environment ?? null,
+          linkedGoalId: payload.linkedGoalId ?? null,
           createdAt: new Date().toISOString(),
         };
 
@@ -472,13 +493,19 @@ export const useHealthStore = create<HealthStoreState>()(
         }));
 
         try {
-          const created = (await healthService.logWorkout(payload)) as any;
+          const created = (await healthService.logWorkout({
+            ...payload,
+            timezoneOffset: payload.timezoneOffset ?? new Date().getTimezoneOffset(),
+          })) as any;
           if (created?.id) {
             set((state) => ({
               recentWorkouts: (state.recentWorkouts || []).map((w) =>
                 w.id === tempId ? { ...optimisticWorkout, ...created } : w
               ),
             }));
+          }
+          if (created?.goalSync) {
+            useChallengeStore.getState().applyWorkoutGoalSync(created.goalSync);
           }
         } catch (error) {
           set((state) => {
@@ -554,13 +581,19 @@ export const useHealthStore = create<HealthStoreState>()(
         });
 
         try {
-          const updated = (await healthService.updateWorkout(id, payload)) as any;
+          const updated = (await healthService.updateWorkout(id, {
+            ...payload,
+            timezoneOffset: payload.timezoneOffset ?? new Date().getTimezoneOffset(),
+          })) as any;
           if (updated?.id) {
             set((state) => ({
               recentWorkouts: (state.recentWorkouts || []).map((w) =>
                 w.id === id ? { ...w, ...updated } : w
               ),
             }));
+          }
+          if (updated?.goalSync) {
+            useChallengeStore.getState().applyWorkoutGoalSync(updated.goalSync);
           }
         } catch (error) {
           set((state) => ({
@@ -608,7 +641,13 @@ export const useHealthStore = create<HealthStoreState>()(
         });
 
         try {
-          await healthService.deleteWorkout(id);
+          const deleted = await healthService.deleteWorkout(
+            id,
+            new Date().getTimezoneOffset()
+          );
+          if (deleted?.goalSync) {
+            useChallengeStore.getState().applyWorkoutGoalSync(deleted.goalSync);
+          }
         } catch (error) {
           set((state) => ({
             recentWorkouts: prevWorkouts,
@@ -672,6 +711,72 @@ export const useHealthStore = create<HealthStoreState>()(
 
       setStravaConnected: (connected: boolean) => {
         set({ isStravaConnected: connected });
+      },
+
+      fetchMealRoutines: async () => {
+        set({ isLoadingMealRoutines: true });
+        try {
+          const res = await healthService.getMealRoutines();
+          set({ mealRoutines: res.routines ?? [], isLoadingMealRoutines: false });
+        } catch {
+          set({ isLoadingMealRoutines: false });
+        }
+      },
+
+      createMealRoutine: async (payload: MealRoutinePayload) => {
+        const created = await healthService.createMealRoutine(payload);
+        set((state) => ({
+          mealRoutines: [
+            created,
+            ...state.mealRoutines.map((r) =>
+              created.isActive ? { ...r, isActive: false } : r
+            ),
+          ],
+        }));
+        return created;
+      },
+
+      updateMealRoutine: async (id: string, payload: Partial<MealRoutinePayload>) => {
+        const updated = await healthService.updateMealRoutine(id, payload);
+        set((state) => ({
+          mealRoutines: state.mealRoutines.map((r) => {
+            if (r.id === id) return updated;
+            return updated.isActive ? { ...r, isActive: false } : r;
+          }),
+        }));
+        return updated;
+      },
+
+      deleteMealRoutine: async (id: string) => {
+        const prev = get().mealRoutines;
+        set({ mealRoutines: prev.filter((r) => r.id !== id) });
+        try {
+          await healthService.deleteMealRoutine(id);
+        } catch (error) {
+          set({ mealRoutines: prev });
+          throw error;
+        }
+      },
+
+      setActiveMealRoutine: async (id: string) => {
+        const prev = get().mealRoutines;
+        set({
+          mealRoutines: prev.map((r) => ({ ...r, isActive: r.id === id })),
+        });
+        try {
+          await healthService.updateMealRoutine(id, { isActive: true });
+        } catch (error) {
+          set({ mealRoutines: prev });
+          throw error;
+        }
+      },
+
+      applyMealRoutineToDate: async (id: string, date: string) => {
+        const res = await healthService.applyMealRoutineToDate(id, date);
+        if (res.created && res.created.length > 0) {
+          await get().fetchProfileBundle(date, { skipCoreProfile: true });
+        }
+        return res.created?.length ?? 0;
       },
 
       reset: () => {

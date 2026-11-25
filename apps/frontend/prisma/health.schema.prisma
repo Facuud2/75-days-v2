@@ -30,20 +30,60 @@ model UserHealthProfile {
 }
 
 model MealEntry {
-  id        String   @id @default(uuid())
-  userId    String
-  date      String // YYYY-MM-DD
-  mealType  String // breakfast | lunch | dinner | snack
-  name      String
-  calories  Float
-  proteinG  Float    @default(0)
-  carbG     Float    @default(0)
-  fatG      Float    @default(0)
-  fiberG    Float    @default(0)
-  sugarG    Float    @default(0)
-  createdAt DateTime @default(now())
+  id            String   @id @default(uuid())
+  userId        String
+  date          String // YYYY-MM-DD
+  mealType      String // breakfast | lunch | dinner | snack
+  name          String
+  calories      Float
+  proteinG      Float    @default(0)
+  carbG         Float    @default(0)
+  fatG          Float    @default(0)
+  fiberG        Float    @default(0)
+  sugarG        Float    @default(0)
+  photoUrl      String?
+  routineItemId String?
+  createdAt     DateTime @default(now())
 
   @@index([userId, date])
+}
+
+model MealRoutine {
+  id          String            @id @default(uuid())
+  userId      String
+  name        String
+  description String?
+  mode        String            @default("weekly") // daily | weekly
+  goalTag     String?           // high_protein | deficit | maintenance | lean_bulk | custom
+  isActive    Boolean           @default(false)
+  items       MealRoutineItem[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([userId])
+}
+
+model MealRoutineItem {
+  id           String      @id @default(uuid())
+  routineId    String
+  dayOfWeek    Int?        // null when mode == "daily"; 0 (Mon) .. 6 (Sun) when mode == "weekly"
+  mealType     String      // breakfast | lunch | dinner | snack
+  name         String
+  calories     Float
+  proteinG     Float       @default(0)
+  carbG        Float       @default(0)
+  fatG         Float       @default(0)
+  fiberG       Float       @default(0)
+  sugarG       Float       @default(0)
+  prepTimeMin  Int?        @default(5)
+  customFoodId String?
+  notes        String?
+  order        Int         @default(0)
+
+  routine MealRoutine @relation(fields: [routineId], references: [id], onDelete: Cascade)
+
+  @@index([routineId])
+  @@index([routineId, dayOfWeek])
 }
 
 model WorkoutEntry {
@@ -60,6 +100,8 @@ model WorkoutEntry {
   loadVolumeKg     Float?
   notes            String?
   routineId        String?
+  environment      String?  // home | gym | outdoor
+  linkedGoalId     String?  // Optional DailyGoal ID override in Core DB
 
   // External Integration
   source     String  @default("manual") // manual | tracker | strava

@@ -11,6 +11,11 @@ import {
   transcribeUserAudio,
 } from '../../services/geminiService';
 import { fetchCachedSystemIngredients } from '../health/customFoodController';
+import { getHealthPrisma } from '../../db';
+import {
+  aiMealProposalItemSchema,
+  recommendMealsForGoal,
+} from '../../services/mealRecommendationService';
 
 const historyItemSchema = z.object({
   role: z.enum(['user', 'assistant']),
@@ -205,6 +210,83 @@ export const analyzeMeal = async (
     return res.status(502).json({
       error:
         'No pudimos analizar tu comida con la IA en este momento. Intentá de nuevo.',
+    });
+  }
+};
+
+const mealRecommendationsRequestSchema = z
+  .object({
+    textInput: z.string().trim().min(1, 'Escribí qué objetivo o comida buscás.').max(2000),
+    scope: z.enum(['single_meal', 'full_day', 'weekly']).default('single_meal'),
+    targetSlot: z.enum(['breakfast', 'lunch', 'dinner', 'snack', 'any']).optional(),
+    history: z.array(historyItemSchema).max(20).optional(),
+    currentDraft: z
+      .object({
+        routineName: z.string().max(120).optional(),
+        routineDescription: z.string().max(300).optional(),
+        mode: z.enum(['single_meal', 'daily', 'weekly']).optional(),
+        items: z.array(aiMealProposalItemSchema).max(40),
+      })
+      .nullable()
+      .optional(),
+    consumedToday: z
+      .object({
+        calories: z.number().min(0).max(25000),
+        proteinG: z.number().min(0).max(2000),
+        carbG: z.number().min(0).max(2000),
+        fatG: z.number().min(0).max(2000),
+      })
+      .optional(),
+  })
+  .strict();
+
+export const recommendMeals = async (
+  req: ControllerRequest,
+  res: ControllerResponse
+) => {
+  try {
+    const payload = mealRecommendationsRequestSchema.parse(req.body);
+    const userId = req.user?.id;
+    let healthProfile:
+      | {
+          dailyCalorieGoal: number;
+          proteinGoalG: number;
+          carbGoalG: number;
+          fatGoalG: number;
+        }
+      | undefined;
+
+    if (userId) {
+      const profile = await getHealthPrisma().userHealthProfile.findUnique({
+        where: { userId },
+        select: {
+          dailyCalorieGoal: true,
+          proteinGoalG: true,
+          carbGoalG: true,
+          fatGoalG: true,
+        },
+      });
+      if (profile) {
+        healthProfile = profile;
+      }
+    }
+
+    const result = await recommendMealsForGoal({
+      ...payload,
+      healthProfile,
+    });
+    return res.json(result);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        error: 'Datos inválidos para generar recomendaciones.',
+        details: error.issues,
+      });
+    }
+    console.error('[aiController.recommendMeals]', error);
+    return res.status(502).json({
+      error:
+        'No pudimos generar recomendaciones con la IA en este momento. Intentá de nuevo.',
     });
   }
 };

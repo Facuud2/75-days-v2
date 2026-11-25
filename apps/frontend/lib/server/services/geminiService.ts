@@ -674,7 +674,7 @@ export interface GeminiClientLike {
   };
 }
 
-function getGeminiClient(clientOverride?: GeminiClientLike): GeminiClientLike {
+export function getGeminiClient(clientOverride?: GeminiClientLike): GeminiClientLike {
   if (clientOverride) return clientOverride;
   const { geminiApiKey: apiKey } = getServerConfig();
   if (!apiKey) {

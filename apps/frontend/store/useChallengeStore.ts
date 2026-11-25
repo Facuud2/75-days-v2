@@ -110,6 +110,14 @@ export interface ChallengeState {
 
   checkDailyReset: () => Promise<void>;
   hydrateFromSync: (challengeData: any | null) => void;
+  applyWorkoutGoalSync: (goalSync: {
+    synced?: boolean;
+    date?: string;
+    updatedLog?: DailyLog | null;
+    updatedPeriodGoals?: PeriodGoalProgress[] | null;
+    challengeStreak?: number;
+    challengePoints?: number;
+  } | null | undefined) => void;
   reset: () => void;
 }
 
@@ -804,6 +812,47 @@ export const useChallengeStore = create<ChallengeState>()(
           isLoading: false,
           isValidating: false,
           error: null,
+        });
+      },
+
+      applyWorkoutGoalSync: (goalSync) => {
+        if (!goalSync?.synced) return;
+        set((state) => {
+          const nextLogs = { ...state.logs };
+          if (goalSync.updatedLog && goalSync.date) {
+            nextLogs[goalSync.date] = {
+              ...nextLogs[goalSync.date],
+              ...goalSync.updatedLog,
+              date: goalSync.date,
+              goals: goalSync.updatedLog.goals ?? nextLogs[goalSync.date]?.goals ?? [],
+            };
+          }
+
+          let nextPeriodGoals = state.periodGoals;
+          if (
+            Array.isArray(goalSync.updatedPeriodGoals) &&
+            goalSync.updatedPeriodGoals.length > 0
+          ) {
+            const updatedMap = new Map(
+              goalSync.updatedPeriodGoals.map((pg) => [pg.id, pg])
+            );
+            nextPeriodGoals = (state.periodGoals || []).map(
+              (pg) => updatedMap.get(pg.id) ?? pg
+            );
+          }
+
+          return {
+            logs: nextLogs,
+            periodGoals: nextPeriodGoals,
+            streak:
+              typeof goalSync.challengeStreak === 'number'
+                ? goalSync.challengeStreak
+                : state.streak,
+            points:
+              typeof goalSync.challengePoints === 'number'
+                ? goalSync.challengePoints
+                : state.points,
+          };
         });
       },
 

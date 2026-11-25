@@ -1,11 +1,15 @@
 'use client';
 
+import { useState } from 'react';
+import dynamic from 'next/dynamic';
+import { format } from 'date-fns';
 import {
   ArrowRight,
   CheckCircle2,
   ChevronRight,
   Flame,
   Plus,
+  Share2,
   Target,
   Trophy,
 } from 'lucide-react';
@@ -13,6 +17,8 @@ import ProgressBar from './ProgressBar';
 import { goalIconMap, getQuestIcon } from './icons';
 import type { ChallengeSummary, QuestSummary } from './types';
 import { difficultyLabel, formatInteger, formatNumber, pluralize } from '@/lib/utils/display';
+
+const ShareProgressModal = dynamic(() => import('@/components/ShareProgressModal'), { ssr: false });
 
 interface ProfileChallengesProps {
   data: ChallengeSummary;
@@ -31,6 +37,8 @@ export default function ProfileChallenges({
   onOpenQuest,
   loading = false,
 }: ProfileChallengesProps) {
+  const [shareOpen, setShareOpen] = useState(false);
+
   if (loading) {
     return (
       <div className="space-y-4" aria-busy="true" aria-label="Cargando retos">
@@ -80,7 +88,18 @@ export default function ProfileChallenges({
     <div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="pv2-label">Reto actual</span>
-        <span className="pv2-chip">{difficultyLabel(data.difficulty)}</span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShareOpen(true)}
+            aria-label="Compartir progreso del reto"
+            className="pv2-chip inline-flex items-center gap-1.5 transition-opacity hover:opacity-80"
+          >
+            <Share2 size={12} aria-hidden="true" />
+            <span>Compartir</span>
+          </button>
+          <span className="pv2-chip">{difficultyLabel(data.difficulty)}</span>
+        </div>
       </div>
 
       <div className="mt-3 flex items-end justify-between gap-4">
@@ -256,6 +275,23 @@ export default function ProfileChallenges({
           </button>
         ) : null}
       </div>
+      {shareOpen && (
+        <ShareProgressModal
+          open={shareOpen}
+          onClose={() => setShareOpen(false)}
+          initialKind="challenge"
+          dailySource={{
+            date: format(new Date(), 'yyyy-MM-dd'),
+            dayNumber: Math.max(1, data.currentDay),
+            goals: (data.todayGoals || []).map((g) => ({
+              id: g.id,
+              title: g.title,
+              icon: g.icon,
+              completed: g.completed,
+            })),
+          }}
+        />
+      )}
     </div>
   );
 }

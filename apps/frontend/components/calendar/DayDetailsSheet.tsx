@@ -3,7 +3,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion, useDragControls, useReducedMotion } from 'motion/react';
-import { CalendarDays, Camera, Check, ChevronLeft, ChevronRight, FileText, Scale, Upload, Utensils, X } from 'lucide-react';
+import { CalendarDays, Camera, Check, ChevronLeft, ChevronRight, FileText, Scale, Share2, Upload, Utensils, X } from 'lucide-react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -18,6 +19,8 @@ import {
   SHEET_EXIT_TRANSITION,
   shouldDismissSheet,
 } from '@/lib/motion/sheetPhysics';
+
+const ShareProgressModal = dynamic(() => import('@/components/ShareProgressModal'), { ssr: false });
 
 const statusText = { success: 'Completado', fail: 'No cumplido', rest: 'Descanso', pending: 'Pendiente', future: 'Futuro', inactive: 'Fuera del reto' } as const;
 
@@ -37,6 +40,7 @@ export default function DayDetailsSheet({ day, onClose, onPrevious, onNext }: { 
   const [isClosing, setIsClosing] = useState(false);
   const [isDragOverPhoto, setIsDragOverPhoto] = useState(false);
   const [justDroppedPhoto, setJustDroppedPhoto] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const dragControls = useDragControls();
   const reduceMotion = useReducedMotion();
 
@@ -59,7 +63,7 @@ export default function DayDetailsSheet({ day, onClose, onPrevious, onNext }: { 
   useEffect(() => {
     closeRef.current?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') dismiss();
+      if (event.key === 'Escape' && !shareOpen) dismiss();
       if (event.key === 'ArrowLeft') onPrevious?.();
       if (event.key === 'ArrowRight') onNext?.();
       if (event.key === 'Tab') {
@@ -80,7 +84,7 @@ export default function DayDetailsSheet({ day, onClose, onPrevious, onNext }: { 
       document.body.style.overflow = overflow;
       if (closeTimer.current) clearTimeout(closeTimer.current);
     };
-  }, [dismiss, onNext, onPrevious]);
+  }, [dismiss, onNext, onPrevious, shareOpen]);
 
   const processImageFile = (file: File | undefined) => {
     if (!file || !file.type.startsWith('image/')) return;
@@ -183,7 +187,20 @@ export default function DayDetailsSheet({ day, onClose, onPrevious, onNext }: { 
             <p className="calendar-context-label"><CalendarDays size={14} aria-hidden="true" /> Día {day.dayNumber} de 75</p>
             <h2 id="calendar-sheet-title">{format(day.dateValue, "EEEE, d 'de' MMMM", { locale: es })}</h2>
           </div>
-          <button ref={closeRef} type="button" className="calendar-icon-button" onClick={dismiss} aria-label="Cerrar detalle del día"><X size={20} /></button>
+          <div className="flex items-center gap-2">
+            {day.status !== 'future' && day.status !== 'inactive' && (
+              <button
+                type="button"
+                className="calendar-icon-button"
+                onClick={() => setShareOpen(true)}
+                aria-label="Compartir estado de este día"
+                title="Compartir día"
+              >
+                <Share2 size={18} />
+              </button>
+            )}
+            <button ref={closeRef} type="button" className="calendar-icon-button" onClick={dismiss} aria-label="Cerrar detalle del día"><X size={20} /></button>
+          </div>
         </header>
 
         <div className="calendar-sheet__body">
@@ -306,6 +323,18 @@ export default function DayDetailsSheet({ day, onClose, onPrevious, onNext }: { 
 
         <footer className="calendar-sheet__footer"><button type="button" onClick={onPrevious} disabled={!onPrevious} className="calendar-nav-button" aria-label="Día anterior"><ChevronLeft size={18} /></button><button type="button" onClick={() => void save()} disabled={isSaving} className="calendar-save-button">{isSaving ? 'Guardando…' : 'Guardar registro'}</button><button type="button" onClick={onNext} disabled={!onNext} className="calendar-nav-button" aria-label="Día siguiente"><ChevronRight size={18} /></button></footer>
       </motion.section>
+      {shareOpen && (
+        <ShareProgressModal
+          open={shareOpen}
+          onClose={() => setShareOpen(false)}
+          initialKind="daily"
+          dailySource={{
+            date: day.date,
+            dayNumber: Math.max(1, day.dayNumber),
+            goals: log?.goals || [],
+          }}
+        />
+      )}
     </motion.div>
   );
 }

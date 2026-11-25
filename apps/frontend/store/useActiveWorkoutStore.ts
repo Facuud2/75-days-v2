@@ -39,11 +39,14 @@ export interface StartExerciseInput {
   defaultRestSec?: number;
 }
 
+export type WorkoutEnvironment = 'gym' | 'home' | 'outdoor';
+
 interface ActiveWorkoutStoreState {
   isActive: boolean;
   isMinimized: boolean;
   isPreStartPickerOpen: boolean;
   sessionMode: 'strength' | 'cardio';
+  environment: WorkoutEnvironment | null;
   startedAt: number | null;
   title: string;
   sport: string;
@@ -65,7 +68,8 @@ interface ActiveWorkoutStoreState {
   startCardioWorkout: (sport: string, title: string) => void;
   startFreeWorkout: (
     initialExercises?: StartExerciseInput | StartExerciseInput[],
-    customTitle?: string
+    customTitle?: string,
+    environment?: WorkoutEnvironment | null
   ) => void;
   startFromRoutine: (routine: WorkoutRoutineRecord) => void;
   setMinimized: (minimized: boolean) => void;
@@ -160,6 +164,7 @@ export const useActiveWorkoutStore = create<ActiveWorkoutStoreState>()(
       isMinimized: false,
       isPreStartPickerOpen: false,
       sessionMode: 'strength',
+      environment: null,
       startedAt: null,
       title: 'Entrenamiento de fuerza',
       sport: 'strength',
@@ -182,6 +187,7 @@ export const useActiveWorkoutStore = create<ActiveWorkoutStoreState>()(
           isMinimized: false,
           isPreStartPickerOpen: false,
           sessionMode: 'cardio',
+          environment: 'outdoor',
           startedAt: Date.now(),
           title: title.trim() || 'Actividad libre',
           sport,
@@ -194,7 +200,7 @@ export const useActiveWorkoutStore = create<ActiveWorkoutStoreState>()(
         });
       },
 
-      startFreeWorkout: (initialExercises, customTitle) => {
+      startFreeWorkout: (initialExercises, customTitle, environment = null) => {
         const list = !initialExercises
           ? []
           : Array.isArray(initialExercises)
@@ -212,6 +218,7 @@ export const useActiveWorkoutStore = create<ActiveWorkoutStoreState>()(
           isMinimized: false,
           isPreStartPickerOpen: false,
           sessionMode: 'strength',
+          environment: environment ?? null,
           startedAt: Date.now(),
           title: customTitle?.trim() || fallbackTitle,
           sport: 'strength',
@@ -240,6 +247,7 @@ export const useActiveWorkoutStore = create<ActiveWorkoutStoreState>()(
           isMinimized: false,
           isPreStartPickerOpen: false,
           sessionMode: 'strength',
+          environment: null,
           startedAt: Date.now(),
           title: routine.name,
           sport: routine.sport || 'strength',
@@ -433,6 +441,7 @@ export const useActiveWorkoutStore = create<ActiveWorkoutStoreState>()(
           isActive: false,
           isMinimized: false,
           sessionMode: 'strength',
+          environment: null,
           startedAt: null,
           title: 'Entrenamiento de fuerza',
           sport: 'strength',

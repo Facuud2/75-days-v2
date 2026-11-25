@@ -33,6 +33,7 @@ import {
   captureVideoFrameForAI,
   CompressedAiImage,
   compressImageForAI,
+  resolveImagePreview,
 } from '@/lib/utils/image';
 import {
   attachBaseDensity,
@@ -62,6 +63,7 @@ interface MealPhotoAnalyzerProps {
     fiberG: number;
     sugarG: number;
     mealType: MealTypeOption;
+    photoUrl?: string;
   }) => void;
 }
 
@@ -132,6 +134,7 @@ export default function MealPhotoAnalyzer({
     'starting'
   );
   const [capturedImage, setCapturedImage] = useState<CompressedAiImage | null>(null);
+  const [thumbEntry, setThumbEntry] = useState<{ sourceUrl: string; thumbUrl: string } | null>(null);
   const [textDescription, setTextDescription] = useState('');
   const [analysisError, setAnalysisError] = useState<string | null>(null);
 
@@ -248,6 +251,25 @@ export default function MealPhotoAnalyzer({
       stopCameraStream();
     };
   }, [stage, stopCameraStream]);
+
+  useEffect(() => {
+    const sourceUrl = capturedImage?.previewUrl;
+    if (!sourceUrl) return;
+    let cancelled = false;
+    void resolveImagePreview(sourceUrl, 160, 160).then((thumb) => {
+      if (!cancelled) {
+        setThumbEntry({ sourceUrl, thumbUrl: thumb ?? sourceUrl });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [capturedImage]);
+
+  const thumbnailUrl =
+    capturedImage?.previewUrl && thumbEntry?.sourceUrl === capturedImage.previewUrl
+      ? thumbEntry.thumbUrl
+      : null;
 
   useEffect(() => {
     return () => {
@@ -576,6 +598,9 @@ export default function MealPhotoAnalyzer({
       fiberG: totals.fiberG,
       sugarG: totals.sugarG,
       mealType,
+      ...(thumbnailUrl || capturedImage?.previewUrl
+        ? { photoUrl: thumbnailUrl ?? capturedImage?.previewUrl }
+        : {}),
     });
   };
 

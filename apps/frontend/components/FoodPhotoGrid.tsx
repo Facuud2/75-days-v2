@@ -3,7 +3,7 @@
 import MealThumbnail from './MealThumbnail';
 
 interface FoodPhotoGridProps {
-  meals: { id: string; name: string; mealType: string }[];
+  meals: { id: string; name: string; mealType: string; photoUrl?: string | null }[];
   className?: string;
 }
 
@@ -18,7 +18,12 @@ export default function FoodPhotoGrid({ meals, className }: FoodPhotoGridProps) 
   return (
     <div className={`flex flex-wrap gap-2 ${className ?? ''}`} aria-hidden="true">
       {meals.map((meal) => (
-        <MealThumbnail key={meal.id} mealType={meal.mealType} size={56} />
+        <MealThumbnail
+          key={meal.id}
+          mealType={meal.mealType}
+          photoUrl={meal.photoUrl}
+          size={56}
+        />
       ))}
     </div>
   );

@@ -82,6 +82,7 @@ export const getHealthSync = async (req: AuthRequest, res: Response) => {
                 proteinG: m.proteinG,
                 carbG: m.carbG,
                 fatG: m.fatG,
+                photoUrl: m.photoUrl ?? null,
             })),
         };
 

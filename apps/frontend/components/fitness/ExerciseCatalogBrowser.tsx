@@ -15,7 +15,9 @@ import toast from 'react-hot-toast';
 import {
   CatalogBundle,
   CatalogExercise,
+  ExerciseEnvironment,
   filterExercises,
+  HOME_EQUIPMENT_KEYS,
   loadExerciseCatalog,
 } from '@/lib/api/exerciseCatalog';
 import { CustomExerciseRecord, healthService } from '@/lib/api/health';
@@ -30,6 +32,7 @@ import CustomExerciseSheet from './CustomExerciseSheet';
 
 interface ExerciseCatalogBrowserProps {
   mode?: 'browse' | 'picker';
+  environment?: ExerciseEnvironment;
   onConfirmSelection?: (exercises: CatalogExercise[]) => void;
   onAddSingle?: (exercise: CatalogExercise) => void;
   hasActiveWorkout?: boolean;
@@ -62,7 +65,10 @@ const POPULAR_EXERCISE_IDS = [
   'Triceps_Pushdown',
   'Dips_-_Chest_Version',
   'Dumbbell_Lunges',
+  'Bodyweight_Squat',
+  'Bodyweight_Walking_Lunge',
   'Plank',
+  'Crunches',
   'Face_Pull',
   'Leg_Extensions',
   'Lying_Leg_Curls',
@@ -106,6 +112,7 @@ function customToCatalogExercise(item: CustomExerciseRecord): CatalogExercise {
 
 export default function ExerciseCatalogBrowser({
   mode = 'browse',
+  environment: controlledEnvironment,
   onConfirmSelection,
   onAddSingle,
   hasActiveWorkout = false,
@@ -122,9 +129,24 @@ export default function ExerciseCatalogBrowser({
   const [bodyZone, setBodyZone] = useState('all');
   const [equipment, setEquipment] = useState('all');
   const [onlyCustom, setOnlyCustom] = useState(false);
+  const [localEnvironment, setLocalEnvironment] = useState<ExerciseEnvironment>('all');
   const [showEquipmentFilter, setShowEquipmentFilter] = useState(false);
 
-  const filterKey = `${query}|${bodyZone}|${equipment}|${onlyCustom}`;
+  const effectiveEnvironment = controlledEnvironment ?? localEnvironment;
+  const availableEquipmentChips = useMemo(() => {
+    if (effectiveEnvironment === 'home') {
+      return EQUIPMENT_CHIPS.filter(
+        (eq) => eq.key === 'all' || HOME_EQUIPMENT_KEYS.has(eq.key)
+      );
+    }
+    return EQUIPMENT_CHIPS;
+  }, [effectiveEnvironment]);
+
+  const effectiveEquipment = availableEquipmentChips.some((eq) => eq.key === equipment)
+    ? equipment
+    : 'all';
+
+  const filterKey = `${query}|${bodyZone}|${effectiveEquipment}|${onlyCustom}|${effectiveEnvironment}`;
   const [pagination, setPagination] = useState({ key: filterKey, count: PAGE_SIZE });
   const visibleCount = pagination.key === filterKey ? pagination.count : PAGE_SIZE;
 
@@ -175,10 +197,11 @@ export default function ExerciseCatalogBrowser({
     return filterExercises(allExercises, {
       query,
       bodyZone,
-      equipment,
+      equipment: effectiveEquipment,
       onlyCustom,
+      environment: effectiveEnvironment,
     });
-  }, [allExercises, query, bodyZone, equipment, onlyCustom]);
+  }, [allExercises, query, bodyZone, effectiveEquipment, onlyCustom, effectiveEnvironment]);
 
   const visibleItems = useMemo(
     () => filtered.slice(0, visibleCount),
@@ -244,7 +267,7 @@ export default function ExerciseCatalogBrowser({
           aria-expanded={showEquipmentFilter}
           aria-label="Filtrar por equipamiento"
           className={`flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center rounded-2xl border transition-colors active:scale-95 ${
-            equipment !== 'all' || showEquipmentFilter
+            effectiveEquipment !== 'all' || showEquipmentFilter
               ? 'border-rose-600 bg-rose-600/15 text-rose-600 dark:text-rose-400'
               : 'border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-700'
           }`}
@@ -262,6 +285,30 @@ export default function ExerciseCatalogBrowser({
           <span className="hidden sm:inline">Crear propio</span>
         </button>
       </div>
+
+      {/* Environment Filter Pills (when not fixed by parent) */}
+      {!controlledEnvironment && (
+        <div className="flex items-center gap-1.5">
+          {[
+            { key: 'all' as const, label: 'Todos' },
+            { key: 'gym' as const, label: 'En gimnasio' },
+            { key: 'home' as const, label: 'En casa' },
+          ].map((env) => (
+            <button
+              key={env.key}
+              type="button"
+              onClick={() => setLocalEnvironment(env.key)}
+              className={`min-h-8 cursor-pointer rounded-full border px-3 text-xs font-semibold transition-colors active:scale-95 ${
+                localEnvironment === env.key
+                  ? 'border-rose-600/70 bg-rose-600/15 text-rose-400'
+                  : 'border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              {env.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Horizontal Body Zone Chips */}
       <div className="-mx-1 flex items-center gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -305,13 +352,13 @@ export default function ExerciseCatalogBrowser({
       {/* Expandable Equipment Filter Chips */}
       {showEquipmentFilter && (
         <div className="flex flex-wrap gap-1.5 rounded-2xl border border-zinc-800/80 bg-zinc-900/50 p-3">
-          {EQUIPMENT_CHIPS.map((eq) => (
+          {availableEquipmentChips.map((eq) => (
             <button
               key={eq.key}
               type="button"
               onClick={() => setEquipment(eq.key)}
               className={`min-h-9 cursor-pointer rounded-xl border px-3 text-xs font-medium transition-colors ${
-                equipment === eq.key
+                effectiveEquipment === eq.key
                   ? 'border-rose-600 bg-rose-600/15 text-rose-600 dark:text-rose-400'
                   : 'border-zinc-800 bg-zinc-950 text-zinc-400 hover:text-zinc-200'
               }`}
@@ -331,7 +378,7 @@ export default function ExerciseCatalogBrowser({
                 mode === 'picker' ? 'Toca para seleccionar' : 'Toca uno para ver técnica'
               }`}
         </span>
-        {(query || bodyZone !== 'all' || equipment !== 'all' || onlyCustom) && (
+        {(query || bodyZone !== 'all' || effectiveEquipment !== 'all' || onlyCustom || (!controlledEnvironment && localEnvironment !== 'all')) && (
           <button
             type="button"
             onClick={() => {
@@ -339,6 +386,7 @@ export default function ExerciseCatalogBrowser({
               setBodyZone('all');
               setEquipment('all');
               setOnlyCustom(false);
+              if (!controlledEnvironment) setLocalEnvironment('all');
             }}
             className="cursor-pointer font-semibold text-rose-600 dark:text-rose-400 hover:underline"
           >

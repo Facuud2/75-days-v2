@@ -42,6 +42,7 @@ model MealEntry {
   fatG      Float    @default(0)
   fiberG    Float    @default(0)
   sugarG    Float    @default(0)
+  photoUrl  String?
   createdAt DateTime @default(now())
 
   @@index([userId, date])

@@ -209,6 +209,73 @@ describe('Fitness Module Rework — Metrics, Validation, Catalog & Anti-IDOR Sec
     expect(filterExercises(sample, { bodyZone: 'chest', equipment: 'machine' })).toHaveLength(0);
   });
 
+  it('filters catalog exercises by environment (gym, home without machinery, outdoor cardio)', () => {
+    const base = {
+      nameEn: 'Exercise',
+      bodyZone: 'core',
+      bodyZoneLabel: 'Core',
+      primaryMuscle: 'abdominals',
+      primaryMuscleLabel: 'Abdominales',
+      secondaryMuscles: [],
+      level: 'beginner',
+      levelLabel: 'Principiante',
+      force: null,
+      forceLabel: null,
+      mechanic: null,
+      mechanicLabel: null,
+      metValue: 5,
+      images: [],
+      instructions: [],
+    };
+    const sample: CatalogExercise[] = [
+      {
+        ...base,
+        id: 'Leg_Press',
+        name: 'Prensa de piernas',
+        bodyZone: 'legs',
+        bodyZoneLabel: 'Piernas',
+        equipment: 'machine',
+        equipmentLabel: 'Máquina',
+        category: 'strength',
+        categoryLabel: 'Fuerza',
+      },
+      {
+        ...base,
+        id: 'Plank',
+        name: 'Plancha abdominal',
+        equipment: 'body only',
+        equipmentLabel: 'Peso corporal',
+        category: 'strength',
+        categoryLabel: 'Fuerza',
+      },
+      {
+        ...base,
+        id: 'Trail_Running_Walking',
+        name: 'Trail Running / Caminata',
+        bodyZone: 'cardio',
+        bodyZoneLabel: 'Cardio',
+        equipment: 'none',
+        equipmentLabel: 'Sin equipo',
+        category: 'cardio',
+        categoryLabel: 'Cardio',
+      },
+    ];
+
+    // Gym includes machines & bodyweight (excludes outdoor-only cardio)
+    expect(filterExercises(sample, { environment: 'gym' }).map((e) => e.id)).toEqual([
+      'Leg_Press',
+      'Plank',
+    ]);
+    // Home includes no-machinery exercises (e.g. plank/abs/legs), excludes gym machines & cardio
+    expect(filterExercises(sample, { environment: 'home' }).map((e) => e.id)).toEqual([
+      'Plank',
+    ]);
+    // Outdoor includes outdoor cardio activities
+    expect(filterExercises(sample, { environment: 'outdoor' }).map((e) => e.id)).toEqual([
+      'Trail_Running_Walking',
+    ]);
+  });
+
   it('rejects unauthenticated requests (401) and cross-user IDOR attempts (403) on routines & custom exercises', async () => {
     // Unauthenticated route guard
     const unauthReq = new Request('http://localhost:3000/api/workouts/routines');

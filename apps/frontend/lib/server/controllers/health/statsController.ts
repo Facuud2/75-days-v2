@@ -66,6 +66,8 @@ function formatDaySummaryFromLists(
       fatG: m.fatG,
       fiberG: m.fiberG ?? 0,
       sugarG: m.sugarG ?? 0,
+      photoUrl: m.photoUrl ?? null,
+      routineItemId: m.routineItemId ?? null,
     })),
   };
 }

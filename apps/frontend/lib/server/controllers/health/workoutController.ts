@@ -7,6 +7,7 @@ import {
   computeWorkoutVolumeKg,
   detectPersonalRecords,
 } from '../../utils/workoutMetrics';
+import { syncWorkoutsToChallengeGoals } from '../../utils/workoutGoalSync';
 
 const WorkoutSetInputSchema = z
   .object({
@@ -53,6 +54,9 @@ export const WorkoutSchema = z
     loadVolumeKg: z.number().min(0).max(500000).optional(),
     notes: z.string().max(500).optional(),
     routineId: z.string().trim().max(100).nullable().optional(),
+    environment: z.enum(['home', 'gym', 'outdoor']).nullable().optional(),
+    linkedGoalId: z.string().trim().max(100).nullable().optional(),
+    timezoneOffset: z.number().int().min(-840).max(840).optional(),
     source: z.enum(['manual', 'tracker']).optional(),
     exercises: z.array(WorkoutExerciseInputSchema).max(40).optional(),
   })
@@ -88,6 +92,9 @@ export const logWorkout = async (
     source,
     title,
     routineId,
+    environment,
+    linkedGoalId,
+    timezoneOffset,
     ...data
   } = parsed.data;
   const isManualCalories = manualCalories !== undefined;
@@ -162,6 +169,8 @@ export const logWorkout = async (
       isManualCalories,
       title: title ?? null,
       routineId: routineId ?? null,
+      environment: environment ?? null,
+      linkedGoalId: linkedGoalId ?? null,
       source: source ?? (exercises && exercises.length > 0 ? 'tracker' : 'manual'),
       loadVolumeKg: finalVolumeKg ?? null,
       ...data,
@@ -195,9 +204,24 @@ export const logWorkout = async (
     include: WORKOUT_INCLUDE,
   });
 
+  let goalSync = null;
+  try {
+    goalSync = await syncWorkoutsToChallengeGoals({
+      userId,
+      date: workout.date,
+      timezoneOffset:
+        timezoneOffset ??
+        req.query?.timezoneOffset ??
+        req.headers?.['x-timezone-offset'],
+    });
+  } catch (syncError) {
+    console.error('[workoutController.logWorkout.goalSync]', syncError);
+  }
+
   return res.status(201).json({
     ...workout,
     personalRecords,
+    goalSync,
   });
 };
 
@@ -274,7 +298,20 @@ export const deleteWorkout = async (
   if (workout.userId !== userId) return res.status(403).json({ error: 'Forbidden' });
 
   await prisma.workoutEntry.delete({ where: { id } });
-  return res.json({ message: 'Workout deleted successfully' });
+
+  let goalSync = null;
+  try {
+    goalSync = await syncWorkoutsToChallengeGoals({
+      userId,
+      date: workout.date,
+      timezoneOffset:
+        req.query?.timezoneOffset ?? req.headers?.['x-timezone-offset'],
+    });
+  } catch (syncError) {
+    console.error('[workoutController.deleteWorkout.goalSync]', syncError);
+  }
+
+  return res.json({ message: 'Workout deleted successfully', goalSync });
 };
 
 export const updateWorkout = async (
@@ -303,6 +340,9 @@ export const updateWorkout = async (
     source,
     title,
     routineId,
+    environment,
+    linkedGoalId,
+    timezoneOffset,
     ...data
   } = parsed.data;
   const isManualCalories = manualCalories !== undefined;
@@ -341,6 +381,10 @@ export const updateWorkout = async (
         isManualCalories,
         title: title !== undefined ? title : workout.title,
         routineId: routineId !== undefined ? routineId : workout.routineId,
+        environment:
+          environment !== undefined ? environment : workout.environment,
+        linkedGoalId:
+          linkedGoalId !== undefined ? linkedGoalId : workout.linkedGoalId,
         source: source ?? workout.source,
         loadVolumeKg: finalVolumeKg ?? null,
         ...data,
@@ -375,7 +419,24 @@ export const updateWorkout = async (
     });
   });
 
-  return res.json(updatedWorkout);
+  let goalSync = null;
+  try {
+    goalSync = await syncWorkoutsToChallengeGoals({
+      userId,
+      date: updatedWorkout.date,
+      timezoneOffset:
+        timezoneOffset ??
+        req.query?.timezoneOffset ??
+        req.headers?.['x-timezone-offset'],
+    });
+  } catch (syncError) {
+    console.error('[workoutController.updateWorkout.goalSync]', syncError);
+  }
+
+  return res.json({
+    ...updatedWorkout,
+    goalSync,
+  });
 };
 
 /**

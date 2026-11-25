@@ -92,6 +92,7 @@ export const getHealthSync = async (
         fatG: m.fatG,
         fiberG: m.fiberG ?? 0,
         sugarG: m.sugarG ?? 0,
+        photoUrl: m.photoUrl ?? null,
       })),
     };
 

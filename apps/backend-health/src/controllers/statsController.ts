@@ -64,6 +64,7 @@ function formatDaySummaryFromLists(
             proteinG: m.proteinG,
             carbG: m.carbG,
             fatG: m.fatG,
+            photoUrl: m.photoUrl ?? null,
         })),
     };
 }

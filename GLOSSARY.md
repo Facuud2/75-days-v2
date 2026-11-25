@@ -73,8 +73,12 @@ Un alimento consumido en una fecha y una comida del día (desayuno, almuerzo, ce
 _Avoid_: Meal, comida registrada
 
 **Entrada de entrenamiento**:
-Una sesión de actividad física en una fecha, con deporte, duración, intensidad y calorías quemadas. Puede ser manual o provenir de Strava.
+Una sesión de actividad física en una fecha, con deporte, duración, intensidad, entorno opcional (en casa, gimnasio o aire libre) y calorías quemadas. Puede ser manual o provenir de Strava.
 _Avoid_: Workout, actividad
+
+**Entorno de entrenamiento**:
+El lugar donde se realiza una entrada de entrenamiento: `En casa` o `Gimnasio` (ambos cuentan como entrenamiento indoor) o `Aire libre` (outdoor).
+_Avoid_: Ubicación, locación
 
 **Ingrediente**:
 Un alimento base del catálogo global, con macros por cada 100 gramos. Es la materia prima de los alimentos personalizados.

@@ -17,6 +17,8 @@ export interface Meal {
   fatG: number;
   fiberG?: number;
   sugarG?: number;
+  photoUrl?: string | null;
+  routineItemId?: string | null;
 }
 
 export interface DailyStats {
@@ -114,6 +116,76 @@ export interface LogMealPayload {
   fatG: number;
   fiberG?: number;
   sugarG?: number;
+  photoUrl?: string | null;
+  routineItemId?: string | null;
+}
+
+export type MealRoutineMode = 'daily' | 'weekly';
+export type MealRoutineGoalTag =
+  | 'high_protein'
+  | 'deficit'
+  | 'maintenance'
+  | 'lean_bulk'
+  | 'custom';
+
+export interface MealRoutineItem {
+  id?: string;
+  dayOfWeek: number | null;
+  mealType: 'breakfast' | 'lunch' | 'dinner' | 'snack';
+  name: string;
+  calories: number;
+  proteinG: number;
+  carbG: number;
+  fatG: number;
+  fiberG?: number;
+  sugarG?: number;
+  prepTimeMin?: number | null;
+  customFoodId?: string | null;
+  notes?: string | null;
+  order?: number;
+}
+
+export interface MealRoutine {
+  id: string;
+  userId: string;
+  name: string;
+  description: string | null;
+  mode: MealRoutineMode;
+  goalTag: MealRoutineGoalTag | null;
+  isActive: boolean;
+  items: MealRoutineItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MealRoutinePayload {
+  name: string;
+  description?: string | null;
+  mode: MealRoutineMode;
+  goalTag?: MealRoutineGoalTag | null;
+  isActive?: boolean;
+  items: MealRoutineItem[];
+}
+
+export interface AiMealProposalItem {
+  id: string;
+  dayOfWeek: number | null;
+  mealType: 'breakfast' | 'lunch' | 'dinner' | 'snack';
+  name: string;
+  calories: number;
+  proteinG: number;
+  carbG: number;
+  fatG: number;
+  prepTimeMin: number;
+  reason: string;
+}
+
+export interface AiMealRecommendationResponse {
+  assistantMessage: string;
+  mode: 'single_meal' | 'daily' | 'weekly';
+  routineName: string;
+  routineDescription: string;
+  items: AiMealProposalItem[];
 }
 
 export interface WorkoutSetItem {
@@ -343,10 +415,15 @@ export const healthService = {
       method: 'PUT',
       body: JSON.stringify(payload),
     }),
-  deleteWorkout: (id: string) =>
-    healthClient<{ message: string }>(`/workouts/${id}`, {
-      method: 'DELETE',
-    }),
+  deleteWorkout: (id: string, timezoneOffset?: number) =>
+    healthClient<{ message: string; goalSync?: any }>(
+      typeof timezoneOffset === 'number'
+        ? `/workouts/${id}?timezoneOffset=${encodeURIComponent(String(timezoneOffset))}`
+        : `/workouts/${id}`,
+      {
+        method: 'DELETE',
+      }
+    ),
   getRecentWorkouts: (limit = 20) =>
     healthClient<{ workouts: WorkoutEntryRecord[] }>(`/workouts/recent?limit=${limit}`),
   getWorkoutsForDay: (date: string) =>
@@ -404,6 +481,54 @@ export const healthService = {
   deleteRoutine: (id: string) =>
     healthClient<{ message: string }>(`/workouts/routines/${id}`, {
       method: 'DELETE',
+    }),
+
+  // Meal Routines CRUD
+  getMealRoutines: () =>
+    healthClient<{ routines: MealRoutine[] }>('/nutrition/routines'),
+  createMealRoutine: (payload: MealRoutinePayload) =>
+    healthClient<MealRoutine>('/nutrition/routines', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  updateMealRoutine: (id: string, payload: Partial<MealRoutinePayload>) =>
+    healthClient<MealRoutine>(`/nutrition/routines/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
+  deleteMealRoutine: (id: string) =>
+    healthClient<{ deleted: boolean; id: string }>(`/nutrition/routines/${id}`, {
+      method: 'DELETE',
+    }),
+  applyMealRoutineToDate: (id: string, date: string) =>
+    healthClient<{ created: Meal[]; skippedCount: number }>(
+      `/nutrition/routines/${id}/apply`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ date }),
+      }
+    ),
+  getAiMealRecommendations: (payload: {
+    textInput: string;
+    scope?: 'single_meal' | 'full_day' | 'weekly';
+    targetSlot?: 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'any';
+    history?: Array<{ role: 'user' | 'assistant'; text: string }>;
+    currentDraft?: {
+      routineName?: string;
+      routineDescription?: string;
+      mode?: 'single_meal' | 'daily' | 'weekly';
+      items: AiMealProposalItem[];
+    } | null;
+    consumedToday?: {
+      calories: number;
+      proteinG: number;
+      carbG: number;
+      fatG: number;
+    };
+  }) =>
+    baseRequest<AiMealRecommendationResponse>('/ai/meal-recommendations', {
+      method: 'POST',
+      body: JSON.stringify(payload),
     }),
 
   // Custom Exercises CRUD

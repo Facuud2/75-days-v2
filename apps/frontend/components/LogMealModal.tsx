@@ -282,6 +282,7 @@ function LogMealModalContent({ onClose, onSaved, date, initialTab, initialMealTy
         fiberG: number;
         sugarG: number;
         mealType: MealType;
+        photoUrl?: string;
     }) => {
         const payload = {
             date,
@@ -293,6 +294,7 @@ function LogMealModalContent({ onClose, onSaved, date, initialTab, initialMealTy
             fatG: meal.fatG,
             fiberG: meal.fiberG,
             sugarG: meal.sugarG,
+            ...(meal.photoUrl ? { photoUrl: meal.photoUrl } : {}),
         };
         onSaved();
         onClose();
