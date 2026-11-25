@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Search, Utensils, Loader2, CheckCircle2, ChevronRight, ArrowLeft, Plus, Bookmark, Flame } from 'lucide-react';
+import { X, Search, Utensils, Loader2, CheckCircle2, ChevronRight, ArrowLeft, Plus, Bookmark, Flame, Camera } from 'lucide-react';
 import { healthService, FatSecretFoodItem, FatSecretFoodDetails, FatSecretFoodServing, CustomFood, Ingredient } from '@/lib/api/health';
 import { useHealthStore } from '@/store/useHealthStore';
+import MealPhotoAnalyzer, { AnalyzerStage } from '@/components/MealPhotoAnalyzer';
 import toast from 'react-hot-toast';
 
 interface LogMealModalProps {
@@ -11,11 +12,21 @@ interface LogMealModalProps {
     onClose: () => void;
     onSaved: () => void;
     date: string; // YYYY-MM-DD
+    initialTab?: 'AI' | 'SEARCH' | 'CUSTOM';
+    initialMealType?: 'breakfast' | 'lunch' | 'dinner' | 'snack';
 }
 
-type Tab = 'SEARCH' | 'CUSTOM';
+type Tab = 'AI' | 'SEARCH' | 'CUSTOM';
 type Step = 'MAIN' | 'DETAILS' | 'CREATE_CUSTOM';
 type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
+
+function inferDefaultMealType(): MealType {
+    const hour = new Date().getHours();
+    if (hour < 11) return 'breakfast';
+    if (hour < 16) return 'lunch';
+    if (hour < 19) return 'snack';
+    return 'dinner';
+}
 
 const MEAL_SUGGESTIONS: Record<MealType, string[]> = {
     breakfast: ['Avena', 'Huevo', 'Pan Integral', 'Café', 'Plátano', 'Leche'],
@@ -31,14 +42,17 @@ export default function LogMealModal(props: LogMealModalProps) {
             onClose={props.onClose}
             onSaved={props.onSaved}
             date={props.date}
+            initialTab={props.initialTab}
+            initialMealType={props.initialMealType}
         />
     );
 }
 
-function LogMealModalContent({ onClose, onSaved, date }: Omit<LogMealModalProps, 'isOpen'>) {
-    const [activeTab, setActiveTab] = useState<Tab>('SEARCH');
+function LogMealModalContent({ onClose, onSaved, date, initialTab, initialMealType }: Omit<LogMealModalProps, 'isOpen'>) {
+    const [activeTab, setActiveTab] = useState<Tab>(() => initialTab ?? 'AI');
+    const [aiStage, setAiStage] = useState<AnalyzerStage>('CAMERA');
     const [step, setStep] = useState<Step>('MAIN');
-    const [mealType, setMealType] = useState<MealType>('lunch');
+    const [mealType, setMealType] = useState<MealType>(() => initialMealType ?? inferDefaultMealType());
 
     // Search state (Online)
     const [query, setQuery] = useState('');
@@ -108,7 +122,7 @@ function LogMealModalContent({ onClose, onSaved, date }: Omit<LogMealModalProps,
             setSearchResults(res.results || []);
         } catch (error) {
             console.error('Failed to search food:', error);
-            // Could add toast or alert here
+            toast.error('No se pudo buscar el alimento.');
         } finally {
             setIsSearching(false);
         }
@@ -127,6 +141,7 @@ function LogMealModalContent({ onClose, onSaved, date }: Omit<LogMealModalProps,
             }
         } catch (error) {
             console.error('Failed to get food details:', error);
+            toast.error('No se pudieron cargar los detalles del alimento.');
             setStep('MAIN'); // Go back on error
         } finally {
             setIsLoadingDetails(false);
@@ -144,6 +159,7 @@ function LogMealModalContent({ onClose, onSaved, date }: Omit<LogMealModalProps,
             setIngredientSearchResults(res.results || []);
         } catch (error) {
             console.error('Failed to search ingredients:', error);
+            toast.error('No se pudieron buscar ingredientes.');
         } finally {
             setIsSearchingIngredient(false);
         }
@@ -157,6 +173,7 @@ function LogMealModalContent({ onClose, onSaved, date }: Omit<LogMealModalProps,
             setIngredientSearchResults([]);
         } catch (error) {
             console.error('Failed to import ingredient:', error);
+            toast.error('No se pudo importar el ingrediente.');
         } finally {
             setIsImporting(false);
         }
@@ -256,6 +273,34 @@ function LogMealModalContent({ onClose, onSaved, date }: Omit<LogMealModalProps,
         });
     };
 
+    const handleConfirmAiMeal = (meal: {
+        name: string;
+        calories: number;
+        proteinG: number;
+        carbG: number;
+        fatG: number;
+        fiberG: number;
+        sugarG: number;
+        mealType: MealType;
+    }) => {
+        const payload = {
+            date,
+            mealType: meal.mealType,
+            name: meal.name,
+            calories: meal.calories,
+            proteinG: meal.proteinG,
+            carbG: meal.carbG,
+            fatG: meal.fatG,
+            fiberG: meal.fiberG,
+            sugarG: meal.sugarG,
+        };
+        onSaved();
+        onClose();
+        void logMealOptimistic(payload).catch(() => {
+            toast.error('No se pudo registrar la comida.');
+        });
+    };
+
     return (
         <div
             className="mobile-sheet-root fixed inset-0 z-[100] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center sm:p-4"
@@ -264,95 +309,135 @@ function LogMealModalContent({ onClose, onSaved, date }: Omit<LogMealModalProps,
             aria-labelledby="meal-modal-title"
             onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
         >
-            <div className="mobile-sheet-panel bg-zinc-900 border border-zinc-800 rounded-t-[2rem] sm:rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[92dvh] sm:max-h-[85vh] overflow-hidden">
+            <div className="mobile-sheet-panel bg-[var(--surface-page)] border border-[var(--border-subtle)] rounded-t-[24px] sm:rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[92dvh] sm:max-h-[85vh] overflow-hidden">
 
                 {/* Header */}
-                <div className="flex items-center justify-between px-4 py-4 sm:px-6 border-b border-zinc-800 shrink-0">
-                    <div className="flex items-center gap-3">
+                <div className="flex items-center justify-between px-4 py-3 sm:px-5 border-b border-[var(--border-subtle)] shrink-0">
+                    <div className="flex items-center gap-2.5">
                         {step !== 'MAIN' && (
-                            <button onClick={() => setStep('MAIN')} className="p-1 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-zinc-200 transition-colors">
-                                <ArrowLeft className="w-5 h-5" />
+                            <button
+                                type="button"
+                                aria-label="Volver"
+                                onClick={() => setStep('MAIN')}
+                                className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full text-[var(--text-muted)] hover:bg-[var(--surface-raised)] hover:text-[var(--text-primary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+                            >
+                                <ArrowLeft className="w-5 h-5" aria-hidden="true" />
                             </button>
                         )}
-                        <div>
-                            <h2 id="meal-modal-title" className="text-lg font-bold text-zinc-100 flex items-center gap-2">
-                                <Utensils className="w-5 h-5 text-orange-400" />
-                                {step === 'MAIN' ? 'Registrar Comida' :
-                                    step === 'DETAILS' ? 'Detalles de la Composición' : 'Crear Plato Personalizado'}
-                            </h2>
-                        </div>
+                        <h2 id="meal-modal-title" className="text-[17px] font-semibold tracking-[-0.01em] text-[var(--text-primary)] flex items-center gap-2">
+                            <Utensils className="w-4 h-4 text-[var(--accent-text)]" aria-hidden="true" />
+                            {step === 'MAIN'
+                                ? (activeTab === 'AI' && aiStage === 'REVIEW'
+                                    ? 'Revisar comida'
+                                    : activeTab === 'AI' && aiStage === 'TEXT_INPUT'
+                                        ? 'Describir comida'
+                                        : 'Registrar Comida')
+                                : step === 'DETAILS'
+                                    ? 'Detalles de la Composición'
+                                    : 'Crear Plato Personalizado'}
+                        </h2>
                     </div>
                     <button
+                        type="button"
                         aria-label="Cerrar registro de comida"
                         onClick={onClose}
-                        className="text-zinc-500 hover:text-zinc-300 transition-colors p-1 rounded-lg hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300"
+                        className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-raised)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
                     >
-                        <X className="w-5 h-5" />
+                        <X className="w-5 h-5" aria-hidden="true" />
                     </button>
                 </div>
 
                 {/* Body Content */}
-                <div className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent">
+                <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-3.5 sm:px-5 sm:py-4 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent">
 
                     {step === 'MAIN' && (
-                        <div className="space-y-6">
+                        <div className={activeTab === 'AI' ? 'space-y-3' : 'space-y-5'}>
 
-                            {/* Tabs */}
-                            <div className="flex border-b border-zinc-800">
-                                <button
-                                    onClick={() => setActiveTab('SEARCH')}
-                                    className={`flex-1 pb-3 text-sm font-semibold transition-colors border-b-2 ${activeTab === 'SEARCH'
-                                        ? 'text-orange-400 border-orange-400'
-                                        : 'text-zinc-500 border-transparent hover:text-zinc-300'
-                                        }`}
-                                >
-                                    Buscador Online
-                                </button>
-                                <button
-                                    onClick={() => setActiveTab('CUSTOM')}
-                                    className={`flex-1 pb-3 text-sm font-semibold transition-colors border-b-2 flex items-center justify-center gap-2 ${activeTab === 'CUSTOM'
-                                        ? 'text-orange-400 border-orange-400'
-                                        : 'text-zinc-500 border-transparent hover:text-zinc-300'
-                                        }`}
-                                >
-                                    <Bookmark className="w-4 h-4" /> Mis Comidas
-                                </button>
-                            </div>
+                            {/* Show Tabs & Top MealType Bar only on initial picker/camera views — hide during AI review/typing */}
+                            {(activeTab !== 'AI' || aiStage === 'CAMERA') && (
+                                <>
+                                    <div className="flex border-b border-[var(--border-subtle)]">
+                                        <button
+                                            type="button"
+                                            onClick={() => setActiveTab('AI')}
+                                            className={`flex-1 pb-2.5 text-xs sm:text-sm font-semibold transition-colors border-b-2 flex items-center justify-center gap-1.5 ${activeTab === 'AI'
+                                                ? 'text-[var(--accent-text)] border-[var(--accent-fill)]'
+                                                : 'text-[var(--text-muted)] border-transparent hover:text-[var(--text-primary)]'
+                                                }`}
+                                        >
+                                            <Camera className="w-4 h-4 shrink-0" /> Escáner IA
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setActiveTab('SEARCH')}
+                                            className={`flex-1 pb-2.5 text-xs sm:text-sm font-semibold transition-colors border-b-2 flex items-center justify-center gap-1.5 ${activeTab === 'SEARCH'
+                                                ? 'text-[var(--accent-text)] border-[var(--accent-fill)]'
+                                                : 'text-[var(--text-muted)] border-transparent hover:text-[var(--text-primary)]'
+                                                }`}
+                                        >
+                                            <Search className="w-4 h-4 shrink-0" /> Buscador
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setActiveTab('CUSTOM')}
+                                            className={`flex-1 pb-2.5 text-xs sm:text-sm font-semibold transition-colors border-b-2 flex items-center justify-center gap-1.5 ${activeTab === 'CUSTOM'
+                                                ? 'text-[var(--accent-text)] border-[var(--accent-fill)]'
+                                                : 'text-[var(--text-muted)] border-transparent hover:text-[var(--text-primary)]'
+                                                }`}
+                                        >
+                                            <Bookmark className="w-4 h-4 shrink-0" /> Mis Comidas
+                                        </button>
+                                    </div>
 
-                            {/* Meal Type Selector (Shared) */}
-                            <div className="flex bg-zinc-950 p-1 rounded-xl border border-zinc-800/50">
-                                {([
-                                    { id: 'breakfast', label: 'Desayuno' },
-                                    { id: 'lunch', label: 'Almuerzo' },
-                                    { id: 'snack', label: 'Snack' },
-                                    { id: 'dinner', label: 'Cena' }
-                                ] as const).map(type => (
-                                    <button
-                                        key={type.id}
-                                        onClick={() => {
-                                            setMealType(type.id);
-                                            setQuery('');
-                                            setSearchResults([]);
-                                            setHasSearched(false);
-                                        }}
-                                        className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-colors ${mealType === type.id
-                                            ? 'bg-zinc-800 text-zinc-100 shadow-sm'
-                                            : 'text-zinc-500 hover:text-zinc-300'
-                                            }`}
-                                    >
-                                        {type.label}
-                                    </button>
-                                ))}
-                            </div>
+                                    <div className="flex bg-[var(--surface-inset)] p-1 rounded-xl border border-[var(--border-subtle)]">
+                                        {([
+                                            { id: 'breakfast', label: 'Desayuno' },
+                                            { id: 'lunch', label: 'Almuerzo' },
+                                            { id: 'snack', label: 'Snack' },
+                                            { id: 'dinner', label: 'Cena' }
+                                        ] as const).map(type => (
+                                            <button
+                                                key={type.id}
+                                                type="button"
+                                                onClick={() => {
+                                                    setMealType(type.id);
+                                                    setQuery('');
+                                                    setSearchResults([]);
+                                                    setHasSearched(false);
+                                                }}
+                                                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-colors ${mealType === type.id
+                                                    ? 'bg-[var(--surface-card)] text-[var(--text-primary)] shadow-xs'
+                                                    : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                                                    }`}
+                                            >
+                                                {type.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </>
+                            )}
+
+                            {activeTab === 'AI' && (
+                                <MealPhotoAnalyzer
+                                    mealType={mealType}
+                                    onMealTypeChange={setMealType}
+                                    onStageChange={setAiStage}
+                                    onConfirmMeal={handleConfirmAiMeal}
+                                />
+                            )}
 
                             {activeTab === 'SEARCH' && (
                                 <div className="space-y-4">
                                     {/* Search Input */}
                                     <form onSubmit={handleSearch} className="relative">
+                                        <label htmlFor="food-search-input" className="sr-only">
+                                            Buscar alimento
+                                        </label>
                                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                            <Search className="h-4 w-4 text-zinc-500" />
+                                            <Search className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />
                                         </div>
                                         <input
+                                            id="food-search-input"
                                             type="text"
                                             value={query}
                                             onChange={(e) => {
@@ -362,15 +447,15 @@ function LogMealModalContent({ onClose, onSaved, date }: Omit<LogMealModalProps,
                                                     setHasSearched(false);
                                                 }
                                             }}
-                                            className="block w-full pl-10 pr-12 py-3 border border-zinc-700 rounded-xl leading-5 bg-zinc-950 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 sm:text-sm transition-colors"
+                                            className="block w-full pl-10 pr-20 py-3 border border-[var(--border-subtle)] rounded-xl leading-5 bg-[var(--surface-inset)] text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--focus-ring)] focus:ring-2 focus:ring-[var(--focus-ring)]/30 text-base sm:text-sm transition-colors"
                                             placeholder="Buscar alimento (ej: Manzana, Pollo...)"
                                         />
                                         <button
                                             type="submit"
                                             disabled={!query.trim() || isSearching}
-                                            className="absolute inset-y-1 right-1 px-3 bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold rounded-lg disabled:opacity-50 transition-colors"
+                                            className="absolute inset-y-1.5 right-1.5 px-3 bg-[var(--surface-card)] border border-[var(--border-subtle)] hover:bg-[var(--surface-raised)] text-[var(--text-primary)] text-xs font-semibold rounded-lg disabled:opacity-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
                                         >
-                                            {isSearching ? <Loader2 className="w-4 h-4 animate-spin text-zinc-400" /> : 'Buscar'}
+                                            {isSearching ? <Loader2 className="w-4 h-4 animate-spin text-[var(--text-muted)]" aria-hidden="true" /> : 'Buscar'}
                                         </button>
                                     </form>
 
@@ -378,7 +463,7 @@ function LogMealModalContent({ onClose, onSaved, date }: Omit<LogMealModalProps,
                                     <div className="space-y-2">
                                         {!hasSearched && !isSearching && (
                                             <div className="py-6">
-                                                 <p className="text-xs text-zinc-500 font-semibold mb-3 text-center">
+                                                 <p className="text-xs text-[var(--text-muted)] font-semibold mb-3 text-center">
                                                     Sugerencias rápidas para {mealType === 'breakfast' ? 'Desayuno' : mealType === 'lunch' ? 'Almuerzo' : mealType === 'dinner' ? 'Cena' : 'Snack'}
                                                 </p>
                                                 <div className="flex flex-wrap justify-center gap-2">
@@ -387,7 +472,7 @@ function LogMealModalContent({ onClose, onSaved, date }: Omit<LogMealModalProps,
                                                             key={item}
                                                             type="button"
                                                             onClick={() => handleSearch(undefined, item)}
-                                                            className="px-3 py-1.5 bg-zinc-950/50 border border-zinc-800 text-zinc-400 text-xs font-semibold rounded-lg hover:bg-zinc-800 hover:text-orange-400 transition-colors"
+                                                            className="min-h-9 px-3 py-1.5 bg-[var(--surface-inset)] border border-[var(--border-subtle)] text-[var(--text-secondary)] text-xs font-semibold rounded-lg hover:bg-[var(--surface-raised)] hover:text-[var(--accent-text)] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
                                                         >
                                                             {item}
                                                         </button>
@@ -397,7 +482,7 @@ function LogMealModalContent({ onClose, onSaved, date }: Omit<LogMealModalProps,
                                         )}
 
                                         {hasSearched && searchResults.length === 0 && !isSearching && (
-                                            <div className="text-center py-10 text-sm text-zinc-500">
+                                            <div className="text-center py-10 text-sm text-[var(--text-muted)]">
                                                 No se encontraron resultados para &quot;{query}&quot;.
                                             </div>
                                         )}
@@ -405,18 +490,19 @@ function LogMealModalContent({ onClose, onSaved, date }: Omit<LogMealModalProps,
                                         {searchResults.map((item) => (
                                             <button
                                                 key={item.id}
+                                                type="button"
                                                 onClick={() => handleSelectFood(item.id)}
-                                                className="w-full flex items-center justify-between p-3 rounded-xl border border-zinc-800/60 bg-zinc-950/30 hover:bg-zinc-800/50 hover:border-zinc-700 transition-all text-left group"
+                                                className="w-full min-h-14 flex items-center justify-between p-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-card)] hover:bg-[var(--surface-inset)] transition-all text-left group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
                                             >
-                                                <div>
-                                                    <div className="font-semibold text-sm text-zinc-200 group-hover:text-orange-400 transition-colors">
-                                                        {item.name} {item.brand && <span className="text-xs text-zinc-500 font-normal">({item.brand})</span>}
+                                                <div className="min-w-0 pr-2">
+                                                    <div className="font-semibold text-sm text-[var(--text-primary)] group-hover:text-[var(--accent-text)] transition-colors">
+                                                        {item.name} {item.brand && <span className="text-xs text-[var(--text-muted)] font-normal">({item.brand})</span>}
                                                     </div>
-                                                    <div className="text-xs text-zinc-500 mt-1 line-clamp-1">
+                                                    <div className="text-xs text-[var(--text-muted)] mt-1 line-clamp-1">
                                                         {item.description}
                                                     </div>
                                                 </div>
-                                                <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-orange-400 opacity-0 group-hover:opacity-100 transition-all -translate-x-2 group-hover:translate-x-0" />
+                                                <ChevronRight className="w-4 h-4 shrink-0 text-[var(--text-muted)] group-hover:text-[var(--accent-text)] transition-all" aria-hidden="true" />
                                             </button>
                                         ))}
                                     </div>
@@ -426,19 +512,20 @@ function LogMealModalContent({ onClose, onSaved, date }: Omit<LogMealModalProps,
                             {activeTab === 'CUSTOM' && (
                                 <div className="space-y-4">
                                     <div className="flex justify-between items-center mb-2">
-                                         <p className="text-xs text-zinc-400 font-semibold">Tus recetas frecuentes</p>
+                                         <p className="text-xs text-[var(--text-muted)] font-semibold">Tus recetas frecuentes</p>
                                         <button
+                                            type="button"
                                             onClick={() => setStep('CREATE_CUSTOM')}
-                                            className="text-xs bg-orange-500/10 text-orange-400 font-bold px-3 py-1.5 rounded-lg hover:bg-orange-500/20 transition-colors flex items-center gap-1"
+                                            className="min-h-9 text-xs bg-[var(--surface-inset)] border border-[var(--border-subtle)] text-[var(--accent-text)] font-bold px-3 py-1.5 rounded-lg hover:bg-[var(--surface-raised)] transition-colors flex items-center gap-1 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
                                         >
-                                            <Plus className="w-3 h-3" /> Nuevo
+                                            <Plus className="w-3.5 h-3.5" aria-hidden="true" /> Nuevo
                                         </button>
                                     </div>
 
                                     {isLoadingCustom ? (
-                                        <div className="py-10 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-zinc-500" /></div>
+                                        <div className="py-10 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-[var(--text-muted)]" aria-hidden="true" /></div>
                                     ) : customFoods.length === 0 ? (
-                                        <div className="text-center py-10 text-sm text-zinc-500 bg-zinc-950/50 rounded-xl border border-dashed border-zinc-800">
+                                        <div className="text-center py-10 text-sm text-[var(--text-muted)] bg-[var(--surface-inset)] rounded-xl border border-dashed border-[var(--border-subtle)]">
                                             Aún no tienes platillos personalizados creados.
                                         </div>
                                     ) : (
@@ -446,23 +533,24 @@ function LogMealModalContent({ onClose, onSaved, date }: Omit<LogMealModalProps,
                                             {customFoods.map(food => (
                                                 <button
                                                     key={food.id}
+                                                    type="button"
                                                     onClick={() => handleLogCustomFood(food)}
-                                                    className="w-full flex items-center justify-between p-3 rounded-xl border border-zinc-800/60 bg-zinc-950/30 hover:border-orange-500/50 hover:bg-orange-500/5 transition-all text-left group"
+                                                    className="w-full min-h-14 flex items-center justify-between p-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-card)] hover:bg-[var(--surface-inset)] transition-all text-left group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
                                                 >
-                                                    <div>
-                                                        <div className="font-bold text-sm text-zinc-200 group-hover:text-orange-400 transition-colors">
+                                                    <div className="min-w-0 pr-2">
+                                                        <div className="font-bold text-sm text-[var(--text-primary)] group-hover:text-[var(--accent-text)] transition-colors">
                                                             {food.name}
                                                         </div>
-                                                        <div className="text-xs text-zinc-500 mt-1 flex gap-2">
-                                                             <span className="inline-flex items-center gap-1"><Flame className="h-3 w-3 text-orange-400" /> {food.calories}kcal</span>
-                                                            <span className="text-zinc-700">|</span>
+                                                        <div className="text-xs text-[var(--text-muted)] mt-1 flex flex-wrap gap-2 tabular-nums">
+                                                             <span className="inline-flex items-center gap-1"><Flame className="h-3 w-3 text-[var(--accent-text)]" aria-hidden="true" /> {food.calories} kcal</span>
+                                                            <span aria-hidden="true">|</span>
                                                             <span>P: {food.proteinG}g</span>
                                                             <span>C: {food.carbG}g</span>
                                                             <span>G: {food.fatG}g</span>
                                                         </div>
                                                     </div>
-                                                    <div className="bg-orange-500/20 text-orange-500 p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all -translate-x-2 group-hover:translate-x-0">
-                                                        <CheckCircle2 className="w-4 h-4" />
+                                                    <div className="text-[var(--accent-text)] p-2 rounded-lg shrink-0">
+                                                        <CheckCircle2 className="w-4 h-4" aria-hidden="true" />
                                                     </div>
                                                 </button>
                                             ))}
@@ -477,26 +565,27 @@ function LogMealModalContent({ onClose, onSaved, date }: Omit<LogMealModalProps,
                     {step === 'DETAILS' && (
                         <div className="space-y-6">
                             {isLoadingDetails || !foodDetails ? (
-                                <div className="py-20 flex flex-col items-center justify-center text-zinc-500 space-y-3">
-                                    <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
+                                <div className="py-20 flex flex-col items-center justify-center text-[var(--text-muted)] space-y-3">
+                                    <Loader2 className="w-8 h-8 animate-spin text-[var(--accent-text)]" aria-hidden="true" />
                                     <span className="text-sm">Obteniendo macros...</span>
                                 </div>
                             ) : (
                                 <>
                                     {/* Food Header */}
                                     <div className="text-center">
-                                        <h3 className="text-xl font-bold text-zinc-100">{foodDetails.name}</h3>
-                                        {foodDetails.brand && <p className="text-sm text-zinc-500">{foodDetails.brand}</p>}
+                                        <h3 className="text-xl font-bold text-[var(--text-primary)]">{foodDetails.name}</h3>
+                                        {foodDetails.brand && <p className="text-sm text-[var(--text-muted)]">{foodDetails.brand}</p>}
                                     </div>
 
                                     {/* Serving Selector */}
-                                    <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 space-y-4">
+                                    <div className="bg-[var(--surface-card)] border border-[var(--border-subtle)] rounded-xl p-4 space-y-4">
                                         <div>
-                                             <label className="text-xs font-semibold text-zinc-400 mb-2 block">
+                                             <label htmlFor="serving-select" className="text-xs font-semibold text-[var(--text-secondary)] mb-2 block">
                                                 Tamaño de Porción
                                             </label>
                                             <select
-                                                className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-zinc-200 focus:outline-none focus:border-orange-500 transition-colors"
+                                                id="serving-select"
+                                                className="w-full bg-[var(--surface-inset)] border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--focus-ring)] focus:ring-2 focus:ring-[var(--focus-ring)]/30 transition-colors"
                                                 value={selectedServing?.id || ''}
                                                 onChange={(e) => {
                                                     const serving = foodDetails.servings.find(s => s.id === e.target.value);
@@ -512,20 +601,21 @@ function LogMealModalContent({ onClose, onSaved, date }: Omit<LogMealModalProps,
                                         </div>
 
                                         <div>
-                                             <label className="text-xs font-semibold text-zinc-400 mb-2 block">
+                                             <label htmlFor="quantity-range" className="text-xs font-semibold text-[var(--text-secondary)] mb-2 block">
                                                 Cantidad (Multiplicador)
                                             </label>
                                             <div className="flex items-center gap-3">
                                                 <input
+                                                    id="quantity-range"
                                                     type="range"
                                                     min="0.5"
                                                     max="5"
                                                     step="0.5"
                                                     value={quantity}
                                                     onChange={(e) => setQuantity(parseFloat(e.target.value))}
-                                                    className="flex-1 accent-orange-500"
+                                                    className="flex-1 accent-[var(--accent-fill)]"
                                                 />
-                                                <div className="bg-zinc-900 border border-zinc-700 px-3 py-1 rounded-md text-sm font-bold min-w-[3rem] text-center">
+                                                <div className="bg-[var(--surface-inset)] border border-[var(--border-subtle)] text-[var(--text-primary)] px-3 py-1 rounded-md text-sm font-bold min-w-[3rem] text-center tabular-nums">
                                                     {quantity}x
                                                 </div>
                                             </div>
@@ -534,24 +624,24 @@ function LogMealModalContent({ onClose, onSaved, date }: Omit<LogMealModalProps,
 
                                     {/* Macros Preview */}
                                     {selectedServing && (
-                                        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-                                            <div className="text-center mb-4">
-                                                <span className="text-3xl font-black text-white">{(selectedServing.calories * quantity).toFixed(0)}</span>
-                                                 <span className="text-xs text-zinc-500 ml-1 font-bold">kcal</span>
+                                        <div className="bg-[var(--surface-card)] border border-[var(--border-subtle)] rounded-xl p-5">
+                                            <div className="text-center mb-4 tabular-nums">
+                                                <span className="text-3xl font-black text-[var(--text-primary)]">{(selectedServing.calories * quantity).toFixed(0)}</span>
+                                                 <span className="text-xs text-[var(--text-muted)] ml-1 font-bold">kcal</span>
                                             </div>
 
-                                            <div className="grid grid-cols-3 gap-2">
-                                                <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-2.5 text-center">
-                                                     <div className="text-[10px] text-blue-400 font-semibold mb-1">Proteínas</div>
-                                                    <div className="font-bold text-zinc-100">{(selectedServing.protein * quantity).toFixed(1)}g</div>
+                                            <div className="grid grid-cols-3 gap-2 tabular-nums">
+                                                <div className="bg-[var(--surface-inset)] border border-[var(--border-subtle)] rounded-lg p-2.5 text-center">
+                                                     <div className="text-[11px] font-semibold mb-1" style={{ color: 'var(--chart-protein)' }}>Proteínas</div>
+                                                    <div className="font-bold text-[var(--text-primary)]">{(selectedServing.protein * quantity).toFixed(1)}g</div>
                                                 </div>
-                                                <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-2.5 text-center">
-                                                     <div className="text-[10px] text-yellow-400 font-semibold mb-1">Carbos</div>
-                                                    <div className="font-bold text-zinc-100">{(selectedServing.carbohydrates * quantity).toFixed(1)}g</div>
+                                                <div className="bg-[var(--surface-inset)] border border-[var(--border-subtle)] rounded-lg p-2.5 text-center">
+                                                     <div className="text-[11px] font-semibold mb-1" style={{ color: 'var(--chart-carb)' }}>Carbos</div>
+                                                    <div className="font-bold text-[var(--text-primary)]">{(selectedServing.carbohydrates * quantity).toFixed(1)}g</div>
                                                 </div>
-                                                <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-2.5 text-center">
-                                                     <div className="text-[10px] text-red-400 font-semibold mb-1">Grasas</div>
-                                                    <div className="font-bold text-zinc-100">{(selectedServing.fat * quantity).toFixed(1)}g</div>
+                                                <div className="bg-[var(--surface-inset)] border border-[var(--border-subtle)] rounded-lg p-2.5 text-center">
+                                                     <div className="text-[11px] font-semibold mb-1" style={{ color: 'var(--chart-fat)' }}>Grasas</div>
+                                                    <div className="font-bold text-[var(--text-primary)]">{(selectedServing.fat * quantity).toFixed(1)}g</div>
                                                 </div>
                                             </div>
                                         </div>
@@ -567,28 +657,29 @@ function LogMealModalContent({ onClose, onSaved, date }: Omit<LogMealModalProps,
                             {/* Recipe Form */}
                             <form id="create-custom-form" onSubmit={handleCreateCustomFood} className="space-y-4">
                                 <div>
-                                    <label className="text-xs font-semibold text-zinc-400 mb-1 block">Nombre del Platillo *</label>
+                                    <label htmlFor="custom-dish-name" className="text-xs font-semibold text-[var(--text-secondary)] mb-1 block">Nombre del Platillo *</label>
                                     <input
+                                        id="custom-dish-name"
                                         required
                                         type="text"
                                         value={newCustomFood.name}
                                         onChange={e => setNewCustomFood({ ...newCustomFood, name: e.target.value })}
-                                        className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-orange-500"
+                                        className="w-full bg-[var(--surface-inset)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-base sm:text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--focus-ring)] focus:ring-2 focus:ring-[var(--focus-ring)]/30"
                                         placeholder="Ej: Avena Mágica"
                                     />
                                 </div>
 
                                 {/* Ingredients Section */}
-                                <div className="pt-2 border-t border-zinc-800">
+                                <div className="pt-2 border-t border-[var(--border-subtle)]">
                                     <div className="flex justify-between items-center mb-3">
-                                         <p className="text-xs font-semibold text-zinc-400">Ingredientes</p>
+                                         <p className="text-xs font-semibold text-[var(--text-secondary)]">Ingredientes</p>
                                         {!isSelectingIngredient && (
                                             <button
                                                 type="button"
                                                 onClick={() => setIsSelectingIngredient(true)}
-                                                className="text-orange-400 hover:text-orange-300 text-xs font-bold flex items-center gap-1"
+                                                className="min-h-9 px-2.5 rounded-lg text-[var(--accent-text)] hover:bg-[var(--surface-inset)] text-xs font-bold flex items-center gap-1 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
                                             >
-                                                <Plus className="w-3 h-3" /> Añadir
+                                                <Plus className="w-3.5 h-3.5" aria-hidden="true" /> Añadir
                                             </button>
                                         )}
                                     </div>
@@ -597,48 +688,50 @@ function LogMealModalContent({ onClose, onSaved, date }: Omit<LogMealModalProps,
                                     {recipeIngredients.length > 0 ? (
                                         <div className="space-y-2 mb-4">
                                             {recipeIngredients.map((item, index) => (
-                                                <div key={`${item.ingredientId}-${index}`} className="flex items-center gap-2 p-2 rounded-lg bg-zinc-950/50 border border-zinc-800">
-                                                    <div className="flex-1">
-                                                        <p className="text-sm text-zinc-200 font-semibold">{item.ingredient?.name}</p>
-                                                        <p className="text-[10px] text-zinc-500">{(item.ingredient!.caloriesPer100g * (item.weightGrams / 100)).toFixed(0)} kcal</p>
+                                                <div key={`${item.ingredientId}-${index}`} className="flex items-center gap-2 p-2 rounded-lg bg-[var(--surface-card)] border border-[var(--border-subtle)]">
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-sm text-[var(--text-primary)] font-semibold truncate">{item.ingredient?.name}</p>
+                                                        <p className="text-[11px] text-[var(--text-muted)] tabular-nums">{(item.ingredient!.caloriesPer100g * (item.weightGrams / 100)).toFixed(0)} kcal</p>
                                                     </div>
-                                                    <div className="flex items-center gap-2">
+                                                    <div className="flex items-center gap-1.5">
                                                         <div className="relative">
                                                             <input
                                                                 type="number"
                                                                 min="1"
+                                                                aria-label={`Gramos de ${item.ingredient?.name ?? 'ingrediente'}`}
                                                                 value={item.weightGrams}
                                                                 onChange={(e) => updateIngredientWeight(index, Number(e.target.value))}
-                                                                className="w-16 bg-zinc-900 border border-zinc-700 rounded-md py-1 pl-2 pr-6 text-xs text-right text-zinc-200 focus:border-orange-500 focus:outline-none"
+                                                                className="w-18 bg-[var(--surface-inset)] border border-[var(--border-subtle)] rounded-md py-1.5 pl-2 pr-6 text-xs text-right text-[var(--text-primary)] tabular-nums focus:border-[var(--focus-ring)] focus:outline-none"
                                                             />
-                                                            <span className="absolute right-2 top-1.5 text-xs text-zinc-500 pointer-events-none">g</span>
+                                                            <span className="absolute right-2 top-1.5 text-xs text-[var(--text-muted)] pointer-events-none">g</span>
                                                         </div>
                                                         <button
                                                             type="button"
+                                                            aria-label={`Quitar ${item.ingredient?.name ?? 'ingrediente'}`}
                                                             onClick={() => removeIngredient(index)}
-                                                            className="p-1 hover:bg-zinc-800 rounded-md text-zinc-500 hover:text-red-400"
+                                                            className="flex h-9 w-9 cursor-pointer items-center justify-center hover:bg-[var(--surface-inset)] rounded-md text-[var(--text-muted)] hover:text-[var(--status-danger)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
                                                         >
-                                                            <X className="w-4 h-4" />
+                                                            <X className="w-4 h-4" aria-hidden="true" />
                                                         </button>
                                                     </div>
                                                 </div>
                                             ))}
-                                            <div className="flex justify-between items-center p-3 mt-4 bg-orange-500/10 border border-orange-500/20 rounded-xl">
+                                            <div className="flex justify-between items-center p-3 mt-4 bg-[var(--surface-inset)] border border-[var(--border-subtle)] rounded-xl">
                                                 <div>
-                                                     <p className="text-[10px] text-orange-400 font-bold">Total Estimado</p>
-                                                     <p className="text-lg font-black text-white">{currentRecipeMacros.cals.toFixed(0)} <span className="text-xs text-zinc-500 font-bold">kcal</span></p>
+                                                     <p className="text-[11px] text-[var(--accent-text)] font-bold">Total Estimado</p>
+                                                     <p className="text-lg font-black text-[var(--text-primary)] tabular-nums">{currentRecipeMacros.cals.toFixed(0)} <span className="text-xs text-[var(--text-muted)] font-bold">kcal</span></p>
                                                 </div>
-                                                <div className="flex gap-3 text-xs text-zinc-400">
-                                                     <span className="flex flex-col items-center"><span className="text-blue-400 font-bold text-[9px]">P</span>{currentRecipeMacros.p.toFixed(1)}g</span>
-                                                     <span className="flex flex-col items-center"><span className="text-yellow-400 font-bold text-[9px]">C</span>{currentRecipeMacros.c.toFixed(1)}g</span>
-                                                     <span className="flex flex-col items-center"><span className="text-red-400 font-bold text-[9px]">G</span>{currentRecipeMacros.f.toFixed(1)}g</span>
+                                                <div className="flex gap-3 text-xs text-[var(--text-secondary)] tabular-nums">
+                                                     <span className="flex flex-col items-center"><span className="font-bold text-[10px]" style={{ color: 'var(--chart-protein)' }}>P</span>{currentRecipeMacros.p.toFixed(1)}g</span>
+                                                     <span className="flex flex-col items-center"><span className="font-bold text-[10px]" style={{ color: 'var(--chart-carb)' }}>C</span>{currentRecipeMacros.c.toFixed(1)}g</span>
+                                                     <span className="flex flex-col items-center"><span className="font-bold text-[10px]" style={{ color: 'var(--chart-fat)' }}>G</span>{currentRecipeMacros.f.toFixed(1)}g</span>
                                                 </div>
                                             </div>
                                         </div>
                                     ) : (
                                         !isSelectingIngredient && (
-                                            <div className="text-center py-6 text-sm text-zinc-500 border border-dashed border-zinc-800 rounded-xl bg-zinc-950/30">
-                                                <Utensils className="w-5 h-5 mx-auto mb-2 text-zinc-600" />
+                                            <div className="text-center py-6 text-sm text-[var(--text-muted)] border border-dashed border-[var(--border-subtle)] rounded-xl bg-[var(--surface-inset)]">
+                                                <Utensils className="w-5 h-5 mx-auto mb-2 text-[var(--text-muted)]" aria-hidden="true" />
                                                 Empieza añadiendo ingredientes<br />para calcular los macros.
                                             </div>
                                         )
@@ -646,13 +739,21 @@ function LogMealModalContent({ onClose, onSaved, date }: Omit<LogMealModalProps,
 
                                     {/* Ingredient Picker Overlay */}
                                     {isSelectingIngredient && (
-                                        <div className="mt-2 bg-zinc-900 border border-zinc-800 rounded-xl p-3 shadow-lg">
+                                        <div className="mt-2 bg-[var(--surface-card)] border border-[var(--border-subtle)] rounded-xl p-3 shadow-lg">
                                             <div className="flex justify-between items-center mb-2">
-                                                <p className="text-xs text-zinc-400 font-bold">Buscar ingrediente base</p>
-                                                <button type="button" onClick={() => setIsSelectingIngredient(false)}><X className="w-4 h-4 text-zinc-500 hover:text-white" /></button>
+                                                <label htmlFor="ingredient-search-input" className="text-xs text-[var(--text-secondary)] font-bold">Buscar ingrediente base</label>
+                                                <button
+                                                    type="button"
+                                                    aria-label="Cerrar buscador de ingredientes"
+                                                    onClick={() => setIsSelectingIngredient(false)}
+                                                    className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-[var(--text-muted)] hover:bg-[var(--surface-inset)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+                                                >
+                                                    <X className="w-4 h-4" aria-hidden="true" />
+                                                </button>
                                             </div>
                                             <div className="flex gap-2">
                                                 <input
+                                                    id="ingredient-search-input"
                                                     type="text"
                                                     autoFocus
                                                     value={ingredientSearch}
@@ -667,20 +768,21 @@ function LogMealModalContent({ onClose, onSaved, date }: Omit<LogMealModalProps,
                                                         }
                                                     }}
                                                     placeholder="Ej: Huevo, Pollo..."
-                                                    className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 mb-2 focus:border-orange-500 focus:outline-none"
+                                                    className="w-full bg-[var(--surface-inset)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-base sm:text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] mb-2 focus:border-[var(--focus-ring)] focus:outline-none"
                                                 />
                                                 <button
                                                     type="button"
+                                                    aria-label="Buscar ingrediente"
                                                     onClick={handleIngredientSearch}
                                                     disabled={isSearchingIngredient || !ingredientSearch.trim()}
-                                                    className="mb-2 px-3 bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold rounded-lg disabled:opacity-50 transition-colors flex items-center justify-center shrink-0"
+                                                    className="mb-2 px-3 bg-[var(--surface-inset)] border border-[var(--border-subtle)] hover:bg-[var(--surface-raised)] text-xs font-semibold rounded-lg disabled:opacity-50 transition-colors flex items-center justify-center shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
                                                 >
-                                                    {isSearchingIngredient ? <Loader2 className="w-4 h-4 animate-spin text-zinc-400" /> : <Search className="w-4 h-4 text-zinc-400" />}
+                                                    {isSearchingIngredient ? <Loader2 className="w-4 h-4 animate-spin text-[var(--text-muted)]" aria-hidden="true" /> : <Search className="w-4 h-4 text-[var(--text-muted)]" aria-hidden="true" />}
                                                 </button>
                                             </div>
-                                            <div className="max-h-40 overflow-y-auto space-y-1 scrollbar-thin scrollbar-thumb-zinc-700">
+                                            <div className="max-h-40 overflow-y-auto space-y-1 scrollbar-thin">
                                                 {isImporting ? (
-                                                    <div className="py-4 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-orange-500" /></div>
+                                                    <div className="py-4 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-[var(--accent-text)]" aria-hidden="true" /></div>
                                                 ) : (
                                                     <>
                                                         {systemIngredients
@@ -691,10 +793,10 @@ function LogMealModalContent({ onClose, onSaved, date }: Omit<LogMealModalProps,
                                                                     key={ing.id}
                                                                     type="button"
                                                                     onClick={() => addIngredientToRecipe(ing)}
-                                                                    className="w-full text-left p-2 hover:bg-zinc-800 rounded-lg flex flex-col group overflow-hidden"
+                                                                    className="w-full text-left p-2 hover:bg-[var(--surface-inset)] rounded-lg flex flex-col group overflow-hidden cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
                                                                 >
-                                                                    <span className="text-sm font-semibold text-zinc-200 group-hover:text-orange-400 truncate w-full">{ing.name}</span>
-                                                                    <span className="text-xs text-zinc-500 truncate w-full">{ing.caloriesPer100g} kcal / 100g · P: {ing.proteinPer100g}g · C: {ing.carbPer100g}g · G: {ing.fatPer100g}g</span>
+                                                                    <span className="text-sm font-semibold text-[var(--text-primary)] group-hover:text-[var(--accent-text)] truncate w-full">{ing.name}</span>
+                                                                    <span className="text-xs text-[var(--text-muted)] truncate w-full tabular-nums">{ing.caloriesPer100g} kcal / 100g · P: {ing.proteinPer100g}g · C: {ing.carbPer100g}g · G: {ing.fatPer100g}g</span>
                                                                 </button>
                                                             ))}
                                                         {ingredientSearchResults.map(item => (
@@ -702,10 +804,10 @@ function LogMealModalContent({ onClose, onSaved, date }: Omit<LogMealModalProps,
                                                                 key={item.id}
                                                                 type="button"
                                                                 onClick={() => handleSelectIngredientFromSearch(item)}
-                                                                className="w-full text-left p-2 hover:bg-zinc-800 rounded-lg flex flex-col group overflow-hidden"
+                                                                className="w-full text-left p-2 hover:bg-[var(--surface-inset)] rounded-lg flex flex-col group overflow-hidden cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
                                                             >
-                                                                <span className="text-sm font-semibold text-zinc-300 group-hover:text-white truncate w-full">{item.name} {item.brand && <span className="text-xs text-zinc-500 font-normal">({item.brand})</span>}</span>
-                                                                <span className="text-xs text-zinc-500 truncate w-full">{item.description}</span>
+                                                                <span className="text-sm font-semibold text-[var(--text-primary)] group-hover:text-[var(--accent-text)] truncate w-full">{item.name} {item.brand && <span className="text-xs text-[var(--text-muted)] font-normal">({item.brand})</span>}</span>
+                                                                <span className="text-xs text-[var(--text-muted)] truncate w-full">{item.description}</span>
                                                             </button>
                                                         ))}
                                                     </>
@@ -721,32 +823,33 @@ function LogMealModalContent({ onClose, onSaved, date }: Omit<LogMealModalProps,
 
                 {/* Footer Controls */}
                 {step === 'CREATE_CUSTOM' && (
-                    <div className="p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] border-t border-zinc-800 bg-zinc-950/50 shrink-0 shadow-[0_-10px_30px_rgba(0,0,0,0.5)] z-10">
+                    <div className="p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] border-t border-[var(--border-subtle)] bg-[var(--surface-page)] shrink-0 z-10">
                         <button
                             type="submit"
                             form="create-custom-form"
                             disabled={isSaving || !newCustomFood.name || recipeIngredients.length === 0}
-                             className="w-full flex justify-center items-center gap-2 bg-orange-500 hover:bg-orange-400 text-zinc-950 font-bold py-3.5 rounded-xl transition-colors disabled:opacity-50 shadow-lg shadow-orange-500/20"
+                             className="w-full min-h-12 flex justify-center items-center gap-2 bg-[var(--accent-fill)] text-[var(--on-accent)] font-bold py-3 rounded-xl transition-opacity disabled:opacity-50 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
                         >
                             {isSaving ? (
-                                <><Loader2 className="w-5 h-5 animate-spin" /> Creando Platillo...</>
+                                <><Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" /> Creando Platillo...</>
                             ) : (
-                                <><Utensils className="w-5 h-5" /> Guardar Platillo</>
+                                <><Utensils className="w-5 h-5" aria-hidden="true" /> Guardar Platillo</>
                             )}
                         </button>
                     </div>
                 )}
                 {step === 'DETAILS' && foodDetails && selectedServing && !isLoadingDetails && (
-                    <div className="p-4 border-t border-zinc-800 bg-zinc-950/50 shrink-0">
+                    <div className="p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] border-t border-[var(--border-subtle)] bg-[var(--surface-page)] shrink-0">
                         <button
+                            type="button"
                             onClick={handleSaveMeal}
                             disabled={isSaving}
-                            className="w-full flex justify-center items-center gap-2 bg-orange-600 hover:bg-orange-500 text-white font-bold py-3 rounded-xl transition-all disabled:opacity-50"
+                            className="w-full min-h-12 flex justify-center items-center gap-2 bg-[var(--accent-fill)] text-[var(--on-accent)] font-bold py-3 rounded-xl transition-opacity disabled:opacity-50 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
                         >
                             {isSaving ? (
-                                <><Loader2 className="w-5 h-5 animate-spin" /> Guardando...</>
+                                <><Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" /> Guardando...</>
                             ) : (
-                                <><CheckCircle2 className="w-5 h-5" /> Agregar al Registro</>
+                                <><CheckCircle2 className="w-5 h-5" aria-hidden="true" /> Agregar al Registro</>
                             )}
                         </button>
                     </div>

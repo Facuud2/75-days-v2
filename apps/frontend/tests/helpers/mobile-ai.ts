@@ -188,7 +188,7 @@ export async function mockSessionApis(page: Page, overrides: SyncOverrides = {})
           id: 'ch-1',
           difficulty,
           isActive: true,
-          startDate: '2026-11-18',
+          startDate: '2026-04-10',
           currentDay: 6,
           streak: 5,
           points: 120,
@@ -209,6 +209,40 @@ export async function mockSessionApis(page: Page, overrides: SyncOverrides = {})
         ],
         nutrition: { meals: [], goals: null },
         workouts: [],
+      }),
+    });
+  });
+
+  await page.route('**/api/challenges/current**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: 'ch-1',
+        difficulty,
+        isActive: true,
+        startDate: '2026-04-10',
+        currentDay: 6,
+        streak: 5,
+        points: 120,
+        achievements: [],
+        customGoalsTemplate: customGoals,
+        dailyLogs: [],
+        periodGoals: [],
+      }),
+    });
+  });
+
+  await page.route('**/api/logs/check-reset**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        message: 'ok',
+        streak: 5,
+        currentDay: 6,
+        logs: [],
+        periodGoals: [],
       }),
     });
   });

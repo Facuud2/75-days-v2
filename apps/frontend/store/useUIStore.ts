@@ -13,6 +13,9 @@ interface UIState {
   isLogWorkoutModalOpen: boolean;
   openLogWorkoutModal: () => void;
   closeLogWorkoutModal: () => void;
+  isLogWeightModalOpen: boolean;
+  openLogWeightModal: () => void;
+  closeLogWeightModal: () => void;
   isTutorialOpen: boolean;
   openTutorial: () => void;
   closeTutorial: () => void;
@@ -31,6 +34,9 @@ export const useUIStore = create<UIState>((set) => ({
   isLogWorkoutModalOpen: false,
   openLogWorkoutModal: () => set({ isLogWorkoutModalOpen: true }),
   closeLogWorkoutModal: () => set({ isLogWorkoutModalOpen: false }),
+  isLogWeightModalOpen: false,
+  openLogWeightModal: () => set({ isLogWeightModalOpen: true }),
+  closeLogWeightModal: () => set({ isLogWeightModalOpen: false }),
   isTutorialOpen: false,
   openTutorial: () => set({ isTutorialOpen: true }),
   closeTutorial: () => set({ isTutorialOpen: false }),

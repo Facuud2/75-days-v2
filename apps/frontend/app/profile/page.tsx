@@ -102,7 +102,7 @@ export default function Profile() {
     customGoalsTemplate,
     fetchCurrentChallenge,
   } = useChallengeStore();
-  const { openPlansModal } = useUIStore();
+  const { openPlansModal, openLogWeightModal } = useUIStore();
 
   const {
     quests,
@@ -483,6 +483,7 @@ export default function Profile() {
               data={activeHealth}
               loading={headerLoading}
               loadingNutrition={!hasLoadedStats}
+              onLogWeight={openLogWeightModal}
               onLogMeal={() => setIsLogMealModalOpen(true)}
               onEditMeal={handleEditMeal}
               onLogWorkout={() => {

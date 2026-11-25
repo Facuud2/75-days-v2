@@ -2,6 +2,7 @@ import { GoogleGenAI } from '@google/genai';
 import { z } from 'zod';
 import { getServerConfig } from '../config';
 import { DEFAULT_GOALS } from '../constants/defaultGoals';
+import { computeMealTotals } from '@/lib/utils/mealMath';
 
 export const ALLOWED_ICONS = [
   'utensils',
@@ -970,5 +971,384 @@ export async function transcribeUserAudio(
   return {
     transcript: parsed.hasSpeech ? cleaned : '',
     hasSpeech: Boolean(parsed.hasSpeech && cleaned.length > 0),
+  };
+}
+
+export const ALLOWED_MEAL_IMAGE_MIMES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+] as const;
+
+export const aiMealItemSchema = z.object({
+  id: z
+    .string()
+    .optional()
+    .transform((v) => (v && v.trim() ? v.trim().slice(0, 64) : '')),
+  name: boundedString(100),
+  /** Preserves unrounded floating-point values internally; UI & totals round at boundary. */
+  estimatedGrams: z
+    .number()
+    .finite()
+    .transform((v) => Math.max(0, Math.min(5000, v))),
+  calories: z
+    .number()
+    .finite()
+    .transform((v) => Math.max(0, Math.min(10000, v))),
+  proteinG: z
+    .number()
+    .finite()
+    .transform((v) => Math.max(0, Math.min(1000, v))),
+  carbG: z
+    .number()
+    .finite()
+    .transform((v) => Math.max(0, Math.min(1000, v))),
+  fatG: z
+    .number()
+    .finite()
+    .transform((v) => Math.max(0, Math.min(1000, v))),
+  fiberG: z
+    .number()
+    .finite()
+    .optional()
+    .default(0)
+    .transform((v) => Math.max(0, Math.min(500, v))),
+  sugarG: z
+    .number()
+    .finite()
+    .optional()
+    .default(0)
+    .transform((v) => Math.max(0, Math.min(1000, v))),
+});
+
+export const aiMealRawResponseSchema = z.object({
+  isFood: z.boolean(),
+  rejectionReason: optionalBoundedString(300),
+  dishName: optionalBoundedString(120),
+  confidence: z.enum(['high', 'medium', 'low']).optional().default('medium'),
+  assumptions: optionalBoundedString(320),
+  suggestedMealType: z
+    .enum(['breakfast', 'lunch', 'dinner', 'snack'])
+    .optional()
+    .default('lunch'),
+  items: z
+    .array(aiMealItemSchema)
+    .optional()
+    .default([])
+    .transform((arr) => arr.slice(0, 20)),
+});
+
+export type AiMealDetectedItem = z.infer<typeof aiMealItemSchema> & { id: string };
+
+export interface ReferenceIngredientPer100g {
+  name: string;
+  caloriesPer100g: number;
+  proteinPer100g: number;
+  carbPer100g: number;
+  fatPer100g: number;
+}
+
+export interface AiMealAnalysisResponse {
+  isFood: boolean;
+  rejectionReason: string;
+  dishName: string;
+  confidence: 'high' | 'medium' | 'low';
+  assumptions: string;
+  suggestedMealType: 'breakfast' | 'lunch' | 'dinner' | 'snack';
+  items: AiMealDetectedItem[];
+  totals: {
+    calories: number;
+    proteinG: number;
+    carbG: number;
+    fatG: number;
+    fiberG: number;
+    sugarG: number;
+  };
+}
+
+export interface AnalyzeMealInput {
+  imageBase64?: string;
+  imageMimeType?: string;
+  textDescription?: string;
+  note?: string;
+  correctionPrompt?: string;
+  currentDishName?: string;
+  currentItems?: Array<{
+    id?: string;
+    name: string;
+    estimatedGrams: number;
+    calories: number;
+    proteinG: number;
+    carbG: number;
+    fatG: number;
+    fiberG?: number;
+    sugarG?: number;
+  }>;
+  mealTypeHint?: 'breakfast' | 'lunch' | 'dinner' | 'snack';
+  referenceIngredients?: ReferenceIngredientPer100g[];
+}
+
+const MEAL_ANALYSIS_JSON_SCHEMA = {
+  type: 'object',
+  properties: {
+    isFood: {
+      type: 'boolean',
+      description:
+        'true si la foto o descripción contiene comida, ingredientes o bebidas consumibles; false si no hay comida identificable o la entrada no tiene relación con alimentación.',
+    },
+    rejectionReason: {
+      type: 'string',
+      description:
+        'Mensaje breve y amable en español explicando por qué no se pudo analizar si isFood es false (ej. foto borrosa sin comida o texto no alimentario). Cadena vacía si isFood es true.',
+    },
+    dishName: {
+      type: 'string',
+      description:
+        'Nombre natural, claro y apetitoso del plato o comida en español (máx 80 caracteres). Vacío si isFood es false.',
+    },
+    confidence: {
+      type: 'string',
+      enum: ['high', 'medium', 'low'],
+      description:
+        'Nivel de certeza nutricional: high (alimentos claros/medibles), medium (porción estimada visualmente), low (plato compuesto con salsas/ingredientes ocultos).',
+    },
+    assumptions: {
+      type: 'string',
+      description:
+        'Resumen conciso en 1 oración de los supuestos usados (ej. peso neto sin cáscara/hueso, estado cocido y aceite estimado).',
+    },
+    suggestedMealType: {
+      type: 'string',
+      enum: ['breakfast', 'lunch', 'dinner', 'snack'],
+      description: 'Momento del día sugerido según el plato o el hint recibido.',
+    },
+    items: {
+      type: 'array',
+      description:
+        'Desglose individual de cada alimento o bebida detectada con peso neto comestible y nutrientes.',
+      items: {
+        type: 'object',
+        properties: {
+          id: {
+            type: 'string',
+            description: 'Conservá el id previo si estás corrigiendo un ítem existente, o generá uno corto (ej. item-1).',
+          },
+          name: {
+            type: 'string',
+            description:
+              'Nombre claro del alimento en español especificando estado comestible y cocción cuando aplique (ej. "Banana pelada", "Manzana roja con cáscara", "Arroz blanco cocido", "Muslo de pollo al horno sin hueso").',
+          },
+          estimatedGrams: {
+            type: 'number',
+            description:
+              'Peso NETO COMESTIBLE (o volumen en ml para líquidos) en el estado servido, excluyendo cáscaras no comestibles, huesos o carozos.',
+          },
+          calories: {
+            type: 'number',
+            description:
+              'Calorías metabolizables (kcal) según factores Atwater específicos de USDA FoodData Central o la tabla canónica provista (con decimales si aplica, sin redondeo brusco).',
+          },
+          proteinG: {
+            type: 'number',
+            description: 'Gramos exactos de proteína.',
+          },
+          carbG: {
+            type: 'number',
+            description: 'Gramos exactos de carbohidratos totales (incluyen fibra y azúcares, tal como reporta USDA).',
+          },
+          fatG: {
+            type: 'number',
+            description: 'Gramos exactos de grasas totales.',
+          },
+          fiberG: {
+            type: 'number',
+            description: 'Gramos de fibra alimentaria total (dato informativo incluido dentro de carbG). 0 si no contiene.',
+          },
+          sugarG: {
+            type: 'number',
+            description: 'Gramos de azúcares totales intrínsecos + añadidos (dato informativo incluido dentro de carbG). 0 si no contiene.',
+          },
+        },
+        required: [
+          'name',
+          'estimatedGrams',
+          'calories',
+          'proteinG',
+          'carbG',
+          'fatG',
+          'fiberG',
+          'sugarG',
+        ],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: [
+    'isFood',
+    'rejectionReason',
+    'dishName',
+    'confidence',
+    'assumptions',
+    'suggestedMealType',
+    'items',
+  ],
+  additionalProperties: false,
+};
+
+const MEAL_ANALYSIS_SYSTEM_INSTRUCTION = `Sos un nutricionista clínico experto en composición bromatológica y estimación visual/textual de porciones para la app "75 Days".
+
+REGLAS CRÍTICAS DE PRECISIÓN NUTRICIONAL:
+1. **Cero alucinaciones**:
+   - Si la imagen no muestra alimentos ni bebidas consumibles (o está completamente negra/irreconocible) y no hay descripción textual válida, devolvé \`isFood: false\`, explicá brevemente el motivo en \`rejectionReason\` y dejá \`items: []\`.
+   - Si el texto enviado no describe ninguna comida ni bebida, devolvé \`isFood: false\`.
+2. **Fuente nutricional única y consistente (Catálogo App + USDA FoodData Central)**:
+   - **Prioridad #1**: Si en el prompt se incluye la \`Tabla canónica de ingredientes base (por 100g comestibles)\` y un alimento detectado coincide claramente con uno de ellos (mismo estado crudo/cocido), calculá \`calories\`, \`proteinG\`, \`carbG\` y \`fatG\` escalando exactamente esos valores por 100g (\`valorPer100g * estimatedGrams / 100\`), y completá \`fiberG\` y \`sugarG\` con **USDA FoodData Central (SR Legacy / Foundation Foods)**.
+   - **Prioridad #2**: Para todo otro alimento o preparación, utilizá **exclusivamente USDA FoodData Central (Foundation Foods / SR Legacy)** como fuente consistente, respetando sus **factores de conversión de Atwater específicos** (NO fuerces la multiplicación genérica \`P*4 + C*4 + G*9\` en frutas, verduras, legumbres o cereales integrales donde la fibra reduce la energía metabolizable real).
+   - Devolvé los valores con precisión decimal natural (no redondees a enteros intermedios) para evitar errores acumulativos.
+3. **Peso neto comestible vs. peso bruto y estado de cocción**:
+   - \`estimatedGrams\` debe representar **siempre la porción neta comestible en el estado servido**:
+     - Descontá cáscaras no comestibles (banana pelada, naranja pelada, cáscara de huevo), huesos (pollo/asado con hueso) y carozos (palta, durazno).
+     - Distinguí rigurosamente entre peso **cocido** y **crudo/seco** (ej. 150g de arroz cocido ≠ 150g de arroz crudo) y dejalo explícito en \`name\` (ej. *"Banana pelada"*, *"Arroz blanco cocido"*, *"Pata-muslo al horno sin hueso"*).
+4. **Fibra y Azúcares sin alterar Carbohidratos totales**:
+   - \`carbG\` es siempre **Carbohidratos totales por diferencia** (estándar USDA).
+   - Informá \`fiberG\` (fibra alimentaria) y \`sugarG\` (azúcares totales) como datos adicionales independientes sin restarlos de \`carbG\` (\`fiberG + sugarG <= carbG\`).
+5. **Modo Corrección (\`correctionPrompt\`) y Notas del usuario**:
+   - Cuando recibís \`Elementos actuales en pantalla\` junto con una corrección del usuario, aplicá exactamente esa corrección conservando intactos (\`id\`, gramos y nutrientes) los ítems que el usuario NO pidió cambiar.
+   - Priorizá siempre los datos explícitos del usuario (pesos de balanza, "sin aceite", "descremado", "media unidad") sobre la estimación visual.`;
+
+function formatReferenceIngredientsBlock(
+  ingredients?: ReferenceIngredientPer100g[]
+): string | null {
+  if (!ingredients || ingredients.length === 0) return null;
+  const compactRows = ingredients
+    .slice(0, 80)
+    .map(
+      (i) =>
+        `- ${i.name}: ${i.caloriesPer100g} kcal | P ${i.proteinPer100g}g | C ${i.carbPer100g}g | G ${i.fatPer100g}g`
+    )
+    .join('\n');
+  return `Tabla canónica de ingredientes base de la app (valores por 100g comestibles):\n${compactRows}`;
+}
+
+export async function analyzeMealInput(
+  input: AnalyzeMealInput,
+  clientOverride?: GeminiClientLike
+): Promise<AiMealAnalysisResponse> {
+  const ai = getGeminiClient(clientOverride);
+  const contentParts: Array<Record<string, unknown>> = [];
+  const promptLines: string[] = [];
+
+  const catalogBlock = formatReferenceIngredientsBlock(input.referenceIngredients);
+  if (catalogBlock) {
+    promptLines.push(catalogBlock);
+  }
+
+  if (input.mealTypeHint) {
+    promptLines.push(`Momento de comida seleccionado por el usuario: ${input.mealTypeHint}`);
+  }
+
+  if (input.currentItems && input.currentItems.length > 0) {
+    promptLines.push(
+      `Plato actual en pantalla: "${input.currentDishName || 'Comida'}"\n` +
+        `Elementos actuales en pantalla:\n${JSON.stringify(input.currentItems, null, 2)}`
+    );
+  }
+
+  if (input.textDescription?.trim()) {
+    promptLines.push(
+      `Descripción escrita por el usuario de lo que comió o bebió:\n"${input.textDescription.trim()}"`
+    );
+  }
+
+  if (input.note?.trim()) {
+    promptLines.push(`Nota aclaratoria del usuario sobre el plato: "${input.note.trim()}"`);
+  }
+
+  if (input.correctionPrompt?.trim()) {
+    promptLines.push(
+      `Pedido de corrección del usuario sobre el análisis actual: "${input.correctionPrompt.trim()}"`
+    );
+  }
+
+  if (input.imageBase64 && !input.correctionPrompt?.trim() && !input.textDescription?.trim()) {
+    promptLines.push(
+      'Analizá la foto adjunta del plato/bebida y devolvé el desglose nutricional en JSON.'
+    );
+  } else {
+    promptLines.push('Devolvé el resultado nutricional actualizado en el formato JSON solicitado.');
+  }
+
+  contentParts.push({
+    type: 'text',
+    text: promptLines.join('\n\n'),
+  });
+
+  if (input.imageBase64?.trim()) {
+    const rawMime = (input.imageMimeType || 'image/jpeg').split(';')[0].trim().toLowerCase();
+    const safeMime = (ALLOWED_MEAL_IMAGE_MIMES as readonly string[]).includes(rawMime)
+      ? rawMime
+      : 'image/jpeg';
+    contentParts.push({
+      type: 'image',
+      data: input.imageBase64.trim(),
+      mime_type: safeMime,
+    });
+  }
+
+  const interaction = await ai.interactions.create({
+    model: 'gemini-4-hydrogen',
+    system_instruction: MEAL_ANALYSIS_SYSTEM_INSTRUCTION,
+    input: [
+      {
+        type: 'user_input',
+        content: contentParts,
+      },
+    ],
+    response_format: {
+      type: 'text',
+      mime_type: 'application/json',
+      schema: MEAL_ANALYSIS_JSON_SCHEMA,
+    },
+    store: false,
+  });
+
+  const rawText = interaction.output_text?.trim();
+  if (!rawText) {
+    throw new Error('Gemini devolvió un análisis nutricional vacío.');
+  }
+
+  const parsed = aiMealRawResponseSchema.parse(JSON.parse(rawText));
+
+  if (!parsed.isFood || parsed.items.length === 0) {
+    return {
+      isFood: false,
+      rejectionReason:
+        parsed.rejectionReason ||
+        'No pudimos identificar alimentos claros. Probá con otra foto más cercana o describí tu plato con el teclado.',
+      dishName: '',
+      confidence: 'low',
+      assumptions: '',
+      suggestedMealType: input.mealTypeHint ?? parsed.suggestedMealType,
+      items: [],
+      totals: { calories: 0, proteinG: 0, carbG: 0, fatG: 0, fiberG: 0, sugarG: 0 },
+    };
+  }
+
+  const normalizedItems: AiMealDetectedItem[] = parsed.items.map((item, idx) => ({
+    ...item,
+    id: item.id || `meal-item-${idx + 1}`,
+  }));
+
+  const totals = computeMealTotals(normalizedItems, 1);
+
+  return {
+    isFood: true,
+    rejectionReason: '',
+    dishName: parsed.dishName || normalizedItems.map((i) => i.name).slice(0, 2).join(' con '),
+    confidence: parsed.confidence,
+    assumptions: parsed.assumptions,
+    suggestedMealType: input.mealTypeHint ?? parsed.suggestedMealType,
+    items: normalizedItems,
+    totals,
   };
 }

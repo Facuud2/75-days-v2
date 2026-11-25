@@ -5,7 +5,7 @@ import { useThemeStore } from '@/store/useThemeStore';
 import { useUIStore } from '@/store/useUIStore';
 import { useChallengeStore } from '@/store/useChallengeStore';
 import dynamic from 'next/dynamic';
-import { Home, Calendar, User, Settings, LogOut, Moon, Sun, Flame, Plus, Dumbbell } from 'lucide-react';
+import { Home, Calendar, User, Settings, LogOut, Moon, Sun, Flame, Plus, Dumbbell, Utensils } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
@@ -17,6 +17,7 @@ import HeaderCountdownTimer from '@/components/HeaderCountdownTimer';
 const PlansModal = dynamic(() => import('@/components/PlansModal'), { ssr: false });
 const LogMealModal = dynamic(() => import('@/components/LogMealModal'), { ssr: false });
 const LogWorkoutModal = dynamic(() => import('@/components/LogWorkoutModal'), { ssr: false });
+const LogWeightModal = dynamic(() => import('@/components/LogWeightModal'), { ssr: false });
 const QuickActionsSheet = dynamic(() => import('@/components/QuickActionsSheet'), { ssr: false });
 const LogoutConfirmSheet = dynamic(() => import('@/components/profile/LogoutConfirmSheet'), { ssr: false });
 const LiveWorkoutOverlay = dynamic(() => import('@/components/fitness/LiveWorkoutOverlay'), { ssr: false });
@@ -54,9 +55,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     openPlansModal,
     openLogMealModal,
     openLogWorkoutModal,
+    openLogWeightModal,
+    closeLogWeightModal,
     isPlansModalOpen,
     isLogMealModalOpen,
     isLogWorkoutModalOpen,
+    isLogWeightModalOpen,
     isQuickActionsOpen,
     openQuickActions,
     closeQuickActions,
@@ -184,6 +188,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   <Calendar size={20} strokeWidth={pathname === '/calendar' ? 2.4 : 1.8} />
                   <span className="text-[10px] mt-1 hidden sm:block">Calendario</span>
                 </Link>
+                <Link data-tour="nav-nutrition" href="/nutrition" className={`app-header-nav flex flex-col items-center p-2 transition-colors ${pathname === '/nutrition' ? 'is-active' : ''}`}>
+                  <Utensils size={20} strokeWidth={pathname === '/nutrition' ? 2.4 : 1.8} />
+                  <span className="text-[10px] mt-1 hidden sm:block">Nutrición</span>
+                </Link>
                 <button data-tour="quick-actions" aria-label="Abrir acciones rápidas" aria-expanded={isQuickActionsOpen} onClick={openQuickActions} className="app-header-nav flex flex-col items-center rounded-xl p-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400">
                   <Plus size={20} strokeWidth={2.2} />
 
@@ -203,13 +211,24 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </div>
             )}
 
-            {/* Mobile Settings shortcut in header (moved from bottom nav to make room for Fitness) */}
-            {isAuthenticated && user?.onboardingCompleted && pathname !== '/settings' && (
+            {/* Mobile Calendar + Settings shortcuts in header (moved from bottom nav to make room for Nutrition & Fitness) */}
+            {isAuthenticated && user?.onboardingCompleted && pathname !== '/calendar' && (
+              <Link
+                data-tour="nav-calendar"
+                href="/calendar"
+                aria-label="Abrir calendario"
+                className="lg:hidden inline-flex min-h-11 min-w-11 items-center justify-center app-header-control transition-colors rounded-full border active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
+              >
+                <Calendar size={18} />
+              </Link>
+            )}
+            {/* Mobile Settings shortcut: only shown on the Profile screen */}
+            {isAuthenticated && user?.onboardingCompleted && pathname === '/profile' && (
               <Link
                 data-tour="nav-settings-mobile"
                 href="/settings"
                 aria-label="Abrir ajustes"
-                className="lg:hidden inline-flex min-h-11 min-w-11 items-center justify-center app-header-control transition-colors rounded-full border active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
+                className="lg:hidden inline-flex min-h-11 min-w-11 items-center justify-center app-header-control transition-colors rounded-full border ml-1.5 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
               >
                 <Settings size={18} />
               </Link>
@@ -243,6 +262,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       {isAuthenticated && isPlansModalOpen && <PlansModal />}
       {isAuthenticated && isLogMealModalOpen && <LogMealModal isOpen={isLogMealModalOpen} onClose={() => { useUIStore.getState().closeLogMealModal(); }} date={getLocalDateString()} onSaved={() => { }} />}
       {isAuthenticated && isLogWorkoutModalOpen && <LogWorkoutModal isOpen={isLogWorkoutModalOpen} onClose={() => { useUIStore.getState().closeLogWorkoutModal(); }} date={getLocalDateString()} onSaved={() => { }} />}
+      {isAuthenticated && isLogWeightModalOpen && <LogWeightModal isOpen={isLogWeightModalOpen} onClose={closeLogWeightModal} date={getLocalDateString()} />}
       {isAuthenticated && user?.onboardingCompleted && (
         <>
           <LiveWorkoutOverlay />
@@ -256,6 +276,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           onClose={closeQuickActions}
           onMeal={openLogMealModal}
           onWorkout={openLogWorkoutModal}
+          onWeight={openLogWeightModal}
           onPlans={openPlansModal}
         />
       )}
@@ -278,9 +299,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <Home size={22} strokeWidth={pathname === '/dashboard' ? 2.4 : 1.8} />
             <span>Inicio</span>
           </Link>
-          <Link data-tour="nav-calendar" href="/calendar" aria-current={pathname === '/calendar' ? 'page' : undefined} className={`flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl px-1 py-1.5 text-[11px] font-semibold ${pathname === '/calendar' ? '' : 'text-white/55'}`}>
-            <Calendar size={22} strokeWidth={pathname === '/calendar' ? 2.4 : 1.8} />
-            <span>Calendario</span>
+          <Link data-tour="nav-nutrition" href="/nutrition" aria-current={pathname === '/nutrition' ? 'page' : undefined} className={`flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl px-1 py-1.5 text-[11px] font-semibold ${pathname === '/nutrition' ? '' : 'text-white/55'}`}>
+            <Utensils size={22} strokeWidth={pathname === '/nutrition' ? 2.4 : 1.8} />
+            <span>Nutrición</span>
           </Link>
           <button data-tour="quick-actions" aria-label="Abrir acciones rápidas" aria-expanded={isQuickActionsOpen} onClick={openQuickActions} className="mobile-action-button -mt-6 flex min-w-0 flex-1 flex-col items-center gap-1 pb-1 text-[11px] font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300">
             <span className="flex h-14 w-14 items-center justify-center rounded-full border-4 border-zinc-950 bg-rose-500 shadow-[0_8px_24px_rgba(244,63,94,0.4)] transition-transform active:scale-95">

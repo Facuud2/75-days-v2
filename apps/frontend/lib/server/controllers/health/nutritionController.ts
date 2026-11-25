@@ -10,6 +10,8 @@ const MealEntrySchema = z.object({
   proteinG: z.number().min(0).max(2000).default(0),
   carbG: z.number().min(0).max(2000).default(0),
   fatG: z.number().min(0).max(2000).default(0),
+  fiberG: z.number().min(0).max(1000).default(0),
+  sugarG: z.number().min(0).max(2000).default(0),
 }).strict();
 
 const GoalsSchema = z.object({

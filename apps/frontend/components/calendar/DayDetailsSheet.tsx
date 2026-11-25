@@ -3,11 +3,14 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion, useDragControls, useReducedMotion } from 'motion/react';
-import { CalendarDays, Camera, Check, ChevronLeft, ChevronRight, FileText, Scale, Upload, X } from 'lucide-react';
+import { CalendarDays, Camera, Check, ChevronLeft, ChevronRight, FileText, Scale, Upload, Utensils, X } from 'lucide-react';
+import Link from 'next/link';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import type { ChallengeDay } from '@/lib/calendar/challengeDays';
 import { useChallengeStore } from '@/store/useChallengeStore';
+import { useHealthStore } from '@/store/useHealthStore';
+import { mealTypeLabel } from '@/lib/utils/display';
 import toast from 'react-hot-toast';
 import {
   REDUCED_MOTION_TRANSITION,
@@ -20,6 +23,8 @@ const statusText = { success: 'Completado', fail: 'No cumplido', rest: 'Descanso
 
 export default function DayDetailsSheet({ day, onClose, onPrevious, onNext }: { day: ChallengeDay; onClose: () => void; onPrevious?: () => void; onNext?: () => void }) {
   const { logDailyGoal, logDailyMetrics } = useChallengeStore();
+  const dayNutrition = useHealthStore((s) => s.dailyStatsByDate[day.date]);
+  const fetchProfileBundle = useHealthStore((s) => s.fetchProfileBundle);
   const log = day.log;
   const [weight, setWeight] = useState(log?.weight?.toString() ?? '');
   const [photoUrl, setPhotoUrl] = useState(log?.photoUrl ?? '');
@@ -34,6 +39,12 @@ export default function DayDetailsSheet({ day, onClose, onPrevious, onNext }: { 
   const [justDroppedPhoto, setJustDroppedPhoto] = useState(false);
   const dragControls = useDragControls();
   const reduceMotion = useReducedMotion();
+
+  useEffect(() => {
+    if (day.status !== 'future') {
+      void fetchProfileBundle(day.date, { skipCoreProfile: true });
+    }
+  }, [day.date, day.status, fetchProfileBundle]);
 
   const dismiss = useCallback(() => {
     // Keep this guard in a ref. Using `isClosing` here made the effect below
@@ -191,6 +202,55 @@ export default function DayDetailsSheet({ day, onClose, onPrevious, onNext }: { 
               </div>
             </section>
           ) : <p className="calendar-empty-note">Todavía no hay metas registradas para este día.</p>}
+
+          {day.status !== 'future' ? (
+            <section className="calendar-sheet__section" aria-labelledby="meals-day-title">
+              <div className="calendar-section-heading">
+                <h3 id="meals-day-title">
+                  Comidas del día
+                  {dayNutrition && dayNutrition.consumed > 0
+                    ? ` · ${Math.round(dayNutrition.consumed)} kcal`
+                    : ''}
+                </h3>
+                <Link
+                  href={`/nutrition?date=${day.date}`}
+                  onClick={onClose}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--accent-text)]"
+                >
+                  <Utensils size={13} aria-hidden="true" />
+                  Abrir Nutrición
+                </Link>
+              </div>
+
+              {dayNutrition && dayNutrition.meals.length > 0 ? (
+                <div className="divide-y divide-[var(--divider)] overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-inset)]">
+                  {dayNutrition.meals.map((meal) => (
+                    <div
+                      key={meal.id}
+                      className="flex items-center justify-between gap-2 px-3.5 py-2.5 text-sm"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium text-[var(--text-primary)]">
+                          {meal.name}
+                        </p>
+                        <p className="text-xs text-[var(--text-muted)] tabular-nums">
+                          {mealTypeLabel(meal.mealType)} · P {Math.round(meal.proteinG)}g · C{' '}
+                          {Math.round(meal.carbG)}g · G {Math.round(meal.fatG)}g
+                        </p>
+                      </div>
+                      <span className="shrink-0 font-semibold text-[var(--text-primary)] tabular-nums">
+                        {Math.round(meal.calories)} kcal
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="calendar-empty-note">
+                  Sin comidas registradas en esta fecha.
+                </p>
+              )}
+            </section>
+          ) : null}
 
           <section className="calendar-sheet__section" aria-labelledby="notes-title">
             <div className="calendar-section-heading"><h3 id="notes-title">Registro personal</h3><FileText size={16} aria-hidden="true" /></div>

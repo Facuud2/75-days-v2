@@ -25,8 +25,10 @@ import {
   CalendarClock,
   Minus,
   Plus,
+  Scale,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { DEFAULT_GOALS } from '@/lib/constants/plans';
 import { syncCoreStores } from '@/lib/api/sync';
 import { isTutorialPending, markTutorialSeen } from '@/lib/tutorial';
@@ -101,7 +103,7 @@ export default function Dashboard() {
     isLoading: isChallengeLoading
   } = useChallengeStore();
   const { quests, fetchQuests, fetchAvailableQuests, isLoading: isQuestsLoading } = useQuestStore();
-  const { openPlansModal, isTutorialOpen, openTutorial, closeTutorial } = useUIStore();
+  const { openPlansModal, openLogWeightModal, isTutorialOpen, openTutorial, closeTutorial } = useUIStore();
 
   const router = useRouter();
 
@@ -579,9 +581,13 @@ export default function Dashboard() {
               <p className="text-rose-500 text-[10px] font-bold tracking-[0.2em] uppercase">Resumen de hoy</p>
               <h2 id="today-summary-title" className="mt-1 text-sm font-semibold text-white/70">Día actual</h2>
             </div>
-            <span className="rounded-full bg-white/5 px-2.5 py-1 text-[10px] font-bold text-white/50">
-              {Math.round((currentDay / 75) * 100)}% del reto
-            </span>
+            <Link
+              href="/calendar"
+              className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-white/80 transition-colors hover:bg-white/10 hover:text-white active:scale-95"
+            >
+              <CalendarRange className="h-3.5 w-3.5 text-rose-400" aria-hidden="true" />
+              <span>Calendario</span>
+            </Link>
           </div>
 
           <div className="mt-3 flex items-baseline gap-1">
@@ -657,6 +663,28 @@ export default function Dashboard() {
                 )}
               </div>
             )}
+          </div>
+
+          <div className="mt-5 border-t border-white/10 pt-4 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-rose-500/15 text-rose-400">
+                <Scale size={17} strokeWidth={1.8} aria-hidden="true" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/50">Peso de hoy</p>
+                <p className="text-sm font-bold text-white tabular-nums truncate">
+                  {devLog?.weight ? `${devLog.weight} kg` : 'Sin registrar'}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={openLogWeightModal}
+              className="inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-xl border border-rose-500/30 bg-rose-500/15 px-3 py-1.5 text-xs font-bold text-rose-300 transition-colors hover:bg-rose-500/25 active:scale-95"
+            >
+              <Plus size={14} strokeWidth={2.2} aria-hidden="true" />
+              <span>{devLog?.weight ? 'Actualizar' : 'Registrar'}</span>
+            </button>
           </div>
         </section>
 
