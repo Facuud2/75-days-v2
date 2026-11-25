@@ -121,6 +121,8 @@ function recomputeStatsMeals(base: DailyStats, meals: Meal[]): DailyStats {
   const proteinG = Math.round(meals.reduce((acc, m) => acc + (Number(m.proteinG) || 0), 0) * 10) / 10;
   const carbG = Math.round(meals.reduce((acc, m) => acc + (Number(m.carbG) || 0), 0) * 10) / 10;
   const fatG = Math.round(meals.reduce((acc, m) => acc + (Number(m.fatG) || 0), 0) * 10) / 10;
+  const fiberG = Math.round(meals.reduce((acc, m) => acc + (Number(m.fiberG) || 0), 0) * 10) / 10;
+  const sugarG = Math.round(meals.reduce((acc, m) => acc + (Number(m.sugarG) || 0), 0) * 10) / 10;
   const dailyGoal = Number(base.dailyGoal) || 2000;
   const burned = Number(base.burned) || 0;
 
@@ -134,6 +136,8 @@ function recomputeStatsMeals(base: DailyStats, meals: Meal[]): DailyStats {
       proteinG,
       carbG,
       fatG,
+      fiberG,
+      sugarG,
     },
     meals,
   };

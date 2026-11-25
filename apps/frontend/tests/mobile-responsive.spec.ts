@@ -31,10 +31,13 @@ test.describe('mobile platform baseline', () => {
       if (viewport.width < 1024) {
         await expect(page.locator('.mobile-bottom-nav')).toBeVisible();
         await expect(page.getByRole('link', { name: /Inicio/ })).toBeVisible();
-        await expect(page.getByRole('link', { name: /Calendario/ })).toBeVisible();
+        await expect(page.getByRole('link', { name: /Nutrición/ })).toBeVisible();
         await expect(page.getByRole('button', { name: 'Abrir acciones rápidas' })).toBeVisible();
+        await expect(page.getByRole('link', { name: /Fitness/ })).toBeVisible();
         await expect(page.getByRole('link', { name: /Perfil/ })).toBeVisible();
-        await expect(page.getByRole('link', { name: /Ajustes/ })).toBeVisible();
+        await expect(page.getByRole('link', { name: 'Abrir calendario' })).toBeVisible();
+        // La tuerca de Ajustes solo aparece en Perfil.
+        await expect(page.getByRole('link', { name: 'Abrir ajustes' })).toBeHidden();
 
         await page.getByRole('button', { name: 'Abrir acciones rápidas' }).click();
         await expect(page.getByRole('dialog', { name: /¿Qué quieres registrar\?/i })).toBeVisible();
@@ -50,5 +53,10 @@ test.describe('mobile platform baseline', () => {
         fullPage: true,
       });
     }
+
+    // La tuerca de Ajustes aparece únicamente en Perfil.
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto('/profile');
+    await expect(page.getByRole('link', { name: 'Abrir ajustes' })).toBeVisible();
   });
 });

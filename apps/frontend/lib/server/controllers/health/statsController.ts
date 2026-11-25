@@ -27,6 +27,8 @@ function formatDaySummaryFromLists(
   const proteinG = meals.reduce((s, m) => s + m.proteinG, 0);
   const carbG = meals.reduce((s, m) => s + m.carbG, 0);
   const fatG = meals.reduce((s, m) => s + m.fatG, 0);
+  const fiberG = meals.reduce((s, m) => s + (m.fiberG ?? 0), 0);
+  const sugarG = meals.reduce((s, m) => s + (m.sugarG ?? 0), 0);
   const burned = workouts.reduce((s, w) => s + w.caloriesBurned, 0);
   const workoutMin = workouts.reduce((s, w) => s + w.durationMin, 0);
 
@@ -44,6 +46,8 @@ function formatDaySummaryFromLists(
       proteinG: Math.round(proteinG * 10) / 10,
       carbG: Math.round(carbG * 10) / 10,
       fatG: Math.round(fatG * 10) / 10,
+      fiberG: Math.round(fiberG * 10) / 10,
+      sugarG: Math.round(sugarG * 10) / 10,
       goals: {
         proteinG: profile?.proteinGoalG ?? 150,
         carbG: profile?.carbGoalG ?? 200,
@@ -60,6 +64,8 @@ function formatDaySummaryFromLists(
       proteinG: m.proteinG,
       carbG: m.carbG,
       fatG: m.fatG,
+      fiberG: m.fiberG ?? 0,
+      sugarG: m.sugarG ?? 0,
     })),
   };
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { AnimatePresence, motion, useDragControls, useReducedMotion } from 'motion/react';
-import { Apple, Dumbbell, Target, X } from 'lucide-react';
+import { Apple, Dumbbell, Scale, Target, X } from 'lucide-react';
 import {
   REDUCED_MOTION_TRANSITION,
   SHEET_ENTER_SPRING,
@@ -16,6 +16,7 @@ interface QuickActionsSheetProps {
   onClose: () => void;
   onMeal: () => void;
   onWorkout: () => void;
+  onWeight: () => void;
   onPlans: () => void;
 }
 
@@ -25,6 +26,7 @@ export default function QuickActionsSheet({
   onClose,
   onMeal,
   onWorkout,
+  onWeight,
   onPlans,
 }: QuickActionsSheetProps) {
   const previousFocusedElement = useRef<HTMLElement | null>(null);
@@ -145,6 +147,19 @@ export default function QuickActionsSheet({
                   </button>
                   <button
                     type="button"
+                    onClick={() => handleAction(onWeight)}
+                    className="quick-action-item flex min-h-16 items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.05] px-4 text-left text-white transition-colors active:scale-[0.99] active:bg-rose-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
+                  >
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-rose-500/15 text-rose-300">
+                      <Scale size={23} strokeWidth={2} />
+                    </span>
+                    <span>
+                      <span className="block font-semibold">Registrar peso</span>
+                      <span className="mt-0.5 block text-sm text-white/50">Actualiza tu peso del día</span>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => handleAction(onPlans)}
                     className="quick-action-item flex min-h-14 items-center gap-4 rounded-2xl px-4 text-left text-white/75 transition-colors active:scale-[0.99] active:bg-white/[0.07] active:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
                   >
@@ -158,19 +173,34 @@ export default function QuickActionsSheet({
                   </button>
                 </>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => handleAction(onPlans)}
-                  className="quick-action-item flex min-h-16 items-center gap-4 rounded-2xl border border-rose-400/30 bg-rose-500/15 px-4 text-left text-white transition-colors active:scale-[0.99] active:bg-rose-500/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
-                >
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-rose-500/20 text-rose-300">
-                    <Target size={23} strokeWidth={2} />
-                  </span>
-                  <span>
-                    <span className="block font-semibold">Elegir un plan</span>
-                    <span className="mt-0.5 block text-sm text-white/55">Inicia un nuevo desafío de 75 días</span>
-                  </span>
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleAction(onPlans)}
+                    className="quick-action-item flex min-h-16 items-center gap-4 rounded-2xl border border-rose-400/30 bg-rose-500/15 px-4 text-left text-white transition-colors active:scale-[0.99] active:bg-rose-500/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
+                  >
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-rose-500/20 text-rose-300">
+                      <Target size={23} strokeWidth={2} />
+                    </span>
+                    <span>
+                      <span className="block font-semibold">Elegir un plan</span>
+                      <span className="mt-0.5 block text-sm text-white/55">Inicia un nuevo desafío de 75 días</span>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAction(onWeight)}
+                    className="quick-action-item flex min-h-16 items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.05] px-4 text-left text-white transition-colors active:scale-[0.99] active:bg-rose-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
+                  >
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-rose-500/15 text-rose-300">
+                      <Scale size={23} strokeWidth={2} />
+                    </span>
+                    <span>
+                      <span className="block font-semibold">Registrar peso</span>
+                      <span className="mt-0.5 block text-sm text-white/50">Actualiza tu peso actual</span>
+                    </span>
+                  </button>
+                </>
               )}
             </div>
 

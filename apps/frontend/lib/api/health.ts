@@ -15,6 +15,8 @@ export interface Meal {
   proteinG: number;
   carbG: number;
   fatG: number;
+  fiberG?: number;
+  sugarG?: number;
 }
 
 export interface DailyStats {
@@ -28,6 +30,8 @@ export interface DailyStats {
     proteinG: number;
     carbG: number;
     fatG: number;
+    fiberG?: number;
+    sugarG?: number;
     goals: {
       proteinG: number;
       carbG: number;
@@ -108,6 +112,8 @@ export interface LogMealPayload {
   proteinG: number;
   carbG: number;
   fatG: number;
+  fiberG?: number;
+  sugarG?: number;
 }
 
 export interface WorkoutSetItem {
@@ -263,7 +269,13 @@ export const healthService = {
     ),
   getDailyStats: (date: string) =>
     healthClient<DailyStats>(`/stats/daily/${date}`),
-  updateGoals: (payload: { weightKg?: number }) =>
+  updateGoals: (payload: {
+    dailyCalorieGoal?: number;
+    proteinGoalG?: number;
+    carbGoalG?: number;
+    fatGoalG?: number;
+    weightKg?: number;
+  }) =>
     healthClient<{ message: string }>('/nutrition/goals', {
       method: 'PUT',
       body: JSON.stringify(payload),

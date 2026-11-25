@@ -39,6 +39,8 @@ model MealEntry {
   proteinG  Float    @default(0)
   carbG     Float    @default(0)
   fatG      Float    @default(0)
+  fiberG    Float    @default(0)
+  sugarG    Float    @default(0)
   createdAt DateTime @default(now())
 
   @@index([userId, date])

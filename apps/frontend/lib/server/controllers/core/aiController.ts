@@ -1,13 +1,16 @@
 import { z } from 'zod';
 import { ControllerRequest, ControllerResponse } from '../../http';
 import {
+  ALLOWED_MEAL_IMAGE_MIMES,
   aiSideQuestDraftSchema,
   aiTaskSchema,
   aiUserContextSchema,
+  analyzeMealInput,
   processCustomPlanTurn,
   processSideQuestTurn,
   transcribeUserAudio,
 } from '../../services/geminiService';
+import { fetchCachedSystemIngredients } from '../health/customFoodController';
 
 const historyItemSchema = z.object({
   role: z.enum(['user', 'assistant']),
@@ -132,6 +135,76 @@ export const transcribeAudio = async (
     console.error('[aiController.transcribeAudio]', error);
     return res.status(502).json({
       error: 'No pudimos transcribir el audio en este momento. Intentá de nuevo.',
+    });
+  }
+};
+
+const currentMealItemInputSchema = z
+  .object({
+    id: z.string().max(64).optional(),
+    name: z.string().trim().min(1).max(120),
+    estimatedGrams: z.number().min(0).max(5000),
+    calories: z.number().min(0).max(10000),
+    proteinG: z.number().min(0).max(1000),
+    carbG: z.number().min(0).max(1000),
+    fatG: z.number().min(0).max(1000),
+    fiberG: z.number().min(0).max(500).optional(),
+    sugarG: z.number().min(0).max(1000).optional(),
+  })
+  .strict();
+
+export const analyzeMealRequestSchema = z
+  .object({
+    imageBase64: z.string().max(3_800_000).optional(),
+    imageMimeType: z.enum(ALLOWED_MEAL_IMAGE_MIMES).optional(),
+    textDescription: z.string().max(1500).optional(),
+    note: z.string().max(400).optional(),
+    correctionPrompt: z.string().max(800).optional(),
+    currentDishName: z.string().max(140).optional(),
+    currentItems: z.array(currentMealItemInputSchema).max(25).optional(),
+    mealTypeHint: z.enum(['breakfast', 'lunch', 'dinner', 'snack']).optional(),
+  })
+  .strict()
+  .refine(
+    (data) =>
+      Boolean(
+        data.imageBase64?.trim() ||
+          data.textDescription?.trim() ||
+          (data.correctionPrompt?.trim() &&
+            data.currentItems &&
+            data.currentItems.length > 0)
+      ),
+    {
+      message:
+        'Debés enviar una foto, una descripción de tu comida o una corrección sobre el plato actual.',
+    }
+  );
+
+export const analyzeMeal = async (
+  req: ControllerRequest,
+  res: ControllerResponse
+) => {
+  try {
+    const payload = analyzeMealRequestSchema.parse(req.body);
+    const referenceIngredients = await fetchCachedSystemIngredients().catch(
+      () => []
+    );
+    const result = await analyzeMealInput({
+      ...payload,
+      referenceIngredients,
+    });
+    return res.json(result);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        error: 'Datos inválidos para analizar la comida.',
+        details: error.issues,
+      });
+    }
+    console.error('[aiController.analyzeMeal]', error);
+    return res.status(502).json({
+      error:
+        'No pudimos analizar tu comida con la IA en este momento. Intentá de nuevo.',
     });
   }
 };

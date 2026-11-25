@@ -145,6 +145,47 @@ export interface AiTranscribeResponse {
   hasSpeech: boolean;
 }
 
+export interface AiMealItem {
+  id: string;
+  name: string;
+  estimatedGrams: number;
+  calories: number;
+  proteinG: number;
+  carbG: number;
+  fatG: number;
+  fiberG?: number;
+  sugarG?: number;
+}
+
+export interface AiAnalyzeMealRequest {
+  imageBase64?: string;
+  imageMimeType?: 'image/jpeg' | 'image/png' | 'image/webp';
+  textDescription?: string;
+  note?: string;
+  correctionPrompt?: string;
+  currentDishName?: string;
+  currentItems?: AiMealItem[];
+  mealTypeHint?: 'breakfast' | 'lunch' | 'dinner' | 'snack';
+}
+
+export interface AiAnalyzeMealResponse {
+  isFood: boolean;
+  rejectionReason: string;
+  dishName: string;
+  confidence: 'high' | 'medium' | 'low';
+  assumptions: string;
+  suggestedMealType: 'breakfast' | 'lunch' | 'dinner' | 'snack';
+  items: AiMealItem[];
+  totals: {
+    calories: number;
+    proteinG: number;
+    carbG: number;
+    fatG: number;
+    fiberG?: number;
+    sugarG?: number;
+  };
+}
+
 export async function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -184,6 +225,14 @@ export const aiService = {
       body: JSON.stringify(payload),
       signal,
       timeoutMs: 30_000,
+    });
+  },
+  analyzeMeal: (payload: AiAnalyzeMealRequest, signal?: AbortSignal) => {
+    return apiClient<AiAnalyzeMealResponse>('/ai/analyze-meal', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      signal,
+      timeoutMs: 45_000,
     });
   },
 };

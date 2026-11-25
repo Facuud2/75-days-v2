@@ -24,6 +24,7 @@ interface ProfileHealthProps {
   data: HealthSummary;
   loading?: boolean;
   loadingNutrition?: boolean;
+  onLogWeight?: () => void;
   onLogMeal: () => void;
   onEditMeal: (meal: MealSummary) => void;
   onLogWorkout: () => void;
@@ -38,6 +39,7 @@ export default function ProfileHealth({
   data,
   loading = false,
   loadingNutrition = false,
+  onLogWeight,
   onLogMeal,
   onEditMeal,
   onLogWorkout,
@@ -94,11 +96,19 @@ export default function ProfileHealth({
             <Scale size={16} strokeWidth={1.5} aria-hidden="true" />
             Peso
           </h3>
-          {data.bmi !== null && data.bmi > 0 ? (
-            <span className="pv2-chip">
-              IMC {formatDecimal(data.bmi)} · {data.bmiLabel}
-            </span>
-          ) : null}
+          <div className="flex items-center gap-2">
+            {data.bmi !== null && data.bmi > 0 ? (
+              <span className="pv2-chip">
+                IMC {formatDecimal(data.bmi)} · {data.bmiLabel}
+              </span>
+            ) : null}
+            {onLogWeight ? (
+              <button type="button" onClick={onLogWeight} className="pv2-link min-h-9 text-xs">
+                <Plus size={14} strokeWidth={2} aria-hidden="true" />
+                Registrar
+              </button>
+            ) : null}
+          </div>
         </div>
 
         {hasWeight ? (
