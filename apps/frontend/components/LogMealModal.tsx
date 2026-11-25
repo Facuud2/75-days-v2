@@ -229,6 +229,7 @@ function LogMealModalContent({ onClose, onSaved, date, initialTab, initialMealTy
         setStep('MAIN');
         setNewCustomFood({ name: '', description: '', servingSize: '' });
         setRecipeIngredients([]);
+        toast.success(`Platillo "${payload.name}" guardado`);
         void createCustomFoodOptimistic(payload, computed).catch(() => {
             toast.error('No se pudo guardar el platillo personalizado.');
         });
@@ -247,6 +248,7 @@ function LogMealModalContent({ onClose, onSaved, date, initialTab, initialMealTy
         // 0ms Optimistic UI: actualiza el store y cierra el modal al instante
         onSaved();
         onClose();
+        toast.success(`"${food.name}" registrada`);
         void logMealOptimistic(payload).catch(() => {
             toast.error('No se pudo registrar la comida.');
         });
@@ -268,6 +270,7 @@ function LogMealModalContent({ onClose, onSaved, date, initialTab, initialMealTy
         // 0ms Optimistic UI: actualiza el store y cierra el modal al instante
         onSaved();
         onClose();
+        toast.success(`"${foodDetails.name}" registrada`);
         void logMealOptimistic(payload).catch(() => {
             toast.error('No se pudo registrar la comida.');
         });
@@ -298,6 +301,7 @@ function LogMealModalContent({ onClose, onSaved, date, initialTab, initialMealTy
         };
         onSaved();
         onClose();
+        toast.success(`"${meal.name}" registrada`);
         void logMealOptimistic(payload).catch(() => {
             toast.error('No se pudo registrar la comida.');
         });

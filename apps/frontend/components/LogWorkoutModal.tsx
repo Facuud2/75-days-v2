@@ -305,10 +305,14 @@ function LogWorkoutModalContent({
     onClose();
 
     if (initialData?.id) {
+      toast.success('Entrenamiento actualizado');
       void updateWorkoutOptimistic(initialData.id, payload).catch(() => {
         toast.error('Error al actualizar el entrenamiento.');
       });
     } else {
+      toast.success(
+        payload.title ? `"${payload.title}" registrado` : 'Entrenamiento registrado'
+      );
       void logWorkoutOptimistic(payload).catch(() => {
         toast.error('Error al guardar el entrenamiento.');
       });
@@ -322,6 +326,7 @@ function LogWorkoutModalContent({
     const workoutId = initialData.id;
     onDelete(workoutId);
     onClose();
+    toast.success('Entrenamiento eliminado');
     void deleteWorkoutOptimistic(workoutId, date).catch(() => {
       toast.error('Error al eliminar el entrenamiento.');
     });

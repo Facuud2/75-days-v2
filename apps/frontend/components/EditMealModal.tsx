@@ -97,6 +97,7 @@ function EditMealModalContent({
 
     onSaved();
     onClose();
+    toast.success(`"${payload.name}" actualizada`);
     void updateMealOptimistic(meal.id, payload).catch(() => {
       toast.error('No se pudieron guardar los cambios.');
     });
@@ -106,6 +107,7 @@ function EditMealModalContent({
     const mealId = meal.id;
     onSaved();
     onClose();
+    toast.success('Comida eliminada');
     void deleteMealOptimistic(mealId, date).catch(() => {
       toast.error('No se pudo eliminar la comida.');
     });

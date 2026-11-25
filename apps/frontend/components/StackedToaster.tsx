@@ -17,7 +17,7 @@ export default function StackedToaster() {
 
   return (
     <div
-      className="pointer-events-none fixed inset-x-0 bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] z-[120] flex justify-center px-4 sm:inset-x-auto sm:bottom-6 sm:right-6 sm:justify-end sm:px-0"
+      className="pointer-events-none fixed inset-x-0 bottom-[calc(5.25rem+env(safe-area-inset-bottom,0px))] z-[120] flex justify-center px-4 sm:inset-x-auto sm:bottom-6 sm:right-6 sm:justify-end sm:px-0"
       role="region"
       aria-label="Notificaciones"
       onMouseEnter={() => {
@@ -33,18 +33,27 @@ export default function StackedToaster() {
         <AnimatePresence initial={false} mode="popLayout">
           {visibleToasts.map((t, index) => {
             const isFront = index === 0;
-            const depthScale = expanded ? 1 : Math.max(0.84, 1 - index * 0.08);
-            const depthY = expanded ? -(index * 62) : -(index * 10);
-            const depthOpacity = expanded ? 1 : Math.max(0.55, 1 - index * 0.2);
+            const depthScale = expanded ? 1 : index === 0 ? 1 : index === 1 ? 0.92 : 0.84;
+            const depthY = expanded ? -(index * 60) : index === 0 ? 0 : index === 1 ? -10 : -18;
+            const depthOpacity = expanded ? 1 : index === 0 ? 1 : index === 1 ? 0.72 : 0.45;
 
             return (
               <motion.div
                 key={t.id}
                 layout={!reduceMotion}
+                drag={isFront && !reduceMotion ? 'y' : false}
+                dragConstraints={{ top: -8, bottom: 80 }}
+                dragElastic={{ top: 0.08, bottom: 0.4 }}
+                dragSnapToOrigin
+                onDragEnd={(_, info) => {
+                  if (info.offset.y > 24 || info.velocity.y > 220) {
+                    toast.dismiss(t.id);
+                  }
+                }}
                 initial={
                   reduceMotion
                     ? { opacity: 0 }
-                    : { opacity: 0, y: 64, scale: 0.94 }
+                    : { opacity: 0, y: 64, scale: 0.96 }
                 }
                 animate={{
                   opacity: depthOpacity,
@@ -55,25 +64,25 @@ export default function StackedToaster() {
                 exit={
                   reduceMotion
                     ? { opacity: 0 }
-                    : { opacity: 0, y: 32, scale: 0.92 }
+                    : { opacity: 0, y: 32, scale: 0.94 }
                 }
                 transition={
                   reduceMotion
                     ? { duration: 0.14 }
-                    : { type: 'spring', bounce: 0.12, duration: 0.38 }
+                    : { type: 'spring', bounce: 0, duration: 0.28 }
                 }
                 style={{
                   position: isFront ? 'relative' : 'absolute',
                   bottom: 0,
                   transformOrigin: 'bottom center',
                 }}
-                className="pointer-events-auto flex w-full items-center gap-2.5 rounded-2xl border border-zinc-800/90 bg-zinc-950/95 px-3.5 py-3 text-sm font-medium text-zinc-100 shadow-2xl backdrop-blur-md"
+                className="pointer-events-auto flex w-full touch-pan-x select-none items-center gap-2.5 rounded-[18px] border border-black/[0.08] bg-zinc-950/85 px-3.5 py-2.5 text-[14px] font-medium leading-snug text-zinc-100 shadow-2xl backdrop-blur-xl backdrop-saturate-180 tabular-nums dark:border-white/[0.12] [@media(prefers-reduced-transparency:reduce)]:bg-zinc-950 [@media(prefers-reduced-transparency:reduce)]:backdrop-blur-none"
                 {...t.ariaProps}
               >
                 {t.type === 'success' ? (
-                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" aria-hidden="true" />
+                  <CheckCircle2 className="h-[18px] w-[18px] shrink-0 text-emerald-400" strokeWidth={2} aria-hidden="true" />
                 ) : t.type === 'error' ? (
-                  <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" aria-hidden="true" />
+                  <AlertCircle className="h-[18px] w-[18px] shrink-0 text-rose-400" strokeWidth={2} aria-hidden="true" />
                 ) : null}
 
                 <div className="min-w-0 flex-1 truncate">
@@ -84,9 +93,9 @@ export default function StackedToaster() {
                   type="button"
                   onClick={() => toast.dismiss(t.id)}
                   aria-label="Cerrar notificación"
-                  className="shrink-0 rounded-lg p-1 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
+                  className="relative flex h-7 w-7 shrink-0 touch-manipulation select-none items-center justify-center rounded-[10px] text-zinc-400 transition-[transform,background-color,color] duration-100 ease-out before:absolute before:-inset-2 before:content-[''] hover:bg-white/10 hover:text-zinc-100 active:scale-90 active:bg-white/15"
                 >
-                  <X className="h-3.5 w-3.5" aria-hidden="true" />
+                  <X className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
                 </button>
               </motion.div>
             );
