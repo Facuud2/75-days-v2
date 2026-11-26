@@ -2,6 +2,7 @@ import type {
   ChallengeGridStatus,
   ChallengeSharePayload,
   DailySharePayload,
+  ProfileSharePayload,
   ShareCardFormat,
   ShareCardTheme,
 } from './shareCardData';
@@ -784,6 +785,402 @@ export function renderChallengeShareCard(
     ctx.fillStyle = palette.textMuted;
     ctx.fillText(item.label, lx + 24, legendY);
     lx += ctx.measureText(item.label).width + 54;
+  });
+
+  drawFooter(ctx, width, height, padX, payload.handle, palette);
+  return canvas;
+}
+
+function loadCanvasImage(url: string | null | undefined, timeoutMs = 4000): Promise<HTMLImageElement | null> {
+  if (!url) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const img = new Image();
+    if (/^https?:\/\//i.test(url)) {
+      img.crossOrigin = 'anonymous';
+    }
+    let settled = false;
+    const finish = (result: HTMLImageElement | null) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      resolve(result);
+    };
+    const timer = window.setTimeout(() => finish(null), timeoutMs);
+    img.onload = () => finish(img.naturalWidth > 0 ? img : null);
+    img.onerror = () => finish(null);
+    img.src = url;
+  });
+}
+
+function drawCoverImage(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  dx: number,
+  dy: number,
+  dw: number,
+  dh: number
+) {
+  const sw = img.naturalWidth || img.width;
+  const sh = img.naturalHeight || img.height;
+  if (!sw || !sh) return;
+  const scale = Math.max(dw / sw, dh / sh);
+  const drawW = sw * scale;
+  const drawH = sh * scale;
+  const offsetX = dx + (dw - drawW) / 2;
+  const offsetY = dy + (dh - drawH) / 2;
+  ctx.drawImage(img, offsetX, offsetY, drawW, drawH);
+}
+
+function wrapText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+  maxLines: number
+): string[] {
+  const words = text.trim().split(/\s+/);
+  if (words.length === 0) return [];
+  const lines: string[] = [];
+  let current = '';
+
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i];
+    const candidate = current ? `${current} ${word}` : word;
+    if (ctx.measureText(candidate).width <= maxWidth) {
+      current = candidate;
+    } else {
+      if (current) {
+        lines.push(current);
+        current = word;
+      } else {
+        lines.push(truncateText(ctx, word, maxWidth));
+        current = '';
+      }
+      if (lines.length === maxLines) {
+        if (current) {
+          lines[maxLines - 1] = truncateText(ctx, `${lines[maxLines - 1]} ${current}`, maxWidth);
+        }
+        return lines;
+      }
+    }
+  }
+
+  if (current && lines.length < maxLines) {
+    lines.push(truncateText(ctx, current, maxWidth));
+  }
+  return lines;
+}
+
+export async function renderProfileShareCard(
+  canvas: HTMLCanvasElement,
+  payload: ProfileSharePayload,
+  options: {
+    format: ShareCardFormat;
+    theme: ShareCardTheme;
+    isCancelled?: () => boolean;
+  }
+): Promise<HTMLCanvasElement> {
+  const [bannerImg, avatarImg] = await Promise.all([
+    loadCanvasImage(payload.bannerUrl),
+    loadCanvasImage(payload.avatarUrl),
+  ]);
+
+  if (options.isCancelled?.()) return canvas;
+
+  const { width, height } = getCanvasDimensions(options.format);
+  canvas.width = width;
+  canvas.height = height;
+
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return canvas;
+
+  const palette = options.theme === 'dark' ? DARK_PALETTE : LIGHT_PALETTE;
+  const isStory = options.format === 'story';
+  const padX = 76;
+  const contentW = width - padX * 2;
+
+  drawBackground(ctx, width, height, palette, palette.accentRose);
+
+  // Header
+  let cursorY = isStory ? 88 : 68;
+  ctx.font = `700 24px ${FONT_STACK}`;
+  ctx.fillStyle = palette.accentRose;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillText('PERFIL DE ATLETA', padX, cursorY);
+
+  const levelText = `NIVEL ${payload.level}`;
+  ctx.font = `700 22px ${FONT_STACK}`;
+  const levelW = ctx.measureText(levelText).width + 56;
+  drawBadge(
+    ctx,
+    width - padX - levelW,
+    cursorY - 8,
+    levelText,
+    palette.accentRoseSoft,
+    palette.accentRose,
+    palette.accentRose,
+    22
+  );
+
+  // Main Profile Hero Card
+  cursorY += isStory ? 64 : 52;
+  const bannerH = isStory ? 310 : 210;
+  const avatarR = isStory ? 92 : 76;
+  const hasQuote = Boolean(payload.quote);
+  const quoteBoxH = hasQuote ? (isStory ? 196 : 156) : 0;
+  const cardBodyH = (isStory ? 280 : 225) + quoteBoxH;
+  const heroCardH = bannerH + cardBodyH;
+
+  fillRoundedRect(
+    ctx,
+    padX,
+    cursorY,
+    contentW,
+    heroCardH,
+    40,
+    palette.cardBg,
+    palette.cardBorder,
+    2
+  );
+
+  // Banner clipped to top of hero card
+  ctx.save();
+  roundedRectPath(ctx, padX, cursorY, contentW, heroCardH, 40);
+  ctx.clip();
+
+  if (bannerImg) {
+    drawCoverImage(ctx, bannerImg, padX, cursorY, contentW, bannerH);
+    const scrim = ctx.createLinearGradient(0, cursorY, 0, cursorY + bannerH);
+    scrim.addColorStop(0, 'rgba(0,0,0,0.08)');
+    scrim.addColorStop(1, 'rgba(0,0,0,0.48)');
+    ctx.fillStyle = scrim;
+    ctx.fillRect(padX, cursorY, contentW, bannerH);
+  } else {
+    const grad = ctx.createLinearGradient(padX, cursorY, padX + contentW, cursorY + bannerH);
+    grad.addColorStop(0, palette.accentRoseSoft);
+    grad.addColorStop(0.55, palette.pillBg);
+    grad.addColorStop(1, palette.accentEmeraldSoft);
+    ctx.fillStyle = grad;
+    ctx.fillRect(padX, cursorY, contentW, bannerH);
+  }
+
+  // Subtle divider under banner
+  ctx.fillStyle = palette.cardBorder;
+  ctx.fillRect(padX, cursorY + bannerH - 2, contentW, 2);
+  ctx.restore();
+
+  // Avatar overlapping bottom-left of banner
+  const avatarCx = padX + 52 + avatarR;
+  const avatarCy = cursorY + bannerH;
+
+  // Outer ring backdrop
+  ctx.beginPath();
+  ctx.arc(avatarCx, avatarCy, avatarR + 8, 0, Math.PI * 2);
+  ctx.fillStyle = palette.bgBase;
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.arc(avatarCx, avatarCy, avatarR + 3, 0, Math.PI * 2);
+  ctx.strokeStyle = palette.accentRose;
+  ctx.lineWidth = 4;
+  ctx.stroke();
+
+  // Clipped avatar image or initial
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(avatarCx, avatarCy, avatarR, 0, Math.PI * 2);
+  ctx.clip();
+  if (avatarImg) {
+    drawCoverImage(
+      ctx,
+      avatarImg,
+      avatarCx - avatarR,
+      avatarCy - avatarR,
+      avatarR * 2,
+      avatarR * 2
+    );
+  } else {
+    ctx.fillStyle = palette.accentRoseSoft;
+    ctx.fillRect(avatarCx - avatarR, avatarCy - avatarR, avatarR * 2, avatarR * 2);
+    ctx.font = `800 ${Math.round(avatarR * 0.85)}px ${FONT_STACK}`;
+    ctx.fillStyle = palette.accentRose;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(payload.initial, avatarCx, avatarCy + 3);
+  }
+  ctx.restore();
+
+  // Member since pill on the right of avatar
+  if (payload.memberSince) {
+    const memberText = `Miembro desde ${payload.memberSince}`;
+    ctx.font = `600 22px ${FONT_STACK}`;
+    const mW = ctx.measureText(memberText).width + 48;
+    const badgeX = Math.max(avatarCx + avatarR + 24, padX + contentW - 44 - mW);
+    const badgeY = cursorY + bannerH + 24;
+    drawBadge(
+      ctx,
+      badgeX,
+      badgeY,
+      memberText,
+      palette.pillBg,
+      palette.pillBorder,
+      palette.textSecondary,
+      22
+    );
+  }
+
+  // Name & Handle
+  const innerPadX = padX + 52;
+  const innerW = contentW - 104;
+  let profileTextY = avatarCy + avatarR + (isStory ? 28 : 22);
+
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.font = `800 ${isStory ? 54 : 46}px ${FONT_STACK}`;
+  ctx.fillStyle = palette.textPrimary;
+  ctx.fillText(truncateText(ctx, payload.name, innerW), innerPadX, profileTextY);
+
+  profileTextY += isStory ? 64 : 54;
+  if (payload.handle) {
+    ctx.font = `600 ${isStory ? 28 : 24}px ${FONT_STACK}`;
+    ctx.fillStyle = palette.textMuted;
+    ctx.fillText(truncateText(ctx, payload.handle, innerW), innerPadX, profileTextY);
+  }
+
+  // Motivational Quote
+  if (payload.quote) {
+    const qY = cursorY + heroCardH - quoteBoxH - (isStory ? 34 : 26);
+    const qH = quoteBoxH;
+    fillRoundedRect(ctx, innerPadX, qY, innerW, qH, 24, palette.pillBg, palette.pillBorder, 1.5);
+    fillRoundedRect(ctx, innerPadX, qY, 8, qH, 4, palette.accentRose);
+
+    ctx.font = `italic 500 ${isStory ? 28 : 24}px ${FONT_STACK}`;
+    ctx.fillStyle = palette.textSecondary;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    const quoteLines = wrapText(ctx, `“${payload.quote}”`, innerW - 64, 3);
+    const lineHeight = isStory ? 38 : 32;
+    const totalTextH = quoteLines.length * lineHeight;
+    let lineY = qY + (qH - totalTextH) / 2;
+    quoteLines.forEach((line) => {
+      ctx.fillText(line, innerPadX + 34, lineY);
+      lineY += lineHeight;
+    });
+  }
+
+  cursorY += heroCardH + (isStory ? 32 : 24);
+
+  // Active Challenge Banner Strip (if active)
+  if (payload.isChallengeActive) {
+    const stripH = isStory ? 112 : 92;
+    fillRoundedRect(
+      ctx,
+      padX,
+      cursorY,
+      contentW,
+      stripH,
+      28,
+      palette.cardBg,
+      palette.cardBorder,
+      2
+    );
+
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.font = `700 22px ${FONT_STACK}`;
+    ctx.fillStyle = palette.accentRose;
+    ctx.fillText(
+      `DESAFÍO 75 ACTIVO · PLAN ${payload.difficultyLabel.toUpperCase()}`,
+      padX + 40,
+      cursorY + stripH * 0.36
+    );
+
+    const pct = Math.round((payload.currentDay / payload.totalDays) * 100);
+    const barX = padX + 40;
+    const barW = contentW - 260;
+    const barY = cursorY + stripH * 0.68;
+    fillRoundedRect(ctx, barX, barY - 6, barW, 12, 6, palette.track);
+    if (pct > 0) {
+      fillRoundedRect(
+        ctx,
+        barX,
+        barY - 6,
+        Math.max(14, (barW * pct) / 100),
+        12,
+        6,
+        palette.accentRose
+      );
+    }
+
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.font = `800 ${isStory ? 34 : 30}px ${FONT_STACK}`;
+    ctx.fillStyle = palette.textPrimary;
+    ctx.fillText(`Día ${payload.currentDay}/${payload.totalDays}`, padX + contentW - 40, cursorY + stripH / 2);
+
+    cursorY += stripH + (isStory ? 28 : 22);
+  }
+
+  // Stats 2x2 Grid
+  const footerTop = height - 124;
+  const availStatsH = footerTop - cursorY - 24;
+  const gap = 24;
+  const statW = (contentW - gap) / 2;
+  const maxStatH = isStory ? 230 : 168;
+  const statH = Math.min(maxStatH, Math.max(128, (availStatsH - gap) / 2));
+
+  const achievementsValue =
+    payload.totalAchievements > 0
+      ? `${payload.unlockedAchievements}/${payload.totalAchievements}`
+      : `${payload.unlockedAchievements}`;
+
+  const stats = [
+    {
+      label: 'RACHA DE DESAFÍO',
+      value: `${payload.streak} ${payload.streak === 1 ? 'día' : 'días'}`,
+      accent: palette.accentAmber,
+    },
+    {
+      label: 'RETOS COMPLETADOS',
+      value: `${payload.challengesCompleted}`,
+      accent: palette.accentEmerald,
+    },
+    {
+      label: 'PUNTOS TOTALES',
+      value: `${payload.points.toLocaleString('es-AR')} pts`,
+      accent: palette.accentSky,
+    },
+    {
+      label: 'LOGROS',
+      value: achievementsValue,
+      accent: palette.accentRose,
+    },
+  ];
+
+  stats.forEach((stat, idx) => {
+    const col = idx % 2;
+    const row = Math.floor(idx / 2);
+    const sx = padX + col * (statW + gap);
+    const sy = cursorY + row * (statH + gap);
+
+    fillRoundedRect(ctx, sx, sy, statW, statH, 28, palette.cardBg, palette.cardBorder, 2);
+
+    // Top accent dot
+    ctx.beginPath();
+    ctx.arc(sx + 44, sy + 44, 7, 0, Math.PI * 2);
+    ctx.fillStyle = stat.accent;
+    ctx.fill();
+
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.font = `700 20px ${FONT_STACK}`;
+    ctx.fillStyle = palette.textMuted;
+    ctx.fillText(stat.label, sx + 64, sy + 45);
+
+    ctx.font = `800 ${isStory ? 54 : 44}px ${FONT_STACK}`;
+    ctx.fillStyle = palette.textPrimary;
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(truncateText(ctx, stat.value, statW - 72), sx + 38, sy + statH - 34);
   });
 
   drawFooter(ctx, width, height, padX, payload.handle, palette);

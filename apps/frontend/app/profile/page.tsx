@@ -52,6 +52,7 @@ const EditMealModal = dynamic(() => import('@/components/EditMealModal'), { ssr:
 const LogWorkoutModal = dynamic(() => import('@/components/LogWorkoutModal'), { ssr: false });
 const SideQuestDetailModal = dynamic(() => import('@/components/SideQuestDetailModal'), { ssr: false });
 const SideQuestsModal = dynamic(() => import('@/components/SideQuestsModal'), { ssr: false });
+const ShareProgressModal = dynamic(() => import('@/components/ShareProgressModal'), { ssr: false });
 
 const IS_DEV_BUILD = process.env.NODE_ENV === 'development';
 import type {
@@ -142,6 +143,7 @@ export default function Profile() {
   const [isAchievementsSheetOpen, setIsAchievementsSheetOpen] = useState(false);
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
   const [isSideQuestsModalOpen, setIsSideQuestsModalOpen] = useState(false);
+  const [isShareProfileOpen, setIsShareProfileOpen] = useState(false);
 
   const [isLogMealModalOpen, setIsLogMealModalOpen] = useState(false);
   const [isLogWorkoutModalOpen, setIsLogWorkoutModalOpen] = useState(false);
@@ -424,6 +426,7 @@ export default function Profile() {
             memberSince={memberSince}
             quote={user.profileQuote}
             onEdit={() => setIsEditMenuOpen(true)}
+            onShare={() => setIsShareProfileOpen(true)}
             onAvatar={() => setProfileEditMode('avatar')}
             onBanner={() => setProfileEditMode('banner')}
             loading={headerLoading}
@@ -650,6 +653,25 @@ export default function Profile() {
 
       {selectedSideQuest ? (
         <SideQuestDetailModal quest={selectedSideQuest} onClose={() => setSelectedSideQuest(null)} />
+      ) : null}
+
+      {isShareProfileOpen ? (
+        <ShareProgressModal
+          open={isShareProfileOpen}
+          onClose={() => setIsShareProfileOpen(false)}
+          initialKind="profile"
+          profileSource={{
+            name: displayName,
+            avatarUrl: user.avatarUrl,
+            bannerUrl: user.bannerUrl,
+            quote: user.profileQuote,
+            level,
+            memberSince,
+            challengesCompleted: activeChallenge.challengesCompleted,
+            unlockedAchievements: unlockedCount,
+            totalAchievements: activeAchievements.length,
+          }}
+        />
       ) : null}
     </div>
   );

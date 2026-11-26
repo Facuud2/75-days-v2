@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildChallengeSharePayload,
   buildDailySharePayload,
+  buildProfileSharePayload,
 } from '@/lib/utils/shareCardData';
 import type { DailyLog, Goal } from '@/store/useChallengeStore';
 
@@ -114,5 +115,56 @@ describe('shareCardData', () => {
     expect(payload.dayGrid[4]).toBe('current');
     expect(payload.dayGrid[5]).toBe('future');
     expect(payload.handle).toBe('@facundo');
+  });
+
+  it('construye el payload de perfil con todos los datos y fallbacks seguros', () => {
+    const payload = buildProfileSharePayload({
+      name: '  Facu Dev  ',
+      avatarUrl: 'https://example.com/avatar.png',
+      bannerUrl: 'https://example.com/banner.png',
+      quote: '  Disciplina sobre motivación  ',
+      level: 5,
+      memberSince: 'nov. 2026',
+      streak: 14,
+      challengesCompleted: 2,
+      points: 450,
+      currentDay: 22,
+      isChallengeActive: true,
+      difficulty: 'Hard',
+      unlockedAchievements: 6,
+      totalAchievements: 12,
+    });
+
+    expect(payload.name).toBe('Facu Dev');
+    expect(payload.handle).toBe('@facudev');
+    expect(payload.initial).toBe('F');
+    expect(payload.avatarUrl).toBe('https://example.com/avatar.png');
+    expect(payload.bannerUrl).toBe('https://example.com/banner.png');
+    expect(payload.quote).toBe('Disciplina sobre motivación');
+    expect(payload.level).toBe(5);
+    expect(payload.memberSince).toBe('nov. 2026');
+    expect(payload.streak).toBe(14);
+    expect(payload.challengesCompleted).toBe(2);
+    expect(payload.points).toBe(450);
+    expect(payload.currentDay).toBe(22);
+    expect(payload.totalDays).toBe(75);
+    expect(payload.isChallengeActive).toBe(true);
+    expect(payload.difficultyLabel).toBe('Duro');
+    expect(payload.unlockedAchievements).toBe(6);
+    expect(payload.totalAchievements).toBe(12);
+
+    const emptyPayload = buildProfileSharePayload({
+      name: '',
+      quote: '   ',
+      level: 0,
+      streak: -3,
+      currentDay: 120,
+    });
+    expect(emptyPayload.name).toBe('Usuario');
+    expect(emptyPayload.quote).toBeNull();
+    expect(emptyPayload.level).toBe(1);
+    expect(emptyPayload.streak).toBe(0);
+    expect(emptyPayload.currentDay).toBe(75);
+    expect(emptyPayload.isChallengeActive).toBe(false);
   });
 });

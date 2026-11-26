@@ -248,4 +248,58 @@ describe('analyzeMealInput with DB Catalog Grounding, USDA Atwater & Fiber/Sugar
       sugarG: 0,
     });
   });
+
+  it('instructs Gemini to accept nutrition labels and textual nutritional values in images or text', async () => {
+    const createMock = vi.fn().mockResolvedValue({
+      output_text: JSON.stringify({
+        isFood: true,
+        rejectionReason: '',
+        dishName: 'Barra proteica según etiqueta',
+        confidence: 'high',
+        assumptions: 'Valores extraídos directamente de la etiqueta nutricional (porción 45g).',
+        suggestedMealType: 'snack',
+        items: [
+          {
+            id: 'item-1',
+            name: 'Barra proteica (etiqueta nutricional)',
+            estimatedGrams: 45,
+            calories: 180,
+            proteinG: 20,
+            carbG: 14,
+            fatG: 5,
+            fiberG: 3,
+            sugarG: 2,
+          },
+        ],
+      }),
+    });
+
+    const result = await analyzeMealInput(
+      {
+        imageBase64: 'bnV0cml0aW9uLWxhYmVs',
+        imageMimeType: 'image/jpeg',
+      },
+      { interactions: { create: createMock } }
+    );
+
+    const callArg = createMock.mock.calls[0][0];
+    expect(callArg.system_instruction).toContain('etiqueta nutricional');
+    expect(callArg.system_instruction).toContain('valores nutricionales explícitos');
+    expect(callArg.response_format.schema.properties.isFood.description).toContain(
+      'etiqueta/tabla nutricional'
+    );
+    const promptText = callArg.input[0].content[0].text as string;
+    expect(promptText).toContain('etiqueta/tabla de información nutricional');
+
+    expect(result.isFood).toBe(true);
+    expect(result.confidence).toBe('high');
+    expect(result.totals).toEqual({
+      calories: 180,
+      proteinG: 20,
+      carbG: 14,
+      fatG: 5,
+      fiberG: 3,
+      sugarG: 2,
+    });
+  });
 });

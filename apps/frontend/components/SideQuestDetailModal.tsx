@@ -1,10 +1,31 @@
 import { useState } from 'react';
-import { Check, Clock, RotateCcw, Target, Trophy, X } from 'lucide-react';
-import { SideQuest, useQuestStore } from '@/store/useQuestStore';
+import { Check, Clock, Minus, RotateCcw, Target, Trophy, X } from 'lucide-react';
+import { SideQuest, SideQuestTask, useQuestStore } from '@/store/useQuestStore';
 
 interface Props {
   quest: SideQuest;
   onClose: () => void;
+}
+
+const FREQUENCY_LABELS: Record<string, string> = {
+  daily: 'Diaria',
+  weekly: 'Semanal',
+  once: 'Única',
+};
+
+function getPeriodTarget(task: SideQuestTask): number {
+  if (typeof task.periodTarget === 'number' && task.periodTarget > 0) {
+    return task.periodTarget;
+  }
+  if (
+    task.frequency === 'weekly' &&
+    typeof task.targetValue === 'number' &&
+    task.targetValue > 1 &&
+    task.targetValue <= 14
+  ) {
+    return task.targetValue;
+  }
+  return 1;
 }
 
 export default function SideQuestDetailModal({ quest, onClose }: Props) {
@@ -13,11 +34,12 @@ export default function SideQuestDetailModal({ quest, onClose }: Props) {
   const inFlightTasksRef = useState(() => new Set<string>())[0];
   const tasks = liveQuest.currentRun?.tasks ?? [];
   const done = tasks.filter(task => task.completed).length;
+  const currentDay = liveQuest.currentRun?.currentDay ?? Math.max(1, liveQuest.progress || 1);
 
-  const handleTask = (taskId: string) => {
+  const handleTask = (taskId: string, action: 'toggle' | 'increment' | 'decrement' = 'toggle') => {
     if (inFlightTasksRef.has(taskId)) return;
     inFlightTasksRef.add(taskId);
-    void toggleTask(liveQuest.id, taskId).finally(() => {
+    void toggleTask(liveQuest.id, taskId, action).finally(() => {
       inFlightTasksRef.delete(taskId);
     });
   };
@@ -53,7 +75,8 @@ export default function SideQuestDetailModal({ quest, onClose }: Props) {
                 {liveQuest.title}
               </h2>
               <p className="mt-1 text-sm text-[var(--text-muted)]">
-                Ejecución {liveQuest.currentRun?.runNumber ?? 1} · {done} de {tasks.length} tareas
+                Ejecución {liveQuest.currentRun?.runNumber ?? 1} · Día {currentDay} de{' '}
+                {liveQuest.durationDays} · {done} de {tasks.length} tareas
               </p>
             </div>
           </div>
@@ -73,62 +96,117 @@ export default function SideQuestDetailModal({ quest, onClose }: Props) {
             </div>
           ) : (
             <div className="space-y-3">
-              {tasks.map(task => (
-                <button
-                  key={task.id}
-                  onClick={() => handleTask(task.id)}
-                  disabled={liveQuest.completed}
-                  className={`flex w-full items-start gap-3 rounded-2xl border p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-70 ${
-                    task.completed
-                      ? 'border-emerald-500/35 bg-emerald-500/10'
-                      : 'border-[var(--border-subtle)] bg-[var(--surface-inset)] hover:border-emerald-500/40 hover:bg-[var(--surface-raised)]'
-                  }`}
-                >
-                  <span
-                    className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+              {tasks.map(task => {
+                const periodTarget = getPeriodTarget(task);
+                const isCountable = periodTarget > 1;
+                const currentValue =
+                  typeof task.currentValue === 'number'
+                    ? task.currentValue
+                    : task.completed
+                      ? periodTarget
+                      : 0;
+
+                return (
+                  <div
+                    key={task.id}
+                    className={`flex w-full items-center gap-2 rounded-2xl border transition-colors ${
                       task.completed
-                        ? 'border-emerald-500 bg-emerald-500'
-                        : 'border-[var(--border-control)] bg-transparent'
+                        ? 'border-emerald-500/35 bg-emerald-500/10'
+                        : 'border-[var(--border-subtle)] bg-[var(--surface-inset)] hover:border-emerald-500/40 hover:bg-[var(--surface-raised)]'
                     }`}
-                    style={task.completed ? { color: '#ffffff' } : undefined}
                   >
-                    {task.completed && <Check size={14} strokeWidth={3} />}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span
-                      className={`block font-semibold ${
-                        task.completed
-                          ? 'text-[var(--status-success)] line-through'
-                          : 'text-[var(--text-primary)]'
-                      }`}
+                    <button
+                      type="button"
+                      onClick={() => handleTask(task.id, isCountable ? 'increment' : 'toggle')}
+                      disabled={liveQuest.completed}
+                      className="flex min-w-0 flex-1 items-start gap-3 p-4 text-left disabled:cursor-not-allowed disabled:opacity-70"
                     >
-                      {task.title}
-                    </span>
-                    {task.description && (
-                      <span className="mt-1 block text-xs leading-relaxed text-[var(--text-secondary)]">
-                        {task.description}
+                      <span
+                        className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+                          task.completed
+                            ? 'border-emerald-500 bg-emerald-500'
+                            : 'border-[var(--border-control)] bg-transparent'
+                        }`}
+                        style={task.completed ? { color: '#ffffff' } : undefined}
+                      >
+                        {task.completed ? (
+                          <Check size={14} strokeWidth={3} />
+                        ) : isCountable && currentValue > 0 ? (
+                          <span className="text-[11px] font-bold text-emerald-500">
+                            {currentValue}
+                          </span>
+                        ) : null}
                       </span>
-                    )}
-                    <span className="mt-2 flex items-center gap-3 text-[11px] font-medium uppercase tracking-wide text-[var(--text-muted)]">
-                      <span className="flex items-center gap-1">
-                        <Clock size={12} /> {task.frequency === 'daily' ? 'Diaria' : task.frequency}
-                      </span>
-                      {task.targetValue && (
-                        <span className="flex items-center gap-1">
-                          <Target size={12} /> {task.targetValue} {task.targetUnit}
+                      <span className="min-w-0 flex-1">
+                        <span
+                          className={`block font-semibold ${
+                            task.completed
+                              ? 'text-[var(--status-success)] line-through'
+                              : 'text-[var(--text-primary)]'
+                          }`}
+                        >
+                          {task.title}
                         </span>
-                      )}
-                    </span>
-                  </span>
-                </button>
-              ))}
+                        {task.description && (
+                          <span className="mt-1 block text-xs leading-relaxed text-[var(--text-secondary)]">
+                            {task.description}
+                          </span>
+                        )}
+                        <span className="mt-2 flex flex-wrap items-center gap-3 text-[11px] font-medium uppercase tracking-wide text-[var(--text-muted)]">
+                          <span className="flex items-center gap-1">
+                            <Clock size={12} />{' '}
+                            {FREQUENCY_LABELS[task.frequency] ?? task.frequency}
+                          </span>
+                          {isCountable ? (
+                            <span className="flex items-center gap-1 tabular-nums text-[var(--status-success)]">
+                              <Target size={12} /> {currentValue} / {periodTarget}{' '}
+                              {task.targetUnit || 'veces'}
+                            </span>
+                          ) : (
+                            task.targetValue && (
+                              <span className="flex items-center gap-1">
+                                <Target size={12} /> {task.targetValue} {task.targetUnit}
+                              </span>
+                            )
+                          )}
+                        </span>
+                      </span>
+                    </button>
+                    {isCountable && currentValue > 0 && !liveQuest.completed && (
+                      <button
+                        type="button"
+                        onClick={() => handleTask(task.id, 'decrement')}
+                        aria-label={`Restar 1 a ${task.title}`}
+                        className="mr-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[var(--border-subtle)] bg-[var(--surface-card)] text-[var(--text-muted)] transition-colors hover:border-rose-500/40 hover:text-[var(--accent-text)]"
+                      >
+                        <Minus size={14} />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
-          <div className="mt-6 h-1.5 overflow-hidden rounded-full bg-[var(--progress-track)]">
-            <div
-              className="h-full rounded-full bg-emerald-500 transition-[width]"
-              style={{ width: `${tasks.length ? (done / tasks.length) * 100 : 0}%` }}
-            />
+          <div className="mt-6 space-y-2">
+            <div className="flex items-center justify-between text-xs text-[var(--text-muted)]">
+              <span>Progreso de misión</span>
+              <span className="font-semibold text-[var(--text-primary)] tabular-nums">
+                {liveQuest.progress} / {liveQuest.durationDays}{' '}
+                {liveQuest.durationDays === 1 ? 'día' : 'días'}
+              </span>
+            </div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-[var(--progress-track)]">
+              <div
+                className="h-full rounded-full bg-emerald-500 transition-[width]"
+                style={{
+                  width: `${
+                    liveQuest.durationDays
+                      ? Math.min(100, (liveQuest.progress / liveQuest.durationDays) * 100)
+                      : 0
+                  }%`,
+                }}
+              />
+            </div>
           </div>
         </div>
 

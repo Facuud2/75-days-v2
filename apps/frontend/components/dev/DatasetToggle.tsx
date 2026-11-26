@@ -58,7 +58,7 @@ export default function DatasetToggle({
         aria-label={`Datos de prueba: ${activeLabel}`}
         onClick={() => setOpen((prev) => !prev)}
         className={`
-          flex items-center gap-2 rounded-full border px-4 py-2.5 text-sm font-medium shadow-lg
+          flex max-w-[calc(100vw-1rem)] items-center gap-2 rounded-full border px-4 py-2.5 text-sm font-medium shadow-lg
           transition-[background-color,border-color,color,box-shadow] duration-200 ease-out
           active:scale-[0.97]
           ${open
@@ -67,7 +67,7 @@ export default function DatasetToggle({
         `}
       >
         <AlertTriangle className="size-4 shrink-0 text-amber-400" />
-        <span className="max-w-[60vw] truncate">{activeLabel}</span>
+        <span className="min-w-0 max-w-[60vw] truncate">{activeLabel}</span>
         <span
           aria-hidden
           className={`ml-1 text-[10px] text-zinc-400 transition-transform duration-200 ease-out ${open ? 'rotate-180' : ''}`}

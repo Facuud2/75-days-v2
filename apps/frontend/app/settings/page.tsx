@@ -140,7 +140,7 @@ export default function SettingsPage() {
     DESKTOP_CATEGORIES[0];
 
   return (
-    <div className="settings-surface min-h-screen w-full bg-[var(--surface-page)] text-[var(--text-primary)] animate-in fade-in duration-200">
+    <div className="settings-surface min-h-dvh w-full bg-[var(--surface-page)] text-[var(--text-primary)] animate-in fade-in duration-200">
       <div className="mx-auto w-full max-w-5xl px-4 pt-5 pb-24 sm:px-6 lg:px-8 lg:py-8">
         {/* ── iOS Large Title Header ── */}
         <header className="mb-5 lg:mb-7">

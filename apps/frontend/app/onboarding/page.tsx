@@ -750,7 +750,7 @@ export default function Onboarding() {
                   </button>
 
                   <div className="px-4 pb-4">
-                    <div className="flex items-end gap-3">
+                    <div className="flex items-start gap-3">
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
@@ -784,7 +784,7 @@ export default function Onboarding() {
                       </button>
 
                       <p
-                        className={`min-w-0 flex-1 pt-2 line-clamp-2 text-xs sm:text-sm leading-snug [overflow-wrap:anywhere] ${
+                        className={`min-w-0 flex-1 pt-2 text-xs sm:text-sm leading-snug [overflow-wrap:anywhere] ${
                           profileQuote.trim() ? '' : 'italic'
                         }`}
                         style={{

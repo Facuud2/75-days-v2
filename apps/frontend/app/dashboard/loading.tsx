@@ -6,11 +6,11 @@
  */
 export default function DashboardLoading() {
   return (
-    <div className="dashboard-page grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
+    <div className="dashboard-page grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-8">
       {/* Left Column */}
-      <div className="min-w-0 space-y-4 sm:space-y-6 lg:col-span-4">
+      <div className="min-w-0 space-y-3 sm:space-y-6 lg:col-span-4">
         {/* Resumen del día */}
-        <div className="bg-rose-950/20 border border-rose-950/40 rounded-3xl p-4 sm:p-6 shadow-lg space-y-4">
+        <div className="bg-rose-950/20 border border-rose-950/40 rounded-2xl sm:rounded-3xl p-3.5 sm:p-6 shadow-lg space-y-3 sm:space-y-4">
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-1">
               <div className="pv2-skeleton h-3 w-20" />

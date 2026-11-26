@@ -32,7 +32,9 @@ export const getCoreSync = async (
     return res.json({
       syncVersion: 1,
       challenge,
-      quests: deduplicateSerializedQuests(rawQuests.map(serializeQuest)),
+      quests: deduplicateSerializedQuests(
+        rawQuests.map((q) => serializeQuest(q, req.query?.timezoneOffset))
+      ),
       availableQuests,
       profile,
     });

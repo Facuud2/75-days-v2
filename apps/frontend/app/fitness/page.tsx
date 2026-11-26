@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Activity,
+  ArrowLeft,
   Award,
-  BookOpen,
   CheckCircle2,
   ChevronRight,
   Clock,
@@ -15,7 +15,6 @@ import {
   Play,
   Plus,
   Trash2,
-  Zap,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import AuthGuard from '@/components/AuthGuard';
@@ -25,7 +24,6 @@ import {
   WorkoutEntryRecord,
   WorkoutRoutineRecord,
 } from '@/lib/api/health';
-import type { CatalogExercise } from '@/lib/api/exerciseCatalog';
 import { useActiveWorkoutStore } from '@/store/useActiveWorkoutStore';
 import { useUIStore } from '@/store/useUIStore';
 import { useHealthStore } from '@/store/useHealthStore';
@@ -35,14 +33,11 @@ import {
   SPORT_LABELS_ES,
   STARTER_ROUTINES,
 } from '@/lib/constants/fitness';
-import ExerciseCatalogBrowser from '@/components/fitness/ExerciseCatalogBrowser';
 import RoutineBuilderSheet from '@/components/fitness/RoutineBuilderSheet';
 import WorkoutSessionDetailSheet from '@/components/fitness/WorkoutSessionDetailSheet';
 
-type FitnessTab = 'train' | 'catalog' | 'history';
-
 export default function FitnessPage() {
-  const [activeTab, setActiveTab] = useState<FitnessTab>('train');
+  const [showHistory, setShowHistory] = useState(false);
   const [overview, setOverview] = useState<FitnessOverviewResponse | null>(null);
   const [routines, setRoutines] = useState<WorkoutRoutineRecord[]>([]);
   const [historyWorkouts, setHistoryWorkouts] = useState<WorkoutEntryRecord[]>([]);
@@ -55,9 +50,7 @@ export default function FitnessPage() {
   const {
     isActive: hasActiveWorkout,
     openPreStartPicker,
-    startFreeWorkout,
     startFromRoutine,
-    addExercises,
     setMinimized,
   } = useActiveWorkoutStore();
   const openLogWorkoutModal = useUIStore((s) => s.openLogWorkoutModal);
@@ -110,32 +103,6 @@ export default function FitnessPage() {
       return;
     }
     openPreStartPicker();
-  };
-
-  const handleAddExerciseFromCatalog = (exercise: CatalogExercise) => {
-    if (hasActiveWorkout) {
-      addExercises([
-        {
-          exerciseId: exercise.id,
-          exerciseName: exercise.name,
-          primaryMuscle: exercise.primaryMuscle,
-          equipment: exercise.equipment,
-          targetSets: 3,
-          defaultRestSec: 90,
-        },
-      ]);
-      toast.success(`"${exercise.name}" añadido a tu sesión activa`);
-      setMinimized(false);
-    } else {
-      startFreeWorkout({
-        exerciseId: exercise.id,
-        exerciseName: exercise.name,
-        primaryMuscle: exercise.primaryMuscle,
-        equipment: exercise.equipment,
-        targetSets: 3,
-        defaultRestSec: 90,
-      });
-    }
   };
 
   const handleDeleteRoutine = async (id: string) => {
@@ -202,52 +169,41 @@ export default function FitnessPage() {
   return (
     <AuthGuard>
       <div className="mx-auto w-full max-w-4xl space-y-5 pb-6">
-        {/* Top Hub Header + Segmented Tabs */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        {/* Top Hub Header + History Icon Shortcut */}
+        <div className="flex items-end justify-between gap-3">
           <div>
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-rose-700 dark:text-rose-400">
               Entrenamiento diario
             </p>
             <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-white">
-              Fitness
+              {showHistory ? 'Historial' : 'Fitness'}
             </h1>
           </div>
 
-          <div
-            role="tablist"
-            aria-label="Secciones de fitness"
-            className="grid grid-cols-3 gap-1 rounded-2xl border border-zinc-800/90 bg-zinc-900/80 p-1 sm:w-auto sm:min-w-[330px]"
-          >
-            {[
-              { id: 'train' as const, label: 'Entrenar', icon: Dumbbell },
-              { id: 'catalog' as const, label: 'Catálogo', icon: BookOpen },
-              { id: 'history' as const, label: 'Historial', icon: History },
-            ].map((tab) => {
-              const Icon = tab.icon;
-              const isSelected = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  role="tab"
-                  aria-selected={isSelected}
-                  type="button"
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex min-h-10 cursor-pointer items-center justify-center gap-1.5 rounded-xl px-3 text-xs font-bold transition-colors ${
-                    isSelected
-                      ? 'bg-rose-600 text-[#ffffff] shadow-sm shadow-rose-600/25'
-                      : 'text-zinc-400 hover:text-white'
-                  }`}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
-          </div>
+          {showHistory ? (
+            <button
+              type="button"
+              onClick={() => setShowHistory(false)}
+              className="inline-flex min-h-10 cursor-pointer items-center gap-1.5 rounded-full border border-zinc-800 bg-zinc-900 px-3.5 text-xs font-bold text-zinc-200 transition-colors hover:bg-zinc-800 hover:text-white active:scale-95"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Volver
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowHistory(true)}
+              aria-label="Ver historial de entrenamientos"
+              title="Historial"
+              className="inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border border-zinc-800 bg-zinc-900/90 text-zinc-200 transition-colors hover:bg-zinc-800 hover:text-white active:scale-95"
+            >
+              <History className="h-5 w-5" />
+            </button>
+          )}
         </div>
 
-        {/* TAB 1: ENTRENAR */}
-        {activeTab === 'train' && (
+        {/* MAIN VIEW: ENTRENAR */}
+        {!showHistory && (
           <div className="space-y-6">
             {/* Compact 75 Days Goal Bar + 2 Clear Everyday Paths */}
             <section className="rounded-3xl border border-zinc-800/90 bg-zinc-900/70 p-4 sm:p-5">
@@ -294,39 +250,52 @@ export default function FitnessPage() {
                 />
               </div>
 
-              {/* 2 crystal-clear choices: Train Live vs Log Past Activity */}
-              <div className="mt-4 grid grid-cols-2 gap-2.5">
-                <button
-                  type="button"
-                  onClick={handleStartFree}
-                  className="flex min-h-[76px] cursor-pointer flex-col items-start justify-between rounded-2xl bg-rose-600 p-3.5 text-left text-[#ffffff] shadow-lg shadow-rose-600/20 transition-transform active:scale-[0.98] hover:bg-rose-700"
-                >
-                  <span className="flex items-center gap-1.5 text-sm font-bold">
-                    <Play className="h-4 w-4 fill-current shrink-0" />
-                    {hasActiveWorkout ? 'Seguir sesión' : 'Entrenar ahora'}
+              {/* Single primary CTA: Start or resume a live workout */}
+              <button
+                type="button"
+                onClick={handleStartFree}
+                className="mt-4 flex min-h-12 w-full cursor-pointer items-center justify-between gap-3 rounded-2xl bg-rose-600 px-4 py-3 text-left text-[#ffffff] shadow-lg shadow-rose-600/20 transition-transform active:scale-[0.98] hover:bg-rose-700"
+              >
+                <span className="flex items-center gap-3">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/15">
+                    <Play className="h-4 w-4 fill-current" />
                   </span>
-                  <span className="mt-1 text-[11px] leading-tight text-[#ffffff]">
-                    {hasActiveWorkout
-                      ? 'Volver al cronómetro activo'
-                      : 'Series, pesos y descanso'}
+                  <span>
+                    <span className="block text-sm font-bold leading-tight">
+                      {hasActiveWorkout ? 'Seguir sesión en vivo' : 'Iniciar sesión en vivo'}
+                    </span>
+                    <span className="mt-0.5 block text-[11px] leading-tight text-white/85">
+                      {hasActiveWorkout
+                        ? 'Volver al cronómetro activo'
+                        : 'Cronómetro, series y descanso en tiempo real'}
+                    </span>
                   </span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={openLogWorkoutModal}
-                  className="flex min-h-[76px] cursor-pointer flex-col items-start justify-between rounded-2xl border border-zinc-800 bg-zinc-950 p-3.5 text-left transition-colors hover:border-zinc-700 hover:bg-zinc-900 active:scale-[0.98]"
-                >
-                  <span className="flex items-center gap-1.5 text-sm font-bold text-white">
-                    <Zap className="h-4 w-4 shrink-0 text-amber-500 dark:text-amber-400" />
-                    Ya entrené
-                  </span>
-                  <span className="mt-1 text-[11px] leading-tight text-zinc-400">
-                    Anotar cardio o actividad
-                  </span>
-                </button>
-              </div>
+                </span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-white/80" />
+              </button>
             </section>
+
+            {/* Clearly separated secondary path: Log a past / already-finished workout */}
+            <button
+              type="button"
+              onClick={openLogWorkoutModal}
+              className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-2xl border border-zinc-800/90 bg-zinc-900/50 px-4 py-3 text-left transition-colors hover:border-zinc-700 hover:bg-zinc-900 active:scale-[0.99]"
+            >
+              <span className="flex items-center gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 text-amber-500 dark:text-amber-400">
+                  <History className="h-4 w-4" />
+                </span>
+                <span>
+                  <span className="block text-xs font-bold text-white">
+                    ¿Ya entrenaste antes? Registrar actividad pasada
+                  </span>
+                  <span className="mt-0.5 block text-[11px] text-zinc-400">
+                    Cargar cardio, deporte o una sesión que ya terminaste
+                  </span>
+                </span>
+              </span>
+              <ChevronRight className="h-4 w-4 shrink-0 text-zinc-500" />
+            </button>
 
             {/* Saved Routines (only shown when user has created routines) */}
             {hasSavedRoutines && (
@@ -400,7 +369,7 @@ export default function FitnessPage() {
                         <button
                           type="button"
                           onClick={() => handleStartRoutine(routine)}
-                          className="inline-flex min-h-10 cursor-pointer items-center gap-1.5 rounded-xl bg-rose-600 px-4 text-xs font-bold text-[#ffffff] transition-transform active:scale-95 hover:bg-rose-700"
+                          className="inline-flex min-h-10 cursor-pointer items-center gap-1.5 rounded-xl border border-zinc-700/70 bg-zinc-800 px-4 text-xs font-bold text-white transition-transform active:scale-95 hover:bg-zinc-700"
                         >
                           <Play className="h-3.5 w-3.5 fill-current" />
                           Empezar
@@ -414,29 +383,29 @@ export default function FitnessPage() {
 
             {/* Starter Templates — immediately visible above the fold for new users */}
             <section className="space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <div>
+              <div>
+                <div className="flex items-center justify-between gap-2">
                   <h2 className="text-base font-bold text-white">
                     {hasSavedRoutines ? 'Plantillas sugeridas' : 'Rutinas listas para hoy'}
                   </h2>
                   {!hasSavedRoutines && (
-                    <p className="text-xs text-zinc-400">
-                      Elige una para empezar en 1 toque o arma la tuya.
-                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingRoutine(null);
+                        setBuilderOpen(true);
+                      }}
+                      className="inline-flex min-h-10 shrink-0 cursor-pointer items-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900 px-3 text-xs font-bold text-white transition-colors hover:border-rose-600/50 active:scale-95"
+                    >
+                      <Plus className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400" />
+                      Crear mía
+                    </button>
                   )}
                 </div>
                 {!hasSavedRoutines && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditingRoutine(null);
-                      setBuilderOpen(true);
-                    }}
-                    className="inline-flex min-h-10 shrink-0 cursor-pointer items-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900 px-3 text-xs font-bold text-white transition-colors hover:border-rose-600/50 active:scale-95"
-                  >
-                    <Plus className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400" />
-                    Crear mía
-                  </button>
+                  <p className="mt-1 text-xs text-zinc-400">
+                    Elige una para empezar en 1 toque o arma la tuya.
+                  </p>
                 )}
               </div>
 
@@ -475,7 +444,7 @@ export default function FitnessPage() {
                     <button
                       type="button"
                       onClick={() => handleStartRoutine(tpl)}
-                      className="mt-4 inline-flex min-h-11 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-rose-600 text-xs font-bold text-[#ffffff] transition-transform active:scale-[0.98] hover:bg-rose-700"
+                      className="mt-4 inline-flex min-h-11 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-zinc-700/70 bg-zinc-800 text-xs font-bold text-white transition-transform active:scale-[0.98] hover:bg-zinc-700"
                     >
                       <Play className="h-3.5 w-3.5 fill-current" />
                       Empezar rutina
@@ -487,19 +456,8 @@ export default function FitnessPage() {
           </div>
         )}
 
-        {/* TAB 2: CATÁLOGO DE 876 EJERCICIOS */}
-        {activeTab === 'catalog' && (
-          <section className="space-y-3">
-            <ExerciseCatalogBrowser
-              mode="browse"
-              onAddSingle={handleAddExerciseFromCatalog}
-              hasActiveWorkout={hasActiveWorkout}
-            />
-          </section>
-        )}
-
-        {/* TAB 3: HISTORIAL Y PROGRESO */}
-        {activeTab === 'history' && (
+        {/* HISTORIAL Y PROGRESO */}
+        {showHistory && (
           <div className="space-y-6">
             {/* Weekly Metrics */}
             <section className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">

@@ -311,8 +311,9 @@ describe('Fase 1: Optimistic UI (0ms) & Stale-While-Revalidate', () => {
       const afterToggle = useQuestStore.getState().quests[0];
       expect(afterToggle.currentRun?.tasks[0].completed).toBe(true);
       expect(afterToggle.progress).toBe(1);
-      expect(afterToggle.completed).toBe(true);
-      expect(afterToggle.completionCount).toBe(1);
+      expect(afterToggle.todayCompleted).toBe(true);
+      expect(afterToggle.completed).toBe(false);
+      expect(afterToggle.completionCount).toBe(0);
 
       resolvePatch(afterToggle);
       await togglePromise;

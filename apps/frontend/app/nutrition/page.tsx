@@ -7,11 +7,13 @@ import { addDays, format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import {
   Beef,
+  Bookmark,
   Camera,
   Check,
   ChevronLeft,
   ChevronRight,
   Droplet,
+  Search,
   SlidersHorizontal,
   Wheat,
   X,
@@ -71,6 +73,7 @@ function NutritionPageInner() {
     queryDate && /^\d{4}-\d{2}-\d{2}$/.test(queryDate) ? queryDate : today
   );
   const [logModalSlot, setLogModalSlot] = useState<MealSlotId | undefined>(undefined);
+  const [logModalTab, setLogModalTab] = useState<'AI' | 'SEARCH' | 'CUSTOM'>('AI');
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [editingMeal, setEditingMeal] = useState<Meal | null>(null);
   const [isRoutineBuilderOpen, setIsRoutineBuilderOpen] = useState(false);
@@ -245,8 +248,9 @@ function NutritionPageInner() {
     }
   };
 
-  const openLogForSlot = (slot?: MealSlotId) => {
+  const openLogForSlot = (slot?: MealSlotId, tab: 'AI' | 'SEARCH' | 'CUSTOM' = 'AI') => {
     setLogModalSlot(slot);
+    setLogModalTab(tab);
     setIsLogModalOpen(true);
   };
 
@@ -255,7 +259,7 @@ function NutritionPageInner() {
   return (
     <div className="mx-auto w-full max-w-3xl space-y-4 pb-6">
       {/* Top Header + Date Switcher */}
-      <div className="flex items-end justify-between gap-3">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--accent-text)]">
             Registro alimentario
@@ -309,7 +313,7 @@ function NutritionPageInner() {
           aria-busy={isLoadingStats && !stats}
           className="rounded-[20px] border border-[var(--border-subtle)] bg-[var(--surface-card)] p-4 space-y-3.5"
         >
-          <div className="flex items-start justify-between gap-2">
+          <div className="flex flex-wrap items-start justify-between gap-2">
             <div className={`tabular-nums transition-opacity ${isLoadingStats && !stats ? 'opacity-60' : ''}`}>
               <p className="text-[12px] font-medium text-[var(--text-muted)]">
                 Calorías consumidas
@@ -398,9 +402,9 @@ function NutritionPageInner() {
               return (
                 <div
                   key={m.key}
-                  className="rounded-xl bg-[var(--surface-inset)] px-3 py-2"
+                  className="min-w-0 rounded-xl bg-[var(--surface-inset)] px-3 py-2"
                 >
-                  <div className="flex items-center gap-1">
+                  <div className="flex flex-wrap items-center gap-1">
                     <MacroIcon
                       className="h-3.5 w-3.5 shrink-0"
                       style={{ color: m.color }}
@@ -408,13 +412,13 @@ function NutritionPageInner() {
                       aria-hidden="true"
                     />
                     <span
-                      className="text-[11px] font-semibold"
+                      className="min-w-0 break-words text-[11px] font-semibold"
                       style={{ color: m.color }}
                     >
                       {m.label}
                     </span>
                   </div>
-                  <span className="mt-0.5 block text-[13px] font-semibold text-[var(--text-primary)] whitespace-nowrap">
+                  <span className="mt-0.5 block text-[13px] font-semibold text-[var(--text-primary)]">
                     {m.val}
                     <span className="font-normal text-[var(--text-muted)]">
                       /{m.goal}g
@@ -552,14 +556,34 @@ function NutritionPageInner() {
               </button>
             </form>
           ) : (
-            <button
-              type="button"
-              onClick={() => openLogForSlot(undefined)}
-              className="flex min-h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-[var(--accent-fill)] px-4 text-[15px] font-semibold text-[var(--on-accent)] transition-transform duration-100 active:scale-[0.98]"
-            >
-              <Camera className="h-4 w-4 shrink-0" aria-hidden="true" />
-              Registrar comida
-            </button>
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => openLogForSlot(undefined, 'AI')}
+                className="flex min-h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-[var(--accent-fill)] px-4 text-[15px] font-semibold text-[var(--on-accent)] transition-transform duration-100 active:scale-[0.98]"
+              >
+                <Camera className="h-4 w-4 shrink-0" aria-hidden="true" />
+                Registrar comida
+              </button>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => openLogForSlot(undefined, 'SEARCH')}
+                  className="flex min-h-10 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-inset)] px-3 text-[13px] font-semibold text-[var(--text-primary)] transition-transform duration-100 active:scale-[0.98] hover:bg-[var(--surface-raised)]"
+                >
+                  <Search className="h-4 w-4 shrink-0 text-[var(--text-secondary)]" aria-hidden="true" />
+                  Buscador
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openLogForSlot(undefined, 'CUSTOM')}
+                  className="flex min-h-10 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-inset)] px-3 text-[13px] font-semibold text-[var(--text-primary)] transition-transform duration-100 active:scale-[0.98] hover:bg-[var(--surface-raised)]"
+                >
+                  <Bookmark className="h-4 w-4 shrink-0 text-[var(--text-secondary)]" aria-hidden="true" />
+                  Mis comidas
+                </button>
+              </div>
+            </div>
           )}
         </section>
 
@@ -645,6 +669,7 @@ function NutritionPageInner() {
         <LogMealModal
           isOpen={isLogModalOpen}
           date={selectedDate}
+          initialTab={logModalTab}
           initialMealType={logModalSlot}
           onClose={() => setIsLogModalOpen(false)}
           onSaved={() => refreshDateStats(selectedDate)}

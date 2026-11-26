@@ -38,7 +38,7 @@ export default function Home() {
 
   return (
     <main
-      className="min-h-screen flex flex-col items-center justify-center px-5 py-10"
+      className="min-h-dvh flex flex-col items-center justify-center px-5 py-10"
       style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
     >
       <div className="w-full max-w-md space-y-8">

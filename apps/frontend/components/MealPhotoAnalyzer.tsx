@@ -25,6 +25,8 @@ import {
   Square,
   Trash2,
   X,
+  Zap,
+  ZapOff,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { aiService, AiMealItem, blobToBase64 } from '@/lib/api/ai';
@@ -54,6 +56,7 @@ interface MealPhotoAnalyzerProps {
   mealType: MealTypeOption;
   onMealTypeChange: (mealType: MealTypeOption) => void;
   onStageChange?: (stage: AnalyzerStage) => void;
+  onClose?: () => void;
   onConfirmMeal: (meal: {
     name: string;
     calories: number;
@@ -127,12 +130,15 @@ export default function MealPhotoAnalyzer({
   mealType,
   onMealTypeChange,
   onStageChange,
+  onClose,
   onConfirmMeal,
 }: MealPhotoAnalyzerProps) {
   const [stage, setStageInternal] = useState<AnalyzerStage>('CAMERA');
   const [cameraStatus, setCameraStatus] = useState<'starting' | 'ready' | 'fallback'>(
     'starting'
   );
+  const [flashOn, setFlashOn] = useState(false);
+  const [flashSupported, setFlashSupported] = useState(false);
   const [capturedImage, setCapturedImage] = useState<CompressedAiImage | null>(null);
   const [thumbEntry, setThumbEntry] = useState<{ sourceUrl: string; thumbUrl: string } | null>(null);
   const [textDescription, setTextDescription] = useState('');
@@ -196,7 +202,26 @@ export default function MealPhotoAnalyzer({
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
+    setFlashOn(false);
+    setFlashSupported(false);
   }, []);
+
+  const handleToggleFlash = useCallback(async () => {
+    const videoTrack = streamRef.current?.getVideoTracks()[0];
+    if (!videoTrack || !flashSupported) {
+      toast('El flash no está disponible en este dispositivo', { icon: '⚡' });
+      return;
+    }
+    const next = !flashOn;
+    try {
+      await videoTrack.applyConstraints({
+        advanced: [{ torch: next } as MediaTrackConstraintSet],
+      });
+      setFlashOn(next);
+    } catch {
+      toast.error('No se pudo activar el flash.');
+    }
+  }, [flashOn, flashSupported]);
 
   useEffect(() => {
     if (stage !== 'CAMERA') {
@@ -232,6 +257,14 @@ export default function MealPhotoAnalyzer({
         }
 
         streamRef.current = stream;
+        const videoTrack = stream.getVideoTracks()[0];
+        const caps =
+          typeof videoTrack?.getCapabilities === 'function'
+            ? (videoTrack.getCapabilities() as MediaTrackCapabilities & { torch?: boolean })
+            : undefined;
+        setFlashSupported(Boolean(caps?.torch));
+        setFlashOn(false);
+
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           await videoRef.current.play().catch(() => {});
@@ -623,6 +656,7 @@ export default function MealPhotoAnalyzer({
         accept="image/*"
         capture="environment"
         onChange={handleFilePicked}
+        aria-label="Tomar foto de comida"
         tabIndex={-1}
         aria-hidden="true"
         className="hidden"
@@ -632,12 +666,13 @@ export default function MealPhotoAnalyzer({
         type="file"
         accept="image/*"
         onChange={handleFilePicked}
+        aria-label="Seleccionar foto de comida de la galería"
         tabIndex={-1}
         aria-hidden="true"
         className="hidden"
       />
 
-      {analysisError ? (
+      {analysisError && stage !== 'CAMERA' ? (
         <div
           role="alert"
           className="flex items-start justify-between gap-2.5 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-3.5 py-2.5 text-[13px] text-[var(--status-danger)]"
@@ -656,90 +691,150 @@ export default function MealPhotoAnalyzer({
         </div>
       ) : null}
 
-      {/* STAGE 1: CLEAN BITEPAL CAMERA VIEWFINDER */}
+      {/* STAGE 1: FULL-SCREEN BITEPAL CAMERA VIEWFINDER */}
       {stage === 'CAMERA' ? (
-        <div className="space-y-3">
-          <div
-            className={`relative aspect-[4/3] max-h-[260px] w-full overflow-hidden rounded-[20px] border border-[var(--border-subtle)] ${
-              cameraStatus === 'ready' ? 'bg-[#0c0c0e]' : 'bg-[var(--surface-inset)]'
+        <div className="fixed inset-0 z-[100] flex flex-col justify-between overflow-hidden bg-black text-white select-none">
+          {/* Full-screen live camera feed */}
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-200 ${
+              cameraStatus === 'ready' ? 'opacity-100' : 'opacity-0'
             }`}
-          >
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted
-              className={`h-full w-full object-cover transition-opacity duration-150 ${
-                cameraStatus === 'ready' ? 'opacity-100' : 'opacity-0'
-              }`}
-            />
+          />
 
-            {cameraStatus !== 'ready' ? (
-              <div className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center">
-                <div className="mb-2.5 flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--surface-raised)] text-[var(--accent-text)]">
-                  <Camera className="h-6 w-6" strokeWidth={2} aria-hidden="true" />
+          {/* Top & bottom gradient scrims for crisp contrast */}
+          <div
+            className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black/75 via-black/30 to-transparent"
+            aria-hidden="true"
+          />
+          <div
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-black/85 via-black/45 to-transparent"
+            aria-hidden="true"
+          />
+
+          {/* Top Bar: Close + Flash */}
+          <div className="relative z-10 flex items-center justify-between px-4 pt-[max(1rem,env(safe-area-inset-top))]">
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Cerrar cámara"
+              className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-white/15 bg-black/45 text-white backdrop-blur-md transition-transform duration-100 active:scale-95"
+            >
+              <X className="h-5 w-5" aria-hidden="true" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => void handleToggleFlash()}
+              aria-label={flashOn ? 'Desactivar flash' : 'Activar flash'}
+              aria-pressed={flashOn}
+              className={`flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border backdrop-blur-md transition-all duration-100 active:scale-95 ${
+                flashOn
+                  ? 'border-amber-300 bg-amber-400 text-black shadow-lg'
+                  : 'border-white/15 bg-black/45 text-white'
+              } ${!flashSupported && cameraStatus === 'ready' ? 'opacity-65' : ''}`}
+            >
+              {flashOn ? (
+                <Zap className="h-5 w-5 fill-current" aria-hidden="true" />
+              ) : (
+                <ZapOff className="h-5 w-5" aria-hidden="true" />
+              )}
+            </button>
+          </div>
+
+          {/* Center Focus Frame (BitePal corner brackets) */}
+          <div className="pointer-events-none relative z-10 flex flex-1 flex-col items-center justify-center px-6">
+            <div className="relative h-64 w-64 sm:h-72 sm:w-72">
+              <span className="absolute left-0 top-0 h-9 w-9 rounded-tl-3xl border-l-[3.5px] border-t-[3.5px] border-white/95 drop-shadow-[0_2px_8px_rgba(0,0,0,0.45)]" />
+              <span className="absolute right-0 top-0 h-9 w-9 rounded-tr-3xl border-r-[3.5px] border-t-[3.5px] border-white/95 drop-shadow-[0_2px_8px_rgba(0,0,0,0.45)]" />
+              <span className="absolute bottom-0 left-0 h-9 w-9 rounded-bl-3xl border-b-[3.5px] border-l-[3.5px] border-white/95 drop-shadow-[0_2px_8px_rgba(0,0,0,0.45)]" />
+              <span className="absolute bottom-0 right-0 h-9 w-9 rounded-br-3xl border-b-[3.5px] border-r-[3.5px] border-white/95 drop-shadow-[0_2px_8px_rgba(0,0,0,0.45)]" />
+
+              {cameraStatus !== 'ready' ? (
+                <div className="absolute inset-0 flex flex-col items-center justify-center px-5 text-center">
+                  <div className="mb-2.5 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 text-white backdrop-blur-md">
+                    <Camera className="h-6 w-6" strokeWidth={2} aria-hidden="true" />
+                  </div>
+                  <p className="text-[15px] font-semibold text-white">
+                    {cameraStatus === 'starting'
+                      ? 'Iniciando cámara...'
+                      : 'Sacá o subí una foto'}
+                  </p>
+                  <p className="mt-1 text-[12px] leading-snug text-white/75">
+                    Enfocá tu plato en el centro o usá Galería / Teclado.
+                  </p>
                 </div>
-                <p className="text-[15px] font-semibold text-[var(--text-primary)]">
-                  {cameraStatus === 'starting'
-                    ? 'Iniciando cámara...'
-                    : 'Sacá o subí una foto de tu plato'}
-                </p>
-                <p className="mt-1 max-w-[240px] text-[13px] leading-snug text-[var(--text-muted)]">
-                  Calculamos las calorías automáticamente o escribí con Teclado.
-                </p>
+              ) : null}
+            </div>
+
+            {cameraStatus === 'ready' ? (
+              <p className="mt-5 rounded-full bg-black/45 px-3.5 py-1 text-xs font-medium text-white/90 backdrop-blur-md">
+                Enfocá tu comida en el centro
+              </p>
+            ) : null}
+          </div>
+
+          {/* Bottom Controls: Galería | Shutter | Teclado */}
+          <div className="relative z-10 space-y-3 px-6 pb-[max(1.75rem,env(safe-area-inset-bottom))] pt-3">
+            {analysisError ? (
+              <div
+                role="alert"
+                className="mx-auto flex max-w-sm items-start justify-between gap-2.5 rounded-2xl border border-red-400/30 bg-black/75 px-3.5 py-2.5 text-[13px] text-red-300 backdrop-blur-md"
+              >
+                <span className="min-w-0 leading-snug [overflow-wrap:anywhere]">
+                  {analysisError}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setAnalysisError(null)}
+                  aria-label="Cerrar aviso"
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-white/70 active:scale-95"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </div>
             ) : null}
 
-            {/* Clean corner brackets */}
-            <div className="pointer-events-none absolute inset-4" aria-hidden="true">
-              <span className="absolute left-0 top-0 h-5 w-5 rounded-tl-xl border-l-2 border-t-2 border-[var(--text-muted)]/45" />
-              <span className="absolute right-0 top-0 h-5 w-5 rounded-tr-xl border-r-2 border-t-2 border-[var(--text-muted)]/45" />
-              <span className="absolute bottom-0 left-0 h-5 w-5 rounded-bl-xl border-b-2 border-l-2 border-[var(--text-muted)]/45" />
-              <span className="absolute bottom-0 right-0 h-5 w-5 rounded-br-xl border-b-2 border-r-2 border-[var(--text-muted)]/45" />
-            </div>
-          </div>
-
-          {/* BitePal 3-Action Bar: Galería | Shutter | Teclado */}
-          <div className="grid grid-cols-3 items-center gap-2 pt-1">
-            <button
-              type="button"
-              onClick={() => galleryInputRef.current?.click()}
-              className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-card)] px-3 text-[13px] font-semibold text-[var(--text-primary)] transition-transform duration-100 active:scale-[0.97]"
-            >
-              <ImagePlus
-                className="h-4 w-4 shrink-0 text-[var(--text-secondary)]"
-                aria-hidden="true"
-              />
-              <span>Galería</span>
-            </button>
-
-            <div className="flex justify-center">
+            <div className="mx-auto grid max-w-sm grid-cols-3 items-center gap-4">
               <button
                 type="button"
-                onClick={handleShutterPress}
-                aria-label="Sacar foto y calcular calorías"
-                className="flex h-16 w-16 cursor-pointer items-center justify-center rounded-full border-[3px] border-[var(--accent-fill)] bg-[var(--surface-card)] p-1 shadow-sm transition-transform duration-100 active:scale-90"
+                onClick={() => galleryInputRef.current?.click()}
+                className="flex cursor-pointer flex-col items-center justify-center gap-1.5 text-white/95 transition-transform duration-100 active:scale-95"
               >
-                <span className="flex h-full w-full items-center justify-center rounded-full bg-[var(--accent-fill)] text-[var(--on-accent)]">
-                  <Camera className="h-5 w-5" strokeWidth={2.2} aria-hidden="true" />
+                <span className="flex h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-white/15 backdrop-blur-md">
+                  <ImagePlus className="h-5 w-5" aria-hidden="true" />
                 </span>
+                <span className="text-[11px] font-medium tracking-wide">Galería</span>
+              </button>
+
+              <div className="flex justify-center">
+                <button
+                  type="button"
+                  onClick={handleShutterPress}
+                  aria-label="Sacar foto y calcular calorías"
+                  className="flex h-[74px] w-[74px] cursor-pointer items-center justify-center rounded-full border-[4px] border-white bg-transparent p-1 shadow-xl transition-transform duration-100 active:scale-90"
+                >
+                  <span className="flex h-full w-full items-center justify-center rounded-full bg-white text-black" />
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setAnalysisError(null);
+                  setStage('TEXT_INPUT');
+                }}
+                className="flex cursor-pointer flex-col items-center justify-center gap-1.5 text-white/95 transition-transform duration-100 active:scale-95"
+              >
+                <span className="flex h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-white/15 backdrop-blur-md">
+                  <Keyboard className="h-5 w-5" aria-hidden="true" />
+                </span>
+                <span className="text-[11px] font-medium tracking-wide">Teclado</span>
               </button>
             </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                setAnalysisError(null);
-                setStage('TEXT_INPUT');
-              }}
-              className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-card)] px-3 text-[13px] font-semibold text-[var(--text-primary)] transition-transform duration-100 active:scale-[0.97]"
-            >
-              <Keyboard
-                className="h-4 w-4 shrink-0 text-[var(--accent-text)]"
-                aria-hidden="true"
-              />
-              <span>Teclado</span>
-            </button>
           </div>
         </div>
       ) : null}

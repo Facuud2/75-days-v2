@@ -162,7 +162,7 @@ export default function ProfilePreview({
       </div>
 
       <div className="px-4 pb-4">
-        <div className="flex items-end gap-3">
+        <div className="flex items-start gap-3">
           <div
             className={`flex shrink-0 items-center justify-center overflow-hidden rounded-full text-xl font-semibold uppercase ${
               hasAvatar ? 'border-2' : 'border'
@@ -189,9 +189,8 @@ export default function ProfilePreview({
 
           {quote ? (
             <p
-              className="min-w-0 flex-1 pt-2 line-clamp-2 text-xs sm:text-sm leading-snug [overflow-wrap:anywhere]"
+              className="min-w-0 flex-1 pt-2 text-xs sm:text-sm leading-snug [overflow-wrap:anywhere]"
               style={{ color: 'var(--text-secondary)' }}
-              title={quote}
             >
               {quote}
             </p>

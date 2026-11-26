@@ -158,8 +158,22 @@ model SideQuestTask {
 
   run          SideQuestRun           @relation(fields: [runId], references: [id], onDelete: Cascade)
   templateTask SideQuestTaskTemplate? @relation(fields: [templateTaskId], references: [id], onDelete: SetNull)
+  logs         SideQuestTaskLog[]
 
   @@index([runId, order])
+}
+
+model SideQuestTaskLog {
+  id          String   @id @default(uuid())
+  taskId      String
+  periodKey   String
+  value       Int      @default(1)
+  completedAt DateTime @default(now())
+
+  task SideQuestTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, periodKey])
+  @@index([taskId])
 }
 
 model Achievement {

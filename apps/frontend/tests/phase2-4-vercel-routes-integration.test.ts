@@ -210,7 +210,9 @@ describe('Phase 2–4 — End-to-End Route Handlers + Neon Serverless + Upstash 
     );
     expect(toggleRes.status).toBe(200);
     const toggleBody = await toggleRes.json();
-    expect(toggleBody.completed).toBe(true);
+    expect(toggleBody.progress).toBe(1);
+    expect(toggleBody.todayCompleted).toBe(true);
+    expect(toggleBody.completed).toBe(false);
   }, 15_000);
 
   it('Health routes: Meals, Workouts, CustomFoods & /api/sync/[date]', async () => {

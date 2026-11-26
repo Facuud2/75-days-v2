@@ -52,7 +52,7 @@ function AuthBootSkeleton() {
       data-boot-skeleton="auth"
       aria-busy="true"
       aria-label="Cargando"
-      className="auth-viewport flex min-h-screen items-center justify-center px-4 py-8"
+      className="auth-viewport flex min-h-dvh items-center justify-center px-4 py-8"
     >
       <div className="w-full max-w-md space-y-5 rounded-3xl border border-white/10 bg-white/[0.03] p-6 sm:p-8">
         <div className="space-y-2">
@@ -104,7 +104,7 @@ export default function RouteBootSkeleton({ pathname }: { pathname: string }) {
       data-boot-skeleton="app"
       aria-busy="true"
       aria-label="Cargando"
-      className="app-shell min-h-screen px-4 pt-6 md:p-6"
+      className="app-shell min-h-dvh px-4 pt-6 md:p-6"
     >
       <div className="mx-auto w-full max-w-7xl">{content}</div>
     </div>

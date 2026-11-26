@@ -1094,7 +1094,7 @@ const MEAL_ANALYSIS_JSON_SCHEMA = {
     isFood: {
       type: 'boolean',
       description:
-        'true si la foto o descripción contiene comida, ingredientes o bebidas consumibles; false si no hay comida identificable o la entrada no tiene relación con alimentación.',
+        'true si la foto o descripción contiene comida, ingredientes, bebidas consumibles, o una etiqueta/tabla nutricional o valores nutricionales en texto (capturas de pantalla, envases, macros escritos); false si no hay comida ni información nutricional identificable o la entrada no tiene relación con alimentación.',
     },
     rejectionReason: {
       type: 'string',
@@ -1110,7 +1110,7 @@ const MEAL_ANALYSIS_JSON_SCHEMA = {
       type: 'string',
       enum: ['high', 'medium', 'low'],
       description:
-        'Nivel de certeza nutricional: high (alimentos claros/medibles), medium (porción estimada visualmente), low (plato compuesto con salsas/ingredientes ocultos).',
+        'Nivel de certeza nutricional: high (alimentos claros/medibles o etiqueta/valores nutricionales explícitos), medium (porción estimada visualmente), low (plato compuesto con salsas/ingredientes ocultos).',
     },
     assumptions: {
       type: 'string',
@@ -1199,20 +1199,27 @@ const MEAL_ANALYSIS_SYSTEM_INSTRUCTION = `Sos un nutricionista clínico experto 
 
 REGLAS CRÍTICAS DE PRECISIÓN NUTRICIONAL:
 1. **Cero alucinaciones**:
-   - Si la imagen no muestra alimentos ni bebidas consumibles (o está completamente negra/irreconocible) y no hay descripción textual válida, devolvé \`isFood: false\`, explicá brevemente el motivo en \`rejectionReason\` y dejá \`items: []\`.
-   - Si el texto enviado no describe ninguna comida ni bebida, devolvé \`isFood: false\`.
-2. **Fuente nutricional única y consistente (Catálogo App + USDA FoodData Central)**:
+   - Si la imagen no muestra alimentos/bebidas consumibles NI una etiqueta, tabla o texto con valores nutricionales (o está completamente negra/irreconocible) y no hay descripción textual válida, devolvé \`isFood: false\`, explicá brevemente el motivo en \`rejectionReason\` y dejá \`items: []\`.
+   - Si el texto enviado no describe ninguna comida/bebida ni contiene valores o información nutricional, devolvé \`isFood: false\`.
+2. **Etiquetas y valores nutricionales en imagen o texto (Prioridad #0)**:
+   - Si la imagen (foto de envase, captura de pantalla, tabla) o el texto contiene una **etiqueta nutricional o valores nutricionales explícitos** (calorías/kcal, proteínas, carbohidratos, grasas, fibra, azúcares, porción/serving size en g o ml), **SIEMPRE aceptala con \`isFood: true\`** y extraé esos valores exactamente como figuran.
+   - Usá el nombre del producto o alimento si aparece en la etiqueta/texto (o un nombre descriptivo claro como *"Alimento según etiqueta nutricional"* si no se especifica).
+   - Usá la porción declarada en la etiqueta/texto como \`estimatedGrams\` (si los valores están por 100g/100ml y no hay otra porción indicada, usá \`100\`; si el usuario aclara cuántas porciones o gramos consumió en texto/nota, escalá proporcionalmente).
+   - Respetá los valores declarados para \`calories\`, \`proteinG\`, \`carbG\`, \`fatG\`, \`fiberG\` y \`sugarG\` (usá \`0\` para fibra o azúcar si no figuran en la etiqueta; si la energía solo figura en \`kJ\`, convertí dividiendo por \`4.184\`).
+   - Marcá \`confidence: 'high'\` cuando los valores provienen directamente de una etiqueta o datos nutricionales explícitos.
+3. **Fuente nutricional única y consistente (Catálogo App + USDA FoodData Central)**:
+   - Cuando no haya una etiqueta o valores nutricionales explícitos:
    - **Prioridad #1**: Si en el prompt se incluye la \`Tabla canónica de ingredientes base (por 100g comestibles)\` y un alimento detectado coincide claramente con uno de ellos (mismo estado crudo/cocido), calculá \`calories\`, \`proteinG\`, \`carbG\` y \`fatG\` escalando exactamente esos valores por 100g (\`valorPer100g * estimatedGrams / 100\`), y completá \`fiberG\` y \`sugarG\` con **USDA FoodData Central (SR Legacy / Foundation Foods)**.
    - **Prioridad #2**: Para todo otro alimento o preparación, utilizá **exclusivamente USDA FoodData Central (Foundation Foods / SR Legacy)** como fuente consistente, respetando sus **factores de conversión de Atwater específicos** (NO fuerces la multiplicación genérica \`P*4 + C*4 + G*9\` en frutas, verduras, legumbres o cereales integrales donde la fibra reduce la energía metabolizable real).
    - Devolvé los valores con precisión decimal natural (no redondees a enteros intermedios) para evitar errores acumulativos.
-3. **Peso neto comestible vs. peso bruto y estado de cocción**:
+4. **Peso neto comestible vs. peso bruto y estado de cocción**:
    - \`estimatedGrams\` debe representar **siempre la porción neta comestible en el estado servido**:
      - Descontá cáscaras no comestibles (banana pelada, naranja pelada, cáscara de huevo), huesos (pollo/asado con hueso) y carozos (palta, durazno).
      - Distinguí rigurosamente entre peso **cocido** y **crudo/seco** (ej. 150g de arroz cocido ≠ 150g de arroz crudo) y dejalo explícito en \`name\` (ej. *"Banana pelada"*, *"Arroz blanco cocido"*, *"Pata-muslo al horno sin hueso"*).
-4. **Fibra y Azúcares sin alterar Carbohidratos totales**:
+5. **Fibra y Azúcares sin alterar Carbohidratos totales**:
    - \`carbG\` es siempre **Carbohidratos totales por diferencia** (estándar USDA).
    - Informá \`fiberG\` (fibra alimentaria) y \`sugarG\` (azúcares totales) como datos adicionales independientes sin restarlos de \`carbG\` (\`fiberG + sugarG <= carbG\`).
-5. **Modo Corrección (\`correctionPrompt\`) y Notas del usuario**:
+6. **Modo Corrección (\`correctionPrompt\`) y Notas del usuario**:
    - Cuando recibís \`Elementos actuales en pantalla\` junto con una corrección del usuario, aplicá exactamente esa corrección conservando intactos (\`id\`, gramos y nutrientes) los ítems que el usuario NO pidió cambiar.
    - Priorizá siempre los datos explícitos del usuario (pesos de balanza, "sin aceite", "descremado", "media unidad") sobre la estimación visual.`;
 
@@ -1272,7 +1279,7 @@ export async function analyzeMealInput(
 
   if (input.imageBase64 && !input.correctionPrompt?.trim() && !input.textDescription?.trim()) {
     promptLines.push(
-      'Analizá la foto adjunta del plato/bebida y devolvé el desglose nutricional en JSON.'
+      'Analizá la imagen adjunta (plato/bebida o etiqueta/tabla de información nutricional) y devolvé el desglose nutricional en JSON.'
     );
   } else {
     promptLines.push('Devolvé el resultado nutricional actualizado en el formato JSON solicitado.');

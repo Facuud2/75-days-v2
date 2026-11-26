@@ -71,7 +71,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   );
 
   return (
-    <html lang="es" className={`${inter.variable} ${jetbrainsMono.variable} font-sans`}>
+    <html lang="es" className={`${inter.variable} ${jetbrainsMono.variable} font-sans`} suppressHydrationWarning>
       <head>
         {apiOrigins.map((origin) => (
           <link key={`preconnect-${origin}`} rel="preconnect" href={origin} crossOrigin="anonymous" />

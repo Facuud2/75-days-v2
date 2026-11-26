@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
+  AlertTriangle,
   ArrowLeft,
   Award,
   Bike,
@@ -283,14 +284,11 @@ export default function LiveWorkoutOverlay() {
     setIsPickerOpen(false);
   };
 
+  const canSaveSession =
+    sessionMode === 'cardio' || liveMetrics.completedSets > 0 || elapsedSec >= 30;
+
   const handleOpenFinishConfirm = () => {
-    const today = getLocalDateString();
-    const previewPayload = buildSubmissionPayload(today);
-    const hasExercisesLogged = Boolean(previewPayload.exercises && previewPayload.exercises.length > 0);
-    if (sessionMode !== 'cardio' && !hasExercisesLogged && elapsedSec < 30) {
-      toast.error('Marca al menos una serie antes de terminar.');
-      return;
-    }
+    setConfirmDiscard(false);
     setOverrideDurationMin(Math.max(1, Math.round(elapsedSec / 60) || 1));
     setIsFinishConfirmOpen(true);
   };
@@ -775,42 +773,6 @@ export default function LiveWorkoutOverlay() {
                 />
               </>
             )}
-
-            {showConfirmDiscard ? (
-              <div className="flex items-center justify-between gap-2 rounded-2xl border border-red-500/30 bg-red-500/10 p-3">
-                <span className="text-xs font-semibold text-red-500 dark:text-red-300">
-                  ¿Descartar este entrenamiento sin guardar?
-                </span>
-                <div className="flex gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setConfirmDiscard(false)}
-                    className="min-h-10 cursor-pointer rounded-xl bg-zinc-900 px-3 text-xs font-semibold text-zinc-300"
-                  >
-                    No
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setConfirmDiscard(false);
-                      discardWorkout();
-                      toast('Entrenamiento descartado');
-                    }}
-                    className="min-h-10 cursor-pointer rounded-xl bg-red-600 px-3 text-xs font-bold text-[#ffffff]"
-                  >
-                    Descartar
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setConfirmDiscard(true)}
-                className="flex min-h-11 w-full cursor-pointer items-center justify-center rounded-2xl text-xs font-semibold text-zinc-400 hover:bg-red-500/5 hover:text-red-400"
-              >
-                Descartar entrenamiento
-              </button>
-            )}
           </div>
         </div>
       </div>
@@ -826,77 +788,142 @@ export default function LiveWorkoutOverlay() {
         />
       )}
 
-      {/* Safe Finish Confirmation Sheet (prevents accidental tap from ending a live workout) */}
+      {/* Safe Finish / Discard Sheet */}
       {showFinishConfirm && (
         <div
           className="fixed inset-0 z-[128] flex items-end justify-center bg-black/80 backdrop-blur-xs sm:items-center sm:p-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby="finish-confirm-title"
-          onClick={() => setIsFinishConfirmOpen(false)}
+          onClick={() => {
+            setConfirmDiscard(false);
+            setIsFinishConfirmOpen(false);
+          }}
         >
           <div
             className="w-full max-w-md rounded-t-[28px] border border-zinc-800 bg-zinc-950 p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] shadow-2xl sm:rounded-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 id="finish-confirm-title" className="text-lg font-bold text-white">
-              ¿Guardar y terminar sesión?
-            </h3>
-            <p className="mt-1 text-xs text-zinc-400">
-              {sessionMode === 'cardio' && exercises.length === 0
-                ? `${title || 'Actividad'} · ${formatDurationClock(elapsedSec)} transcurridos.`
-                : `Completaste ${liveMetrics.completedSets} de ${liveMetrics.totalSets} series (${liveMetrics.volumeKg} kg).`}
-            </p>
+            {showConfirmDiscard ? (
+              <>
+                <div className="flex items-start gap-3">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-red-500/15 text-red-400">
+                    <AlertTriangle className="h-5 w-5" />
+                  </span>
+                  <div>
+                    <h3 id="finish-confirm-title" className="text-lg font-bold text-white">
+                      ¿Descartar este entrenamiento?
+                    </h3>
+                    <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+                      Si lo descartas se perderá todo el progreso de esta sesión (series, pesos y tiempo registrado). Esta acción no se puede deshacer.
+                    </p>
+                  </div>
+                </div>
 
-            <div className="mt-4 flex items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-900/70 p-3">
-              <span className="text-xs font-semibold text-zinc-300">Duración a guardar (min)</span>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setOverrideDurationMin((v) => Math.max(1, v - 5))}
-                  aria-label="Restar 5 minutos"
-                  className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl bg-zinc-800 text-white"
-                >
-                  <Minus className="h-4 w-4" />
-                </button>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  min={1}
-                  max={1440}
-                  value={overrideDurationMin}
-                  onChange={(e) => setOverrideDurationMin(Number(e.target.value))}
-                  aria-label="Minutos totales"
-                  className="w-14 bg-transparent text-center text-base font-bold text-white tabular-nums focus:outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={() => setOverrideDurationMin((v) => Math.min(1440, v + 5))}
-                  aria-label="Sumar 5 minutos"
-                  className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl bg-zinc-800 text-white"
-                >
-                  <Plus className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
+                <div className="mt-5 flex gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDiscard(false)}
+                    className="min-h-12 flex-1 cursor-pointer rounded-xl border border-zinc-800 bg-zinc-900 text-sm font-semibold text-zinc-200 hover:bg-zinc-800"
+                  >
+                    Volver
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConfirmDiscard(false);
+                      setIsFinishConfirmOpen(false);
+                      discardWorkout();
+                      toast('Entrenamiento descartado');
+                    }}
+                    className="min-h-12 flex-1 cursor-pointer rounded-xl bg-red-600 text-sm font-bold text-[#ffffff] shadow-lg shadow-red-600/20 hover:bg-red-700"
+                  >
+                    Sí, descartar todo
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h3 id="finish-confirm-title" className="text-lg font-bold text-white">
+                  ¿Terminar esta sesión?
+                </h3>
+                <p className="mt-1 text-xs text-zinc-400">
+                  {sessionMode === 'cardio' && exercises.length === 0
+                    ? `${title || 'Actividad'} · ${formatDurationClock(elapsedSec)} transcurridos.`
+                    : `Completaste ${liveMetrics.completedSets} de ${liveMetrics.totalSets} series (${liveMetrics.volumeKg} kg).`}
+                </p>
 
-            <div className="mt-5 flex gap-2.5">
-              <button
-                type="button"
-                onClick={() => setIsFinishConfirmOpen(false)}
-                className="min-h-12 flex-1 cursor-pointer rounded-xl border border-zinc-800 bg-zinc-900 text-sm font-semibold text-zinc-300 hover:bg-zinc-800"
-              >
-                Seguir entrenando
-              </button>
-              <button
-                type="button"
-                disabled={isFinishing}
-                onClick={handleConfirmFinish}
-                className="min-h-12 flex-1 cursor-pointer rounded-xl bg-emerald-700 text-sm font-bold text-[#ffffff] shadow-lg shadow-emerald-700/20 hover:bg-emerald-800 disabled:opacity-50"
-              >
-                {isFinishing ? 'Guardando...' : 'Guardar sesión'}
-              </button>
-            </div>
+                {canSaveSession ? (
+                  <div className="mt-4 flex items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-900/70 p-3">
+                    <span className="text-xs font-semibold text-zinc-300">Duración a guardar (min)</span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setOverrideDurationMin((v) => Math.max(1, v - 5))}
+                        aria-label="Restar 5 minutos"
+                        className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl bg-zinc-800 text-white"
+                      >
+                        <Minus className="h-4 w-4" />
+                      </button>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min={1}
+                        max={1440}
+                        value={overrideDurationMin}
+                        onChange={(e) => setOverrideDurationMin(Number(e.target.value))}
+                        aria-label="Minutos totales"
+                        className="w-14 bg-transparent text-center text-base font-bold text-white tabular-nums focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setOverrideDurationMin((v) => Math.min(1440, v + 5))}
+                        aria-label="Sumar 5 minutos"
+                        className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl bg-zinc-800 text-white"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="mt-3 rounded-2xl border border-zinc-800 bg-zinc-900/60 px-3.5 py-2.5 text-xs text-zinc-400">
+                    Marca al menos una serie para poder guardar la sesión, o descártala si la iniciaste por error.
+                  </p>
+                )}
+
+                <div className="mt-5 space-y-2.5">
+                  <button
+                    type="button"
+                    disabled={isFinishing || !canSaveSession}
+                    onClick={handleConfirmFinish}
+                    className="min-h-12 w-full cursor-pointer rounded-xl bg-emerald-700 text-sm font-bold text-[#ffffff] shadow-lg shadow-emerald-700/20 hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    {isFinishing ? 'Guardando...' : 'Guardar entrenamiento'}
+                  </button>
+
+                  <div className="flex gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setConfirmDiscard(false);
+                        setIsFinishConfirmOpen(false);
+                      }}
+                      className="min-h-11 flex-1 cursor-pointer rounded-xl border border-zinc-800 bg-zinc-900 text-xs font-semibold text-zinc-300 hover:bg-zinc-800"
+                    >
+                      Seguir entrenando
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isFinishing}
+                      onClick={() => setConfirmDiscard(true)}
+                      className="min-h-11 flex-1 cursor-pointer rounded-xl border border-red-500/30 bg-red-500/10 text-xs font-bold text-red-400 hover:bg-red-500/15 disabled:opacity-50"
+                    >
+                      Descartar
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

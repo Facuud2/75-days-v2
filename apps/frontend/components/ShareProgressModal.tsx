@@ -20,6 +20,7 @@ import { useAuthStore } from '@/store/useAuthStore';
 import {
   buildChallengeSharePayload,
   buildDailySharePayload,
+  buildProfileSharePayload,
   type ShareCardFormat,
   type ShareCardKind,
   type ShareCardTheme,
@@ -31,6 +32,7 @@ import {
   downloadPngBlob,
   renderChallengeShareCard,
   renderDailyShareCard,
+  renderProfileShareCard,
   sharePngBlob,
 } from '@/lib/utils/shareCardRenderer';
 
@@ -40,11 +42,24 @@ export interface DailyShareSource {
   goals: Goal[];
 }
 
+export interface ProfileShareSource {
+  name: string;
+  avatarUrl?: string | null;
+  bannerUrl?: string | null;
+  quote?: string | null;
+  level: number;
+  memberSince: string | null;
+  challengesCompleted: number;
+  unlockedAchievements: number;
+  totalAchievements: number;
+}
+
 interface ShareProgressModalProps {
   open: boolean;
   onClose: () => void;
   initialKind?: ShareCardKind;
   dailySource?: DailyShareSource;
+  profileSource?: ProfileShareSource;
 }
 
 export default function ShareProgressModal({
@@ -52,7 +67,9 @@ export default function ShareProgressModal({
   onClose,
   initialKind = 'daily',
   dailySource,
+  profileSource,
 }: ShareProgressModalProps) {
+  const isActive = useChallengeStore((s) => s.isActive);
   const difficulty = useChallengeStore((s) => s.difficulty);
   const currentDay = useChallengeStore((s) => s.currentDay);
   const streak = useChallengeStore((s) => s.streak);
@@ -63,9 +80,14 @@ export default function ShareProgressModal({
   const userName = useAuthStore((s) => s.user?.name);
 
   const hasDaily = Boolean(dailySource);
-  const [kind, setKind] = useState<ShareCardKind>(
-    initialKind === 'daily' && !hasDaily ? 'challenge' : initialKind
-  );
+  const hasProfile = Boolean(profileSource);
+  const resolveInitialKind = useCallback((): ShareCardKind => {
+    if (initialKind === 'profile' && hasProfile) return 'profile';
+    if (initialKind === 'daily' && !hasDaily) return hasProfile ? 'profile' : 'challenge';
+    return initialKind;
+  }, [initialKind, hasDaily, hasProfile]);
+
+  const [kind, setKind] = useState<ShareCardKind>(resolveInitialKind);
   const [format, setFormat] = useState<ShareCardFormat>('story');
   const [theme, setTheme] = useState<ShareCardTheme>('dark');
   const [showGoalTitles, setShowGoalTitles] = useState(true);
@@ -73,6 +95,12 @@ export default function ShareProgressModal({
   const [copied, setCopied] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setKind(resolveInitialKind());
+    }
+  }, [open, resolveInitialKind]);
 
   useEffect(() => {
     if (!open) return;
@@ -113,35 +141,75 @@ export default function ShareProgressModal({
     });
   }, [currentDay, difficulty, streak, startDate, logs, points, periodGoals, userName]);
 
+  const profilePayload = useMemo(() => {
+    if (!profileSource) return null;
+    return buildProfileSharePayload({
+      name: profileSource.name,
+      avatarUrl: profileSource.avatarUrl,
+      bannerUrl: profileSource.bannerUrl,
+      quote: profileSource.quote,
+      level: profileSource.level,
+      memberSince: profileSource.memberSince,
+      streak,
+      challengesCompleted: profileSource.challengesCompleted,
+      points,
+      currentDay,
+      isChallengeActive: isActive,
+      difficulty,
+      unlockedAchievements: profileSource.unlockedAchievements,
+      totalAchievements: profileSource.totalAchievements,
+    });
+  }, [profileSource, streak, points, currentDay, isActive, difficulty]);
+
   useEffect(() => {
     if (!open || !canvasRef.current) return;
-    if (kind === 'daily' && dailyPayload) {
-      renderDailyShareCard(canvasRef.current, dailyPayload, {
+    let cancelled = false;
+    const canvas = canvasRef.current;
+
+    if (kind === 'profile' && profilePayload) {
+      void renderProfileShareCard(canvas, profilePayload, {
+        format,
+        theme,
+        isCancelled: () => cancelled,
+      });
+    } else if (kind === 'daily' && dailyPayload) {
+      renderDailyShareCard(canvas, dailyPayload, {
         format,
         theme,
         showGoalTitles,
       });
     } else {
-      renderChallengeShareCard(canvasRef.current, challengePayload, {
+      renderChallengeShareCard(canvas, challengePayload, {
         format,
         theme,
       });
     }
-  }, [open, kind, format, theme, showGoalTitles, dailyPayload, challengePayload]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, kind, format, theme, showGoalTitles, dailyPayload, challengePayload, profilePayload]);
 
   const getFilename = useCallback(() => {
+    if (kind === 'profile' && profilePayload) {
+      const slug = profilePayload.handle ? profilePayload.handle.replace(/^@/, '') : 'usuario';
+      return `75-days-perfil-${slug}-${format}.png`;
+    }
     if (kind === 'daily' && dailyPayload) {
       return `75-days-dia-${dailyPayload.dayNumber}-${format}.png`;
     }
     return `75-days-progreso-${challengePayload.currentDay}-de-75-${format}.png`;
-  }, [kind, format, dailyPayload, challengePayload.currentDay]);
+  }, [kind, format, dailyPayload, challengePayload.currentDay, profilePayload]);
 
   const getShareText = useCallback(() => {
+    if (kind === 'profile' && profilePayload) {
+      return `${profilePayload.name} · Nivel ${profilePayload.level} · Racha de ${profilePayload.streak} días en 75 Days Challenge`;
+    }
     if (kind === 'daily' && dailyPayload) {
       return `Día ${dailyPayload.dayNumber}/75 · ${dailyPayload.progressPercent}% completado (${dailyPayload.completedCount}/${dailyPayload.totalCount} tareas)`;
     }
     return `Día ${challengePayload.currentDay}/75 (${challengePayload.progressPercent}%) en 75 Days Challenge`;
-  }, [kind, dailyPayload, challengePayload]);
+  }, [kind, dailyPayload, challengePayload, profilePayload]);
 
   const handleShare = async () => {
     if (!canvasRef.current || isExporting) return;
@@ -216,10 +284,10 @@ export default function ShareProgressModal({
         <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-5 py-3.5">
           <div>
             <p className="text-[10px] font-bold tracking-[0.2em] text-rose-400 uppercase">
-              Compartir progreso
+              {kind === 'profile' ? 'Compartir perfil' : 'Compartir progreso'}
             </p>
             <h2 id="share-modal-title" className="text-base font-bold text-white">
-              Generar tarjeta de estado
+              {kind === 'profile' ? 'Tarjeta de perfil' : 'Generar tarjeta de estado'}
             </h2>
           </div>
           <button
@@ -246,6 +314,33 @@ export default function ShareProgressModal({
                 }`}
               >
                 Estado del día
+              </button>
+              <button
+                type="button"
+                onClick={() => setKind('challenge')}
+                className={`rounded-xl px-3 py-2 text-xs font-semibold transition-colors ${
+                  kind === 'challenge'
+                    ? 'bg-rose-500 text-white shadow-sm'
+                    : 'text-white/70 hover:text-white'
+                }`}
+              >
+                Reto completo
+              </button>
+            </div>
+          )}
+
+          {!hasDaily && hasProfile && (
+            <div className="grid grid-cols-2 gap-2 rounded-2xl bg-white/5 p-1">
+              <button
+                type="button"
+                onClick={() => setKind('profile')}
+                className={`rounded-xl px-3 py-2 text-xs font-semibold transition-colors ${
+                  kind === 'profile'
+                    ? 'bg-rose-500 text-white shadow-sm'
+                    : 'text-white/70 hover:text-white'
+                }`}
+              >
+                Perfil
               </button>
               <button
                 type="button"

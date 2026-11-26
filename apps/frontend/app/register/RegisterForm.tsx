@@ -18,8 +18,8 @@ import { navigateAuthWithTransition } from '@/lib/authTransition';
 
 const registerSchema = z
   .object({
-    firstName: z.string().trim().min(1, 'Ingresa tu nombre'),
-    lastName: z.string().trim().min(1, 'Ingresa tus apellidos'),
+    firstName: z.string().trim().min(1, 'Ingresa tu nombre').max(60, 'Máximo 60 caracteres'),
+    lastName: z.string().trim().min(1, 'Ingresa tus apellidos').max(60, 'Máximo 60 caracteres'),
     email: z
       .string()
       .trim()

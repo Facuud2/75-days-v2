@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Search, Utensils, Loader2, CheckCircle2, ChevronRight, ArrowLeft, Plus, Bookmark, Flame, Camera } from 'lucide-react';
+import { X, Search, Utensils, Loader2, CheckCircle2, ChevronRight, ArrowLeft, Plus, Bookmark, Flame } from 'lucide-react';
 import { healthService, FatSecretFoodItem, FatSecretFoodDetails, FatSecretFoodServing, CustomFood, Ingredient } from '@/lib/api/health';
 import { useHealthStore } from '@/store/useHealthStore';
 import MealPhotoAnalyzer, { AnalyzerStage } from '@/components/MealPhotoAnalyzer';
@@ -49,7 +49,7 @@ export default function LogMealModal(props: LogMealModalProps) {
 }
 
 function LogMealModalContent({ onClose, onSaved, date, initialTab, initialMealType }: Omit<LogMealModalProps, 'isOpen'>) {
-    const [activeTab, setActiveTab] = useState<Tab>(() => initialTab ?? 'AI');
+    const activeTab: Tab = initialTab ?? 'AI';
     const [aiStage, setAiStage] = useState<AnalyzerStage>('CAMERA');
     const [step, setStep] = useState<Step>('MAIN');
     const [mealType, setMealType] = useState<MealType>(() => initialMealType ?? inferDefaultMealType());
@@ -307,6 +307,41 @@ function LogMealModalContent({ onClose, onSaved, date, initialTab, initialMealTy
         });
     };
 
+    if (step === 'MAIN' && activeTab === 'AI' && aiStage === 'CAMERA') {
+        return (
+            <MealPhotoAnalyzer
+                mealType={mealType}
+                onMealTypeChange={setMealType}
+                onStageChange={setAiStage}
+                onClose={onClose}
+                onConfirmMeal={handleConfirmAiMeal}
+            />
+        );
+    }
+
+    const mealTypeSelector = (
+        <div className="flex bg-[var(--surface-inset)] p-1 rounded-xl border border-[var(--border-subtle)]">
+            {([
+                { id: 'breakfast', label: 'Desayuno' },
+                { id: 'lunch', label: 'Almuerzo' },
+                { id: 'snack', label: 'Snack' },
+                { id: 'dinner', label: 'Cena' }
+            ] as const).map(type => (
+                <button
+                    key={type.id}
+                    type="button"
+                    onClick={() => setMealType(type.id)}
+                    className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${mealType === type.id
+                        ? 'bg-[var(--surface-card)] text-[var(--text-primary)] shadow-xs'
+                        : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                        }`}
+                >
+                    {type.label}
+                </button>
+            ))}
+        </div>
+    );
+
     return (
         <div
             className="mobile-sheet-root fixed inset-0 z-[100] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center sm:p-4"
@@ -331,13 +366,23 @@ function LogMealModalContent({ onClose, onSaved, date, initialTab, initialMealTy
                             </button>
                         )}
                         <h2 id="meal-modal-title" className="text-[17px] font-semibold tracking-[-0.01em] text-[var(--text-primary)] flex items-center gap-2">
-                            <Utensils className="w-4 h-4 text-[var(--accent-text)]" aria-hidden="true" />
+                            {activeTab === 'SEARCH' && step === 'MAIN' ? (
+                                <Search className="w-4 h-4 text-[var(--accent-text)]" aria-hidden="true" />
+                            ) : activeTab === 'CUSTOM' && step === 'MAIN' ? (
+                                <Bookmark className="w-4 h-4 text-[var(--accent-text)]" aria-hidden="true" />
+                            ) : (
+                                <Utensils className="w-4 h-4 text-[var(--accent-text)]" aria-hidden="true" />
+                            )}
                             {step === 'MAIN'
-                                ? (activeTab === 'AI' && aiStage === 'REVIEW'
-                                    ? 'Revisar comida'
-                                    : activeTab === 'AI' && aiStage === 'TEXT_INPUT'
-                                        ? 'Describir comida'
-                                        : 'Registrar Comida')
+                                ? (activeTab === 'SEARCH'
+                                    ? 'Buscador de Alimentos'
+                                    : activeTab === 'CUSTOM'
+                                        ? 'Mis Comidas'
+                                        : aiStage === 'REVIEW'
+                                            ? 'Revisar comida'
+                                            : aiStage === 'TEXT_INPUT'
+                                                ? 'Describir comida'
+                                                : 'Registrar Comida')
                                 : step === 'DETAILS'
                                     ? 'Detalles de la Composición'
                                     : 'Crear Plato Personalizado'}
@@ -357,77 +402,15 @@ function LogMealModalContent({ onClose, onSaved, date, initialTab, initialMealTy
                 <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-3.5 sm:px-5 sm:py-4 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent">
 
                     {step === 'MAIN' && (
-                        <div className={activeTab === 'AI' ? 'space-y-3' : 'space-y-5'}>
-
-                            {/* Show Tabs & Top MealType Bar only on initial picker/camera views — hide during AI review/typing */}
-                            {(activeTab !== 'AI' || aiStage === 'CAMERA') && (
-                                <>
-                                    <div className="flex border-b border-[var(--border-subtle)]">
-                                        <button
-                                            type="button"
-                                            onClick={() => setActiveTab('AI')}
-                                            className={`flex-1 pb-2.5 text-xs sm:text-sm font-semibold transition-colors border-b-2 flex items-center justify-center gap-1.5 ${activeTab === 'AI'
-                                                ? 'text-[var(--accent-text)] border-[var(--accent-fill)]'
-                                                : 'text-[var(--text-muted)] border-transparent hover:text-[var(--text-primary)]'
-                                                }`}
-                                        >
-                                            <Camera className="w-4 h-4 shrink-0" /> Escáner IA
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => setActiveTab('SEARCH')}
-                                            className={`flex-1 pb-2.5 text-xs sm:text-sm font-semibold transition-colors border-b-2 flex items-center justify-center gap-1.5 ${activeTab === 'SEARCH'
-                                                ? 'text-[var(--accent-text)] border-[var(--accent-fill)]'
-                                                : 'text-[var(--text-muted)] border-transparent hover:text-[var(--text-primary)]'
-                                                }`}
-                                        >
-                                            <Search className="w-4 h-4 shrink-0" /> Buscador
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => setActiveTab('CUSTOM')}
-                                            className={`flex-1 pb-2.5 text-xs sm:text-sm font-semibold transition-colors border-b-2 flex items-center justify-center gap-1.5 ${activeTab === 'CUSTOM'
-                                                ? 'text-[var(--accent-text)] border-[var(--accent-fill)]'
-                                                : 'text-[var(--text-muted)] border-transparent hover:text-[var(--text-primary)]'
-                                                }`}
-                                        >
-                                            <Bookmark className="w-4 h-4 shrink-0" /> Mis Comidas
-                                        </button>
-                                    </div>
-
-                                    <div className="flex bg-[var(--surface-inset)] p-1 rounded-xl border border-[var(--border-subtle)]">
-                                        {([
-                                            { id: 'breakfast', label: 'Desayuno' },
-                                            { id: 'lunch', label: 'Almuerzo' },
-                                            { id: 'snack', label: 'Snack' },
-                                            { id: 'dinner', label: 'Cena' }
-                                        ] as const).map(type => (
-                                            <button
-                                                key={type.id}
-                                                type="button"
-                                                onClick={() => {
-                                                    setMealType(type.id);
-                                                    setQuery('');
-                                                    setSearchResults([]);
-                                                    setHasSearched(false);
-                                                }}
-                                                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-colors ${mealType === type.id
-                                                    ? 'bg-[var(--surface-card)] text-[var(--text-primary)] shadow-xs'
-                                                    : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
-                                                    }`}
-                                            >
-                                                {type.label}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </>
-                            )}
+                        <div className={activeTab === 'AI' ? 'space-y-3' : 'space-y-4'}>
+                            {activeTab === 'CUSTOM' && mealTypeSelector}
 
                             {activeTab === 'AI' && (
                                 <MealPhotoAnalyzer
                                     mealType={mealType}
                                     onMealTypeChange={setMealType}
                                     onStageChange={setAiStage}
+                                    onClose={onClose}
                                     onConfirmMeal={handleConfirmAiMeal}
                                 />
                             )}
@@ -627,6 +610,8 @@ function LogMealModalContent({ onClose, onSaved, date, initialTab, initialMealTy
                                             </div>
                                         </div>
                                     </div>
+
+                                    {mealTypeSelector}
 
                                     {/* Macros Preview */}
                                     {selectedServing && (

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { differenceInCalendarDays, format, parseISO } from 'date-fns';
 import { apiClient } from '@/lib/api/client';
 
 export interface SideQuest {
@@ -13,6 +14,7 @@ export interface SideQuest {
   startedAt: string;
   progress: number;
   completed: boolean;
+  todayCompleted?: boolean;
   completionCount: number;
   currentRun: SideQuestRun | null;
 }
@@ -28,6 +30,9 @@ export interface SideQuestTask {
   targetUnit: string | null;
   completed: boolean;
   completedAt: string | null;
+  currentValue?: number;
+  periodTarget?: number;
+  periodKey?: string;
 }
 
 export interface SideQuestRun {
@@ -36,6 +41,9 @@ export interface SideQuestRun {
   startedAt: string;
   completedAt: string | null;
   completed: boolean;
+  currentDay?: number;
+  currentWeek?: number;
+  totalWeeks?: number;
   tasks: SideQuestTask[];
 }
 
@@ -60,7 +68,11 @@ interface QuestStore {
   subscribeToQuest: (title: string, difficulty: string, durationDays: number) => Promise<void>;
   createCustomQuest: (quest: CreateQuestInput) => Promise<boolean>;
   progressQuest: (id: string) => Promise<void>;
-  toggleTask: (questId: string, taskId: string) => Promise<void>;
+  toggleTask: (
+    questId: string,
+    taskId: string,
+    action?: 'toggle' | 'increment' | 'decrement'
+  ) => Promise<void>;
   restartQuest: (id: string) => Promise<void>;
   hydrateFromSync: (quests: SideQuest[], availableQuests: SideQuestTemplate[]) => void;
   reset: () => void;
@@ -106,6 +118,72 @@ const deduplicateQuests = (quests: SideQuest[]): SideQuest[] => {
   return Array.from(byKey.values());
 };
 
+const getTaskPeriodTargetClient = (task: SideQuestTask): number => {
+  if (typeof task.periodTarget === 'number' && task.periodTarget > 0) {
+    return task.periodTarget;
+  }
+  if (
+    task.frequency === 'weekly' &&
+    typeof task.targetValue === 'number' &&
+    task.targetValue > 1 &&
+    task.targetValue <= 14
+  ) {
+    return task.targetValue;
+  }
+  return 1;
+};
+
+const normalizeQuestForToday = (quest: SideQuest): SideQuest => {
+  if (!quest.currentRun || quest.currentRun.completed) return quest;
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  const startDateObj = new Date(quest.currentRun.startedAt);
+  const startStr = Number.isNaN(startDateObj.getTime())
+    ? todayStr
+    : format(startDateObj, 'yyyy-MM-dd');
+  const dayOffset = Math.max(
+    0,
+    differenceInCalendarDays(parseISO(todayStr), parseISO(startStr))
+  );
+  const currentDay = Math.min(Math.max(1, quest.durationDays || 1), dayOffset + 1);
+  const currentWeek = Math.floor(dayOffset / 7) + 1;
+
+  const tasks = (quest.currentRun.tasks || []).map((task) => {
+    const expectedPeriodKey =
+      task.frequency === 'once'
+        ? 'once'
+        : task.frequency === 'weekly'
+          ? `week-${currentWeek}`
+          : todayStr;
+    if (task.periodKey && task.periodKey !== expectedPeriodKey) {
+      return {
+        ...task,
+        completed: false,
+        completedAt: null,
+        currentValue: 0,
+        periodKey: expectedPeriodKey,
+      };
+    }
+    return task;
+  });
+
+  const dailyTasks = tasks.filter((t) => t.frequency === 'daily');
+  const todayCompleted =
+    dailyTasks.length > 0
+      ? dailyTasks.every((t) => t.completed)
+      : tasks.length > 0 && tasks.every((t) => t.completed);
+
+  return {
+    ...quest,
+    todayCompleted,
+    currentRun: {
+      ...quest.currentRun,
+      currentDay,
+      currentWeek,
+      tasks,
+    },
+  };
+};
+
 export const useQuestStore = create<QuestStore>()(
   persist(
     (set, get) => ({
@@ -120,10 +198,15 @@ export const useQuestStore = create<QuestStore>()(
         const hasCached = (get().quests?.length ?? 0) > 0;
         set({ isLoading: !hasCached, isValidating: true, error: null });
         try {
-          const response = await apiClient<SideQuest[]>('/quests');
+          const tzOffset = new Date().getTimezoneOffset();
+          const response = await apiClient<SideQuest[]>(
+            `/quests?timezoneOffset=${encodeURIComponent(String(tzOffset))}`
+          );
           if (seq !== questSyncSeq) return;
           set({
-            quests: Array.isArray(response) ? deduplicateQuests(response) : [],
+            quests: Array.isArray(response)
+              ? deduplicateQuests(response).map(normalizeQuestForToday)
+              : [],
             isLoading: false,
             isValidating: false,
           });
@@ -344,42 +427,104 @@ export const useQuestStore = create<QuestStore>()(
         }
       },
 
-      toggleTask: async (questId, taskId) => {
+      toggleTask: async (questId, taskId, action = 'toggle') => {
         ++questSyncSeq;
         const previousQuests = get().quests || [];
         const nowIso = new Date().toISOString();
+        const tzOffset = new Date().getTimezoneOffset();
 
-        // Optimistic update completo en Frame 0 (0ms): tarea, progreso, estado completado y contador
+        // Optimistic update completo en Frame 0 (0ms): tarea, progreso por días, estado completado y contador
         set({
           quests: previousQuests.map((quest) => {
             if (quest.id !== questId || !quest.currentRun) return quest;
-            const updatedTasks = (quest.currentRun.tasks || []).map((task) =>
-              task.id === taskId
-                ? {
-                    ...task,
-                    completed: !task.completed,
-                    completedAt: !task.completed ? nowIso : null,
-                  }
-                : task
-            );
-            const completedCount = updatedTasks.filter((t) => t.completed).length;
-            const allDone = updatedTasks.length > 0 && completedCount === updatedTasks.length;
+            const prevTasks = quest.currentRun.tasks || [];
+            const prevDaily = prevTasks.filter((t) => t.frequency === 'daily');
+            const wasTodayDone =
+              prevDaily.length > 0 && prevDaily.every((t) => t.completed);
+
+            const updatedTasks = prevTasks.map((task) => {
+              if (task.id !== taskId) return task;
+              const periodTarget = getTaskPeriodTargetClient(task);
+              const currentValue =
+                typeof task.currentValue === 'number'
+                  ? task.currentValue
+                  : task.completed
+                    ? periodTarget
+                    : 0;
+              let nextValue = currentValue;
+              if (periodTarget > 1) {
+                if (action === 'decrement') {
+                  nextValue = Math.max(0, currentValue - 1);
+                } else if (action === 'increment') {
+                  nextValue = Math.min(periodTarget, currentValue + 1);
+                } else {
+                  nextValue =
+                    currentValue >= periodTarget
+                      ? 0
+                      : Math.min(periodTarget, currentValue + 1);
+                }
+              } else {
+                if (action === 'decrement') nextValue = 0;
+                else if (action === 'increment') nextValue = 1;
+                else nextValue = currentValue >= 1 ? 0 : 1;
+              }
+              const completed = nextValue >= periodTarget;
+              return {
+                ...task,
+                currentValue: nextValue,
+                periodTarget,
+                completed,
+                completedAt: completed ? nowIso : null,
+              };
+            });
+
+            const dailyTasks = updatedTasks.filter((t) => t.frequency === 'daily');
+            const onceTasks = updatedTasks.filter((t) => t.frequency === 'once');
+            const nextTodayDone =
+              dailyTasks.length > 0
+                ? dailyTasks.every((t) => t.completed)
+                : updatedTasks.length > 0 && updatedTasks.every((t) => t.completed);
+            const allOnceDone =
+              onceTasks.length === 0 || onceTasks.every((t) => t.completed);
+
+            const safeDuration = Math.max(1, quest.durationDays || 1);
+            let nextProgress = quest.progress ?? 0;
+            if (dailyTasks.length > 0) {
+              if (!wasTodayDone && nextTodayDone) {
+                nextProgress = Math.min(safeDuration, nextProgress + 1);
+              } else if (wasTodayDone && !nextTodayDone) {
+                nextProgress = Math.max(0, nextProgress - 1);
+              }
+            } else if (updatedTasks.every((t) => t.frequency === 'once')) {
+              const doneOnce = onceTasks.filter((t) => t.completed).length;
+              nextProgress = allOnceDone
+                ? safeDuration
+                : Math.floor((doneOnce / Math.max(1, onceTasks.length)) * safeDuration);
+            }
+
+            const runCompleted =
+              dailyTasks.length > 0
+                ? nextProgress >= safeDuration && allOnceDone
+                : updatedTasks.every((t) => t.frequency === 'once')
+                  ? allOnceDone
+                  : quest.completed;
             const wasCompleted = quest.completed;
 
             return {
               ...quest,
-              progress: completedCount,
-              completed: allDone,
+              progress: nextProgress,
+              completed: runCompleted,
+              todayCompleted: nextTodayDone,
               completionCount:
-                allDone && !wasCompleted
+                runCompleted && !wasCompleted
                   ? quest.completionCount + 1
-                  : !allDone && wasCompleted
+                  : !runCompleted && wasCompleted
                     ? Math.max(0, quest.completionCount - 1)
                     : quest.completionCount,
               currentRun: {
                 ...quest.currentRun,
-                completed: allDone,
-                completedAt: allDone ? nowIso : null,
+                completed: runCompleted,
+                completedAt: runCompleted ? nowIso : null,
                 tasks: updatedTasks,
               },
             };
@@ -389,6 +534,7 @@ export const useQuestStore = create<QuestStore>()(
         try {
           const response = await apiClient<SideQuest>(`/quests/${questId}/tasks/${taskId}`, {
             method: 'PATCH',
+            body: JSON.stringify({ action, timezoneOffset: tzOffset }),
           });
           set({ quests: (get().quests || []).map((q) => (q.id === questId ? response : q)) });
         } catch (error: any) {
@@ -409,6 +555,7 @@ export const useQuestStore = create<QuestStore>()(
               ...quest,
               progress: 0,
               completed: false,
+              todayCompleted: false,
               currentRun: quest.currentRun
                 ? {
                     ...quest.currentRun,
@@ -416,10 +563,13 @@ export const useQuestStore = create<QuestStore>()(
                     startedAt: nowIso,
                     completedAt: null,
                     completed: false,
+                    currentDay: 1,
+                    currentWeek: 1,
                     tasks: (quest.currentRun.tasks || []).map((t) => ({
                       ...t,
                       completed: false,
                       completedAt: null,
+                      currentValue: 0,
                     })),
                   }
                 : null,
@@ -440,7 +590,9 @@ export const useQuestStore = create<QuestStore>()(
       hydrateFromSync: (quests, availableQuests) => {
         ++questSyncSeq;
         set({
-          quests: Array.isArray(quests) ? deduplicateQuests(quests) : get().quests,
+          quests: Array.isArray(quests)
+            ? deduplicateQuests(quests).map(normalizeQuestForToday)
+            : get().quests,
           availableQuests: Array.isArray(availableQuests)
             ? availableQuests
             : get().availableQuests,
@@ -462,6 +614,11 @@ export const useQuestStore = create<QuestStore>()(
         quests: state.quests,
         availableQuests: state.availableQuests,
       }),
+      onRehydrateStorage: () => (state) => {
+        if (state?.quests?.length) {
+          state.quests = state.quests.map(normalizeQuestForToday);
+        }
+      },
     }
   )
 );

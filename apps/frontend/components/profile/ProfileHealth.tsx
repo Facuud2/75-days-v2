@@ -307,7 +307,7 @@ export default function ProfileHealth({
             <Activity size={16} strokeWidth={1.5} aria-hidden="true" />
             Actividad
           </h3>
-          <div className="flex items-center gap-1">
+          <div className="flex flex-wrap items-center gap-1">
             {data.isStravaConnected ? (
               <button
                 type="button"

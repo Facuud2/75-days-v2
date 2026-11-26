@@ -147,7 +147,7 @@ export default function EdgeCasesPage() {
   }
 
   return (
-    <main dir="auto" className="min-h-screen bg-zinc-950 text-zinc-100 p-4 pb-32 md:p-8 md:pb-32">
+    <main dir="auto" className="min-h-dvh bg-zinc-950 text-zinc-100 p-4 pb-32 md:p-8 md:pb-32">
       <div className="mx-auto max-w-7xl space-y-8">
         <header className="space-y-3">
           <div className="flex flex-wrap items-center gap-3">

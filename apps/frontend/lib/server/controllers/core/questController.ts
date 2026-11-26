@@ -1,12 +1,66 @@
 import { z } from 'zod';
 import { getCorePrisma } from '../../db';
 import { ControllerRequest, ControllerResponse } from '../../http';
+import { localChallengeDate, parseTimezoneOffset } from '../../utils/challengeDate';
+import {
+  evaluateSideQuestRun,
+  getRunCurrentWeekAndDay,
+  getTaskPeriodKey,
+  getTaskPeriodTarget,
+  isCountableWeeklyTask,
+} from '../../utils/sideQuestRules';
 
-const taskInclude = { tasks: { orderBy: { order: 'asc' as const } } };
+const taskInclude = {
+  tasks: {
+    orderBy: { order: 'asc' as const },
+    include: { logs: true },
+  },
+};
 
-export const serializeQuest = (quest: any) => {
+export const serializeQuest = (quest: any, rawTimezoneOffset?: unknown) => {
   const run = quest.runs?.[0] ?? null;
-  const tasks = run?.tasks ?? [];
+  const tzOffset = parseTimezoneOffset(rawTimezoneOffset);
+  const todayStr = localChallengeDate(tzOffset);
+
+  if (!run) {
+    return {
+      id: quest.id,
+      userId: quest.userId,
+      templateId: quest.templateId,
+      title: quest.title,
+      description: quest.description,
+      difficulty: quest.difficulty,
+      durationDays: quest.durationDays,
+      icon: quest.icon,
+      startedAt: quest.startedAt,
+      progress: quest.progress ?? 0,
+      completed: quest.completed,
+      todayCompleted: false,
+      completionCount: quest.completionCount,
+      currentRun: null,
+    };
+  }
+
+  const evaluated = evaluateSideQuestRun({
+    durationDays: quest.durationDays,
+    run,
+    todayStr,
+    timezoneOffset: tzOffset,
+  });
+
+  const serializedTasks = (run.tasks ?? []).map((task: any) => {
+    const state = evaluated.taskStates.get(task.id);
+    const { logs: _logs, ...taskWithoutLogs } = task;
+    return {
+      ...taskWithoutLogs,
+      completed: state?.completed ?? false,
+      completedAt: state?.completedAt ?? null,
+      currentValue: state?.currentValue ?? 0,
+      periodTarget: state?.periodTarget ?? 1,
+      periodKey: state?.periodKey ?? todayStr,
+    };
+  });
+
   return {
     id: quest.id,
     userId: quest.userId,
@@ -17,19 +71,21 @@ export const serializeQuest = (quest: any) => {
     durationDays: quest.durationDays,
     icon: quest.icon,
     startedAt: quest.startedAt,
-    progress: tasks.filter((task: any) => task.completed).length,
-    completed: run?.completed ?? quest.completed,
+    progress: evaluated.progress,
+    completed: evaluated.runCompleted,
+    todayCompleted: evaluated.todayCompleted,
     completionCount: quest.completionCount,
-    currentRun: run
-      ? {
-          id: run.id,
-          runNumber: run.runNumber,
-          startedAt: run.startedAt,
-          completedAt: run.completedAt,
-          completed: run.completed,
-          tasks,
-        }
-      : null,
+    currentRun: {
+      id: run.id,
+      runNumber: run.runNumber,
+      startedAt: run.startedAt,
+      completedAt: run.completedAt,
+      completed: evaluated.runCompleted,
+      currentDay: evaluated.currentDay,
+      currentWeek: evaluated.currentWeek,
+      totalWeeks: evaluated.totalWeeks,
+      tasks: serializedTasks,
+    },
   };
 };
 
@@ -65,12 +121,15 @@ export const questInclude = {
 export const getQuests = async (req: ControllerRequest, res: ControllerResponse) => {
   try {
     const prisma = getCorePrisma();
+    const tzOffset = req.query?.timezoneOffset ?? req.headers?.['x-timezone-offset'];
     const quests = await prisma.sideQuest.findMany({
       where: { userId: req.user!.id },
       orderBy: { startedAt: 'desc' },
       include: questInclude,
     });
-    return res.json(deduplicateSerializedQuests(quests.map(serializeQuest)));
+    return res.json(
+      deduplicateSerializedQuests(quests.map((q) => serializeQuest(q, tzOffset)))
+    );
   } catch (error) {
     console.error('[questController.getQuests]', error);
     return res.status(500).json({ error: 'Internal server error' });
@@ -234,12 +293,30 @@ const getOwnedQuest = async (id: string, userId: string) => {
   return prisma.sideQuest.findFirst({ where: { id, userId }, include: questInclude });
 };
 
+const toggleTaskBodySchema = z
+  .object({
+    action: z.enum(['toggle', 'increment', 'decrement']).optional().default('toggle'),
+    timezoneOffset: z.number().optional(),
+  })
+  .optional();
+
 export const toggleQuestTask = async (
   req: ControllerRequest,
   res: ControllerResponse
 ) => {
   try {
     const prisma = getCorePrisma();
+    const parsedBody = toggleTaskBodySchema.parse(req.body ?? {}) ?? {
+      action: 'toggle' as const,
+      timezoneOffset: undefined,
+    };
+    const rawTzOffset =
+      parsedBody.timezoneOffset ??
+      req.query?.timezoneOffset ??
+      req.headers?.['x-timezone-offset'];
+    const tzOffset = parseTimezoneOffset(rawTzOffset);
+    const todayStr = localChallengeDate(tzOffset);
+
     const quest = await getOwnedQuest(req.params.id as string, req.user!.id);
     if (!quest?.runs[0]) {
       return res.status(404).json({ error: 'Active side quest run not found' });
@@ -250,47 +327,122 @@ export const toggleQuestTask = async (
         .json({ error: 'Restart the mission to begin a new run' });
     }
     const run = quest.runs[0];
-    const task = run.tasks.find((item) => item.id === req.params.taskId);
+    const task = run.tasks.find((item: any) => item.id === req.params.taskId);
     if (!task) {
       return res.status(404).json({ error: 'Side quest task not found' });
     }
 
-    const nextCompleted = !task.completed;
+    const { currentWeek } = getRunCurrentWeekAndDay(
+      run.startedAt,
+      todayStr,
+      quest.durationDays,
+      tzOffset
+    );
+    const periodKey = getTaskPeriodKey(task.frequency, todayStr, currentWeek);
+    const periodTarget = getTaskPeriodTarget(task);
+    const existingLogs = task.logs ?? [];
+    const currentLog = existingLogs.find((l: any) => l.periodKey === periodKey);
+    const currentValue = currentLog ? Math.max(0, currentLog.value) : 0;
+
+    let nextValue = currentValue;
+    if (isCountableWeeklyTask(task)) {
+      if (parsedBody.action === 'decrement') {
+        nextValue = Math.max(0, currentValue - 1);
+      } else if (parsedBody.action === 'increment') {
+        nextValue = Math.min(periodTarget, currentValue + 1);
+      } else {
+        nextValue =
+          currentValue >= periodTarget ? 0 : Math.min(periodTarget, currentValue + 1);
+      }
+    } else {
+      if (parsedBody.action === 'decrement') {
+        nextValue = 0;
+      } else if (parsedBody.action === 'increment') {
+        nextValue = 1;
+      } else {
+        nextValue = currentValue >= 1 ? 0 : 1;
+      }
+    }
+
     const now = new Date();
-    const updatedTasks = run.tasks.map((item) =>
+    const nextTaskCompleted = nextValue >= periodTarget;
+    const updatedLogsForTask =
+      nextValue > 0
+        ? [
+            ...existingLogs.filter((l: any) => l.periodKey !== periodKey),
+            { periodKey, value: nextValue, completedAt: now },
+          ]
+        : existingLogs.filter((l: any) => l.periodKey !== periodKey);
+
+    const updatedTasks = run.tasks.map((item: any) =>
       item.id === task.id
         ? {
             ...item,
-            completed: nextCompleted,
-            completedAt: nextCompleted ? now : null,
+            completed: nextTaskCompleted,
+            completedAt: nextTaskCompleted ? now : null,
+            logs: updatedLogsForTask,
           }
         : item
     );
-    const runCompleted =
-      updatedTasks.length > 0 && updatedTasks.every((item) => item.completed);
-    const nextCompletionCount = runCompleted
-      ? quest.completionCount + 1
-      : quest.completionCount;
 
-    await prisma.$transaction([
+    const evaluated = evaluateSideQuestRun({
+      durationDays: quest.durationDays,
+      run: { ...run, tasks: updatedTasks },
+      todayStr,
+      timezoneOffset: tzOffset,
+    });
+    const runCompleted = evaluated.runCompleted;
+    const wasCompleted = Boolean(run.completed);
+    const nextCompletionCount =
+      runCompleted && !wasCompleted
+        ? quest.completionCount + 1
+        : quest.completionCount;
+
+    const txOps: any[] = [
+      nextValue > 0
+        ? prisma.sideQuestTaskLog.upsert({
+            where: { taskId_periodKey: { taskId: task.id, periodKey } },
+            update: { value: nextValue, completedAt: now },
+            create: { taskId: task.id, periodKey, value: nextValue, completedAt: now },
+          })
+        : prisma.sideQuestTaskLog.deleteMany({
+            where: { taskId: task.id, periodKey },
+          }),
       prisma.sideQuestTask.update({
         where: { id: task.id },
-        data: { completed: nextCompleted, completedAt: nextCompleted ? now : null },
+        data: {
+          completed: nextTaskCompleted,
+          completedAt: nextTaskCompleted ? now : null,
+        },
       }),
       prisma.sideQuestRun.update({
         where: { id: run.id },
-        data: { completed: runCompleted, completedAt: runCompleted ? now : null },
+        data: {
+          completed: runCompleted,
+          completedAt: runCompleted ? now : null,
+        },
       }),
       prisma.sideQuest.update({
         where: { id: quest.id },
-        data: runCompleted
-          ? { completed: true, completionCount: { increment: 1 } }
-          : { completed: false },
+        data:
+          runCompleted && !wasCompleted
+            ? {
+                completed: true,
+                progress: evaluated.progress,
+                completionCount: { increment: 1 },
+              }
+            : {
+                completed: runCompleted,
+                progress: evaluated.progress,
+              },
       }),
-    ]);
+    ];
+
+    await prisma.$transaction(txOps);
 
     const updatedQuest = {
       ...quest,
+      progress: evaluated.progress,
       completed: runCompleted,
       completionCount: nextCompletionCount,
       runs: [
@@ -302,8 +454,11 @@ export const toggleQuestTask = async (
         },
       ],
     };
-    return res.json(serializeQuest(updatedQuest));
+    return res.json(serializeQuest(updatedQuest, tzOffset));
   } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Validation failed', details: error.issues });
+    }
     console.error('[questController.toggleQuestTask]', error);
     return res.status(500).json({ error: 'Internal server error' });
   }

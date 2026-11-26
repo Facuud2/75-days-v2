@@ -27,6 +27,7 @@ import {
   Plus,
   Scale,
   Share2,
+  ChevronRight,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -105,7 +106,14 @@ export default function Dashboard() {
     checkDailyReset,
     isLoading: isChallengeLoading
   } = useChallengeStore();
-  const { quests, fetchQuests, fetchAvailableQuests, isLoading: isQuestsLoading } = useQuestStore();
+  const {
+    quests,
+    fetchQuests,
+    fetchAvailableQuests,
+    toggleTask,
+    progressQuest,
+    isLoading: isQuestsLoading,
+  } = useQuestStore();
   const { openPlansModal, openLogWeightModal, isTutorialOpen, openTutorial, closeTutorial } = useUIStore();
 
   const router = useRouter();
@@ -213,35 +221,35 @@ export default function Dashboard() {
           }
         }}
         aria-pressed={goal.completed}
-        className={`group cursor-pointer w-full text-left bg-rose-950/20 border rounded-2xl px-3.5 py-3 sm:p-5 flex flex-col gap-3 transition-all duration-200 min-h-14 ${goal.completed
+        className={`group cursor-pointer w-full text-left bg-rose-950/20 border rounded-xl sm:rounded-2xl px-3 py-2.5 sm:p-5 flex flex-col gap-2.5 sm:gap-3 transition-all duration-200 min-h-12 sm:min-h-14 ${goal.completed
           ? 'border-rose-500/30 bg-rose-500/5 hover:border-rose-500/50 hover:bg-rose-500/10'
           : 'border-[#361726] hover:border-rose-500/50 hover:bg-rose-950/40'
           }`}
       >
         <div className="flex items-center gap-3 sm:gap-5">
-          <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0 transition-colors ${goal.completed
+          <div className={`w-9 h-9 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0 transition-colors ${goal.completed
             ? 'bg-rose-500/20 text-rose-500'
             : 'bg-rose-950/60 text-rose-500/70 group-hover:text-rose-500'
             }`}>
-            <IconComponent size={20} strokeWidth={1.5} className="sm:w-6 sm:h-6" />
+            <IconComponent size={18} strokeWidth={1.6} className="sm:w-6 sm:h-6" />
           </div>
 
           <div className="flex-1 min-w-0">
-            <h3 className={`font-semibold text-base sm:text-lg ${goal.description ? 'mb-0.5 sm:mb-1' : ''} transition-colors ${goal.completed ? 'text-white/70 line-through' : 'text-white'}`}>
+            <h3 className={`font-semibold text-[15px] leading-snug sm:text-lg ${goal.description ? 'mb-0.5 sm:mb-1' : ''} transition-colors ${goal.completed ? 'text-white/70 line-through' : 'text-white'}`}>
               {goal.title}
             </h3>
             {goal.description ? (
-              <p className={`text-sm transition-colors ${goal.completed ? 'text-white/50' : 'text-white/60'}`}>
+              <p className={`text-xs sm:text-sm transition-colors ${goal.completed ? 'text-white/50' : 'text-white/60'}`}>
                 {goal.description}
               </p>
             ) : null}
           </div>
 
-          <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center shrink-0 transition-all duration-200 group-active:scale-90 ${goal.completed
+          <div className={`w-6 h-6 sm:w-8 sm:h-8 rounded-full border-2 flex items-center justify-center shrink-0 transition-all duration-200 group-active:scale-90 ${goal.completed
             ? 'bg-rose-500 border-rose-500 shadow-[0_0_15px_var(--color-rose-500)] group-hover:bg-rose-400 group-hover:border-rose-400'
             : 'border-rose-950/40 group-hover:border-rose-500/50'
             }`}>
-            {goal.completed && <Check size={16} className="text-white" strokeWidth={3} />}
+            {goal.completed && <Check size={14} className="text-white sm:w-4 sm:h-4" strokeWidth={3} />}
           </div>
         </div>
 
@@ -542,6 +550,16 @@ export default function Dashboard() {
             })) as typeof quests)
           : rawQuests;
 
+  const activeQuests = (devQuests || []).filter(q => !q.completed);
+  const isQuestDoneToday = (q: (typeof activeQuests)[number]) => {
+    if (q.todayCompleted) return true;
+    const tasks = q.currentRun?.tasks ?? [];
+    const dailyTasks = tasks.filter(t => t.frequency === 'daily');
+    return dailyTasks.length > 0 && dailyTasks.every(t => t.completed);
+  };
+  const pendingQuestsToday = activeQuests.filter(q => !isQuestDoneToday(q));
+  const completedQuestsTodayCount = activeQuests.length - pendingQuestsToday.length;
+
   const completedTasks = (devLog?.goals || []).filter(g => g.completed).length;
   const totalTasks = devLog?.goals?.length || 0;
   const remainingTasks = totalTasks - completedTasks;
@@ -576,45 +594,45 @@ export default function Dashboard() {
   const completedMonthlyCount = currentMonthlyGoals.filter((g) => g.status === 'success').length;
 
   return (
-    <div className="dashboard-page grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 animate-in fade-in">
+    <div className="dashboard-page grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-8 animate-in fade-in">
 
       {/* Left Column */}
-      <div className="min-w-0 space-y-4 sm:space-y-6 lg:col-span-4">
+      <div className="min-w-0 space-y-3 sm:space-y-6 lg:col-span-4">
 
         {/* RESUMEN DEL DÍA: une avance del desafío y estado de las tareas */}
-        <section data-tour="daily-summary" className="bg-rose-950/20 border border-rose-950/40 rounded-3xl p-4 sm:p-6 shadow-lg" aria-labelledby="today-summary-title">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-rose-500 text-[10px] font-bold tracking-[0.2em] uppercase">Resumen de hoy</p>
-              <h2 id="today-summary-title" className="mt-1 text-sm font-semibold text-white/70">Día actual</h2>
+        <section data-tour="daily-summary" className="bg-rose-950/20 border border-rose-950/40 rounded-2xl sm:rounded-3xl p-3.5 sm:p-6 shadow-lg" aria-labelledby="today-summary-title">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-rose-500 text-[10px] font-bold tracking-[0.16em] uppercase whitespace-nowrap">Resumen de hoy</p>
+              <h2 id="today-summary-title" className="mt-0.5 text-xs sm:text-sm font-semibold text-white/70">Día actual</h2>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
               <button
                 type="button"
                 onClick={() => setShareModal({ open: true, initialKind: 'challenge' })}
                 aria-label="Compartir progreso del reto"
-                className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-white/80 transition-colors hover:bg-white/10 hover:text-white active:scale-95"
+                className="hit-44 inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] sm:text-xs font-semibold text-white/80 transition-colors hover:bg-white/10 hover:text-white active:scale-95"
               >
-                <Share2 className="h-3.5 w-3.5 text-rose-400" aria-hidden="true" />
+                <Share2 className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-rose-400" aria-hidden="true" />
                 <span>Compartir</span>
               </button>
               <Link
                 href="/calendar"
-                className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-white/80 transition-colors hover:bg-white/10 hover:text-white active:scale-95"
+                className="hit-44 inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] sm:text-xs font-semibold text-white/80 transition-colors hover:bg-white/10 hover:text-white active:scale-95"
               >
-                <CalendarRange className="h-3.5 w-3.5 text-rose-400" aria-hidden="true" />
+                <CalendarRange className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-rose-400" aria-hidden="true" />
                 <span>Calendario</span>
               </Link>
             </div>
           </div>
 
-          <div className="mt-3 flex items-baseline gap-1">
-            <span className="text-5xl font-bold tracking-tighter text-white tabular-nums sm:text-7xl">{currentDay}</span>
-            <span className="text-xl font-bold text-white/40 sm:text-2xl">/ 75 días</span>
+          <div className="mt-2 sm:mt-3 flex items-baseline gap-1.5">
+            <span className="text-[28px] leading-none font-bold tracking-[-0.03em] text-white tabular-nums whitespace-nowrap sm:text-6xl">{currentDay}</span>
+            <span className="text-sm font-semibold text-white/45 sm:text-xl whitespace-nowrap">/ 75 días</span>
           </div>
 
-          <div className="mt-4 space-y-2">
-            <div className="flex justify-between text-xs font-medium text-white/60">
+          <div className="mt-2.5 sm:mt-4 space-y-1.5 sm:space-y-2">
+            <div className="flex justify-between text-[11px] sm:text-xs font-medium text-white/60 tabular-nums">
               <span>Progreso del desafío</span>
               <span>{Math.round((currentDay / 75) * 100)}%</span>
             </div>
@@ -626,23 +644,23 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="mt-5 border-t border-white/10 pt-5">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-rose-500 text-[10px] font-bold tracking-[0.2em] uppercase">Estado diario</p>
-                <h3 className="mt-1 text-xl font-bold uppercase tracking-tight text-white">
+          <div className="mt-3.5 border-t border-white/10 pt-3.5 sm:mt-5 sm:pt-5">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-rose-500 text-[10px] font-bold tracking-[0.16em] uppercase">Estado diario</p>
+                <h3 className="mt-0.5 text-base sm:text-xl font-bold uppercase tracking-tight text-white">
                   {progress === 100 ? 'Completado' : 'En progreso'}
                 </h3>
               </div>
 
-              <div className="relative flex h-16 w-16 shrink-0 items-center justify-center sm:h-20 sm:w-20">
+              <div className="relative flex h-12 w-12 shrink-0 items-center justify-center sm:h-16 sm:w-16">
                 <svg className="h-full w-full -rotate-90" viewBox="0 0 36 36" aria-label={`${progress}% de tareas completadas`} role="img">
                   <path
                     className="text-white/5"
                     d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                     fill="none"
                     stroke="currentColor"
-                    strokeWidth="2"
+                    strokeWidth="2.4"
                   />
                   <path
                     className={`transition-all duration-250 ease-out ${progress === 100 ? 'text-emerald-600 dark:text-emerald-500' : 'text-rose-500'}`}
@@ -650,41 +668,41 @@ export default function Dashboard() {
                     d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                     fill="none"
                     stroke="currentColor"
-                    strokeWidth="2"
+                    strokeWidth="2.4"
                   />
                 </svg>
-                <span className={`absolute text-xs font-bold sm:text-sm ${progress === 100 ? 'text-emerald-600 dark:text-emerald-500' : 'text-white'}`}>
+                <span className={`absolute text-[11px] font-bold tabular-nums sm:text-sm ${progress === 100 ? 'text-emerald-600 dark:text-emerald-500' : 'text-white'}`}>
                   {progress}%
                 </span>
               </div>
             </div>
-            <p className="mt-3 max-w-[18rem] text-sm leading-relaxed text-white/60">
+            <p className="mt-1.5 sm:mt-2.5 text-xs sm:text-sm leading-snug text-white/60">
               {totalTasks === 0
                 ? 'Tu plan actual se enfoca en metas semanales o mensuales.'
                 : remainingTasks === 0
                   ? '¡Todas las tareas diarias completadas por hoy! Gran trabajo.'
                   : `${remainingTasks} tareas diarias restantes para terminar el día.`}
             </p>
-            <div className="mt-4">
+            <div className="mt-2.5 sm:mt-4">
               <button
                 type="button"
                 onClick={() => setShareModal({ open: true, initialKind: 'daily' })}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3.5 py-2.5 text-xs font-semibold text-white/85 transition-colors hover:bg-white/10 hover:text-white active:scale-[0.98]"
+                className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl sm:rounded-2xl border border-white/10 bg-white/5 px-3 py-2 sm:py-2.5 text-xs font-semibold text-white/85 transition-colors hover:bg-white/10 hover:text-white active:scale-[0.98]"
               >
                 <Share2 className="h-3.5 w-3.5 text-rose-400" aria-hidden="true" />
                 <span>Compartir estado de hoy</span>
               </button>
             </div>
             {(currentWeeklyGoals.length > 0 || currentMonthlyGoals.length > 0) && (
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className="mt-2.5 flex flex-wrap gap-1.5 sm:gap-2">
                 {currentWeeklyGoals.length > 0 && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-400/25 bg-sky-500/10 px-2.5 py-1 text-[11px] font-semibold text-sky-300 tabular-nums">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-400/25 bg-sky-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-sky-300 tabular-nums">
                     <CalendarRange size={12} aria-hidden="true" />
                     Sem {currentWeekNumber}: {completedWeeklyCount}/{currentWeeklyGoals.length}
                   </span>
                 )}
                 {currentMonthlyGoals.length > 0 && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-400/25 bg-violet-500/10 px-2.5 py-1 text-[11px] font-semibold text-violet-300 tabular-nums">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-400/25 bg-violet-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-violet-300 tabular-nums">
                     <CalendarClock size={12} aria-hidden="true" />
                     Mes {currentMonthNumber}: {completedMonthlyCount}/{currentMonthlyGoals.length}
                   </span>
@@ -693,14 +711,14 @@ export default function Dashboard() {
             )}
           </div>
 
-          <div className="mt-5 border-t border-white/10 pt-4 flex items-center justify-between gap-3">
+          <div className="mt-3.5 border-t border-white/10 pt-3 sm:mt-5 sm:pt-4 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2.5 min-w-0">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-rose-500/15 text-rose-400">
-                <Scale size={17} strokeWidth={1.8} aria-hidden="true" />
+              <span className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-lg sm:rounded-xl bg-rose-500/15 text-rose-400">
+                <Scale size={15} strokeWidth={1.8} aria-hidden="true" />
               </span>
               <div className="min-w-0">
-                <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/50">Peso de hoy</p>
-                <p className="text-sm font-bold text-white tabular-nums truncate">
+                <p className="text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.14em] text-white/50">Peso de hoy</p>
+                <p className="text-[13px] sm:text-sm font-bold text-white tabular-nums truncate">
                   {devLog?.weight ? `${devLog.weight} kg` : 'Sin registrar'}
                 </p>
               </div>
@@ -708,9 +726,9 @@ export default function Dashboard() {
             <button
               type="button"
               onClick={openLogWeightModal}
-              className="inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-xl border border-rose-500/30 bg-rose-500/15 px-3 py-1.5 text-xs font-bold text-rose-300 transition-colors hover:bg-rose-500/25 active:scale-95"
+              className="hit-44 inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-lg sm:rounded-xl border border-rose-500/30 bg-rose-500/15 px-2.5 py-1.5 text-xs font-bold text-rose-300 transition-colors hover:bg-rose-500/25 active:scale-95"
             >
-              <Plus size={14} strokeWidth={2.2} aria-hidden="true" />
+              <Plus size={13} strokeWidth={2.2} aria-hidden="true" />
               <span>{devLog?.weight ? 'Actualizar' : 'Registrar'}</span>
             </button>
           </div>
@@ -720,19 +738,19 @@ export default function Dashboard() {
 
       {/* Right Column */}
       <div className="lg:col-span-8">
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-4 sm:mb-8 gap-3 sm:gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-3 sm:mb-6 gap-2.5 sm:gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-rose-400 tracking-tight">Tareas de Hoy</h1>
-            <span className="text-white/60 text-sm font-medium capitalize">
+            <h1 className="text-xl sm:text-2xl font-bold text-rose-400 tracking-tight">Tareas de Hoy</h1>
+            <span className="text-white/60 text-xs sm:text-sm font-medium capitalize">
               {format(now, "EEEE, d 'de' MMMM", { locale: es })}
             </span>
           </div>
 
           {/* Pills Toggle */}
-          <div className="flex w-full sm:w-auto bg-rose-950/20 p-1 rounded-2xl border border-rose-950/40">
+          <div className="flex w-full sm:w-auto bg-rose-950/20 p-1 rounded-xl sm:rounded-2xl border border-rose-950/40">
             <button
               onClick={() => setActiveTab('plan')}
-              className={`flex-1 sm:flex-none min-h-11 px-4 sm:px-6 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === 'plan'
+              className={`flex-1 sm:flex-none min-h-9 sm:min-h-11 px-3 sm:px-6 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-sm font-bold transition-all ${activeTab === 'plan'
                 ? 'bg-rose-400 text-zinc-950 shadow-lg shadow-rose-500/20'
                 : 'text-white/60 hover:text-white hover:bg-white/5'
                 }`}
@@ -742,33 +760,49 @@ export default function Dashboard() {
             <button
               data-tour="missions-tab"
               onClick={() => setActiveTab('missions')}
-              className={`flex-1 sm:flex-none min-h-11 px-4 sm:px-6 py-2 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${activeTab === 'missions'
+              className={`flex-1 sm:flex-none min-h-9 sm:min-h-11 px-3 sm:px-6 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-1.5 sm:gap-2 ${activeTab === 'missions'
                 ? 'bg-rose-400 text-zinc-950 shadow-lg shadow-rose-500/20'
                 : 'text-white/60 hover:text-white hover:bg-white/5'
                 }`}
             >
               Misiones
-              {(devQuests || []).filter(q => !q.completed).length > 0 && (
-                <span className={`w-5 h-5 flex items-center justify-center rounded-full text-[10px] ${activeTab === 'missions' ? 'bg-white text-rose-500' : 'bg-rose-500/20 text-rose-500'
-                  }`}>
-                  {(devQuests || []).filter(q => !q.completed).length}
+              {pendingQuestsToday.length > 0 ? (
+                <span
+                  className={`min-w-4 h-4 sm:min-w-5 sm:h-5 px-1 inline-flex items-center justify-center rounded-full text-[10px] sm:text-[11px] font-extrabold tabular-nums ${activeTab === 'missions'
+                    ? 'bg-neutral-950 text-amber-300'
+                    : 'bg-amber-400 text-neutral-950 shadow-sm shadow-amber-500/30'
+                    }`}
+                >
+                  {pendingQuestsToday.length}
+                  <span className="sr-only"> misiones pendientes hoy</span>
                 </span>
-              )}
+              ) : activeQuests.length > 0 ? (
+                <span
+                  className={`w-4 h-4 sm:w-5 sm:h-5 inline-flex items-center justify-center rounded-full ${activeTab === 'missions'
+                    ? 'bg-neutral-950/15 text-neutral-950'
+                    : 'bg-emerald-500/20 text-emerald-400'
+                    }`}
+                  title="Misiones al día"
+                >
+                  <Check size={11} strokeWidth={3} />
+                  <span className="sr-only">Misiones secundarias al día</span>
+                </span>
+              ) : null}
             </button>
           </div>
         </div>
 
-        <div data-tour="daily-tasks" className="space-y-6 sm:space-y-8 min-h-[280px] sm:min-h-[400px]">
+        <div data-tour="daily-tasks" className="space-y-4 sm:space-y-8 min-h-[240px] sm:min-h-[400px]">
           {activeTab === 'plan' ? (
             /* TAB: PLAN ACTIVO */
             <>
               {currentPlanName === 'Custom' ? (
                 /* PLAN CUSTOM: all goals are personal */
                 <div>
-                    <h2 className="text-sm font-bold tracking-widest text-emerald-300 uppercase mb-4 flex items-center gap-2">
-                    <PlusCircle size={16} /> Metas Personalizadas
+                    <h2 className="text-xs sm:text-sm font-bold tracking-widest text-emerald-300 uppercase mb-2.5 sm:mb-4 flex items-center gap-2">
+                    <PlusCircle size={15} /> Metas Personalizadas
                   </h2>
-                  <div className="space-y-3">
+                  <div className="space-y-2 sm:space-y-3">
                     {devLog.goals.map(renderGoalItem)}
                   </div>
                 </div>
@@ -776,10 +810,10 @@ export default function Dashboard() {
                 <>
                   {/* TAREAS DEL PLAN BASE (Soft / Medium / Hard) */}
                   <div>
-                    <h2 className="text-sm font-bold tracking-widest text-rose-300 uppercase mb-4 flex items-center gap-2">
-                      <Target size={16} /> Plan {currentPlanName}
+                    <h2 className="text-xs sm:text-sm font-bold tracking-widest text-rose-300 uppercase mb-2.5 sm:mb-4 flex items-center gap-2">
+                      <Target size={15} /> Plan {currentPlanName}
                       </h2>
-                    <div className="space-y-3">
+                    <div className="space-y-2 sm:space-y-3">
                       {baseGoals.length > 0 ? (
                         baseGoals.map(renderGoalItem)
                       ) : (
@@ -793,15 +827,132 @@ export default function Dashboard() {
                   {/* METAS PERSONALIZADAS (extra goals on non-custom plans) */}
                   {customGoals.length > 0 && (
                     <div>
-                        <h2 className="text-sm font-bold tracking-widest text-emerald-300 uppercase mb-4 flex items-center gap-2">
-                        <PlusCircle size={16} /> Metas Personalizadas
+                        <h2 className="text-xs sm:text-sm font-bold tracking-widest text-emerald-300 uppercase mb-2.5 sm:mb-4 flex items-center gap-2">
+                        <PlusCircle size={15} /> Metas Personalizadas
                       </h2>
-                      <div className="space-y-3">
+                      <div className="space-y-2 sm:space-y-3">
                         {customGoals.map(renderGoalItem)}
                       </div>
                     </div>
                   )}
                 </>
+              )}
+
+              {/* SECCIÓN APILADA: MISIONES SECUNDARIAS ACTIVAS */}
+              {activeQuests.length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-3 sm:mb-4">
+                    <h2 className="text-xs sm:text-sm font-bold tracking-widest text-amber-400 uppercase flex items-center gap-2">
+                      <Trophy size={15} /> Misiones Secundarias
+                    </h2>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs font-semibold text-amber-400/85 tabular-nums">
+                        {completedQuestsTodayCount}/{activeQuests.length} hoy
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('missions')}
+                        className="text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)] underline-offset-4 hover:underline transition-colors cursor-pointer"
+                      >
+                        Ver todas
+                      </button>
+                    </div>
+                  </div>
+                  <div className="space-y-2.5 sm:space-y-3">
+                    {activeQuests.map(quest => {
+                      const todayDone = isQuestDoneToday(quest);
+                      const tasks = quest.currentRun?.tasks ?? [];
+                      const doneTasks = tasks.filter(t => t.completed).length;
+                      const currentQuestDay = quest.currentRun?.currentDay ?? Math.max(1, quest.progress || 1);
+                      const singleSimpleDailyTask =
+                        tasks.length === 1 &&
+                        tasks[0].frequency === 'daily' &&
+                        (!tasks[0].periodTarget || tasks[0].periodTarget <= 1)
+                          ? tasks[0]
+                          : null;
+                      const canQuickToggle = Boolean(singleSimpleDailyTask) || tasks.length === 0;
+
+                      const handleQuickAction = (e: React.MouseEvent) => {
+                        e.stopPropagation();
+                        if (singleSimpleDailyTask) {
+                          void toggleTask(quest.id, singleSimpleDailyTask.id, 'toggle');
+                        } else if (tasks.length === 0) {
+                          void progressQuest(quest.id);
+                        } else {
+                          setSelectedSideQuest(quest);
+                        }
+                      };
+
+                      return (
+                        <div
+                          key={quest.id}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => setSelectedSideQuest(quest)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              setSelectedSideQuest(quest);
+                            }
+                          }}
+                          aria-haspopup="dialog"
+                          aria-label={`Misión secundaria ${quest.title}: día ${currentQuestDay} de ${quest.durationDays}, ${todayDone ? 'completada hoy' : 'pendiente hoy'}`}
+                          className={`group cursor-pointer w-full text-left border rounded-2xl px-3.5 py-3 sm:px-4 sm:py-3.5 flex items-center gap-3 sm:gap-4 transition-all duration-200 focus-visible:outline-2 focus-visible:outline-amber-400 focus-visible:outline-offset-2 ${todayDone
+                            ? 'border-emerald-500/35 bg-emerald-500/[0.08] hover:border-emerald-400/55'
+                            : 'border-amber-500/30 bg-amber-500/[0.06] hover:border-amber-400/55 hover:bg-amber-500/[0.10]'
+                            }`}
+                        >
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors ${todayDone
+                            ? 'bg-emerald-500/20 text-emerald-400'
+                            : 'bg-amber-500/15 text-amber-400'
+                            }`}>
+                            <Trophy size={19} strokeWidth={1.75} />
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h3 className={`font-semibold text-sm sm:text-base truncate transition-colors ${todayDone ? 'text-white/75 line-through' : 'text-white'}`}>
+                                {quest.title}
+                              </h3>
+                              <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 ${todayDone
+                                ? 'bg-emerald-500/20 text-emerald-400'
+                                : 'bg-amber-500/15 text-amber-300'
+                                }`}>
+                                {todayDone ? 'Hoy listo' : 'Pendiente hoy'}
+                              </span>
+                            </div>
+                            <p className="text-xs text-[var(--text-muted)] mt-0.5 tabular-nums">
+                              Día {currentQuestDay} de {quest.durationDays}
+                              {tasks.length > 1 ? ` · ${doneTasks}/${tasks.length} tareas` : ''}
+                            </p>
+                          </div>
+
+                          {canQuickToggle ? (
+                            <button
+                              type="button"
+                              onClick={handleQuickAction}
+                              aria-label={todayDone ? `Desmarcar ${quest.title} hoy` : `Marcar ${quest.title} hoy`}
+                              aria-pressed={todayDone}
+                              className={`w-10 h-10 rounded-full border-2 flex items-center justify-center shrink-0 transition-all duration-150 cursor-pointer ${todayDone
+                                ? 'bg-emerald-500 border-emerald-500 text-neutral-950 hover:bg-emerald-400'
+                                : 'border-amber-400/50 text-amber-400 hover:bg-amber-400 hover:text-neutral-950 hover:border-amber-400'
+                                }`}
+                            >
+                              <Check size={16} strokeWidth={3} />
+                            </button>
+                          ) : (
+                            <div className="flex items-center gap-1.5 shrink-0 text-[var(--text-muted)] group-hover:text-amber-400 transition-colors">
+                              <span className="text-xs font-semibold tabular-nums">
+                                {doneTasks}/{tasks.length}
+                              </span>
+                              <ChevronRight size={16} />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               )}
 
               {/* SECCIÓN APILADA: METAS SEMANALES */}
@@ -842,7 +993,7 @@ export default function Dashboard() {
             /* TAB: MISIONES */
             <div className="animate-in fade-in slide-in-from-right-4 duration-300">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-sm font-bold tracking-widest text-emerald-300 uppercase flex items-center gap-2">
+                <h2 className="text-sm font-bold tracking-widest text-amber-400 uppercase flex items-center gap-2">
                   <Trophy size={16} /> Misiones Secundarias
                 </h2>
                 <button
@@ -883,13 +1034,17 @@ export default function Dashboard() {
                             <h3 className={`font-bold text-lg transition-colors ${quest.completed ? 'text-white/70 line-through' : 'text-white'}`}>
                               {quest.title}
                             </h3>
-                            {quest.completed && (
+                            {quest.completed ? (
                               <span className="text-[10px] uppercase font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-md">
                                 Completada
                               </span>
-                            )}
+                            ) : quest.todayCompleted ? (
+                              <span className="text-[10px] uppercase font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md">
+                                Hoy listo
+                              </span>
+                            ) : null}
                           </div>
-                          <div className="flex items-center gap-4">
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                             <span className="text-xs font-semibold text-white/40">
                               Dificultad: <span className={
                                 quest.difficulty === 'Easy' ? 'text-emerald-400' :
@@ -897,7 +1052,7 @@ export default function Dashboard() {
                               }>{quest.difficulty}</span>
                             </span>
                             <span className="text-xs font-semibold text-white/40">
-                              Progreso: <span className="text-white">{quest.progress}</span> / {quest.durationDays}
+                              Progreso: <span className="text-white">{quest.progress}</span> / {quest.durationDays} días
                             </span>
                             <span className="text-xs font-semibold text-white/40">
                               Completada: <span className="text-emerald-300">{quest.completionCount} {quest.completionCount === 1 ? 'vez' : 'veces'}</span>

@@ -1,10 +1,10 @@
 import { addDays, format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import type { DailyLog, Goal, PeriodGoalProgress } from '@/store/useChallengeStore';
-import { difficultyLabel, getNameHandle } from '@/lib/utils/display';
+import { difficultyLabel, getInitial, getNameHandle } from '@/lib/utils/display';
 import { parseLocalDate } from '@/lib/utils/date';
 
-export type ShareCardKind = 'daily' | 'challenge';
+export type ShareCardKind = 'daily' | 'challenge' | 'profile';
 export type ShareCardFormat = 'story' | 'post';
 export type ShareCardTheme = 'dark' | 'light';
 
@@ -46,6 +46,26 @@ export interface ChallengeSharePayload {
   monthlySummary: { completed: number; total: number } | null;
   dayGrid: ChallengeGridStatus[];
   handle: string | null;
+}
+
+export interface ProfileSharePayload {
+  name: string;
+  handle: string | null;
+  initial: string;
+  avatarUrl: string | null;
+  bannerUrl: string | null;
+  quote: string | null;
+  level: number;
+  memberSince: string | null;
+  streak: number;
+  challengesCompleted: number;
+  points: number;
+  currentDay: number;
+  totalDays: number;
+  isChallengeActive: boolean;
+  difficultyLabel: string;
+  unlockedAchievements: number;
+  totalAchievements: number;
 }
 
 function formatGoalProgressText(goal: Goal): string | null {
@@ -209,5 +229,48 @@ export function buildChallengeSharePayload(params: {
         : null,
     dayGrid,
     handle: rawHandle ? `@${rawHandle}` : null,
+  };
+}
+
+export function buildProfileSharePayload(params: {
+  name?: string | null;
+  avatarUrl?: string | null;
+  bannerUrl?: string | null;
+  quote?: string | null;
+  level?: number;
+  memberSince?: string | null;
+  streak?: number;
+  challengesCompleted?: number;
+  points?: number;
+  currentDay?: number;
+  totalDays?: number;
+  isChallengeActive?: boolean;
+  difficulty?: string | null;
+  unlockedAchievements?: number;
+  totalAchievements?: number;
+}): ProfileSharePayload {
+  const cleanName = params.name?.trim() || 'Usuario';
+  const rawHandle = getNameHandle(cleanName);
+  const totalDays = params.totalDays ?? 75;
+  const clampedDay = Math.max(0, Math.min(totalDays, params.currentDay ?? 0));
+
+  return {
+    name: cleanName,
+    handle: rawHandle ? `@${rawHandle}` : null,
+    initial: getInitial(cleanName),
+    avatarUrl: params.avatarUrl?.trim() || null,
+    bannerUrl: params.bannerUrl?.trim() || null,
+    quote: params.quote?.trim() || null,
+    level: Math.max(1, Math.floor(params.level ?? 1)),
+    memberSince: params.memberSince?.trim() || null,
+    streak: Math.max(0, params.streak ?? 0),
+    challengesCompleted: Math.max(0, params.challengesCompleted ?? 0),
+    points: Math.max(0, params.points ?? 0),
+    currentDay: clampedDay,
+    totalDays,
+    isChallengeActive: Boolean(params.isChallengeActive),
+    difficultyLabel: difficultyLabel(params.difficulty),
+    unlockedAchievements: Math.max(0, params.unlockedAchievements ?? 0),
+    totalAchievements: Math.max(0, params.totalAchievements ?? 0),
   };
 }

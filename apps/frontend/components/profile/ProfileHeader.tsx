@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Pencil } from 'lucide-react';
+import { Pencil, Share2 } from 'lucide-react';
 import { getInitial } from '@/lib/utils/display';
 
 interface ProfileHeaderProps {
@@ -12,6 +12,7 @@ interface ProfileHeaderProps {
   memberSince: string | null;
   quote?: string | null;
   onEdit: () => void;
+  onShare?: () => void;
   onAvatar: () => void;
   onBanner?: () => void;
   loading?: boolean;
@@ -25,6 +26,7 @@ export default function ProfileHeader({
   memberSince,
   quote,
   onEdit,
+  onShare,
   onAvatar,
   onBanner,
   loading = false,
@@ -86,8 +88,8 @@ export default function ProfileHeader({
       ) : null}
 
       <div className="p-4 sm:p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex min-w-0 flex-1 items-center gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className={`flex min-w-0 flex-1 flex-wrap gap-3 ${showBanner ? 'items-start' : 'items-center'}`}>
             <button
               type="button"
               onClick={onAvatar}
@@ -116,19 +118,31 @@ export default function ProfileHeader({
 
             {quote ? (
               <p
-                className="min-w-0 flex-1 line-clamp-2 text-xs sm:text-sm leading-snug [overflow-wrap:anywhere]"
+                className="min-w-[12rem] flex-1 text-xs sm:text-sm leading-snug [overflow-wrap:anywhere]"
                 style={{ color: 'var(--text-secondary)' }}
-                title={quote}
               >
                 {quote}
               </p>
             ) : null}
           </div>
 
-          <button type="button" onClick={onEdit} className="pv2-ghost shrink-0 px-3" aria-label="Editar perfil">
-            <Pencil size={16} strokeWidth={2} aria-hidden="true" />
-            <span className="hidden sm:inline">Editar</span>
-          </button>
+          <div className="flex shrink-0 items-center gap-1.5">
+            {onShare ? (
+              <button
+                type="button"
+                onClick={onShare}
+                className="pv2-ghost shrink-0 px-3"
+                aria-label="Compartir perfil"
+              >
+                <Share2 size={16} strokeWidth={2} aria-hidden="true" />
+                <span className="hidden sm:inline">Compartir</span>
+              </button>
+            ) : null}
+            <button type="button" onClick={onEdit} className="pv2-ghost shrink-0 px-3" aria-label="Editar perfil">
+              <Pencil size={16} strokeWidth={2} aria-hidden="true" />
+              <span className="hidden sm:inline">Editar</span>
+            </button>
+          </div>
         </div>
 
         <div className="mt-4 min-w-0">

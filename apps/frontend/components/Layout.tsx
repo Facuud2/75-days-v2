@@ -9,6 +9,7 @@ import { Home, Calendar, User, Settings, LogOut, Moon, Sun, Flame, Plus, Dumbbel
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
+import { MotionConfig } from 'motion/react';
 import { startCircularReveal } from '@/lib/themeTransition';
 import { getLocalDateString } from '@/lib/utils/date';
 import HeaderCountdownTimer from '@/components/HeaderCountdownTimer';
@@ -55,7 +56,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     openPlansModal,
     openLogMealModal,
     openLogWorkoutModal,
-    openLogWeightModal,
     closeLogWeightModal,
     isPlansModalOpen,
     isLogMealModalOpen,
@@ -138,7 +138,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   if (!isAuthenticated && !['/login', '/register', '/onboarding'].includes(pathname)) {
-    return <div className="min-h-screen bg-zinc-950 text-white">{children}</div>;
+    return <div className="min-h-dvh bg-zinc-950 text-white">{children}</div>;
   }
 
   const toggleTheme = (e: React.MouseEvent) => {
@@ -151,7 +151,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
 
   return (
-    <div className="app-shell min-h-screen flex flex-col">
+    <MotionConfig reducedMotion="user">
+    <div className="app-shell min-h-dvh flex flex-col">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[100] focus:rounded-xl focus:bg-rose-500 focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white focus:shadow-lg"
@@ -159,11 +160,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         Saltar al contenido principal
       </a>
       {/* Header */}
-      <header className="app-header sticky top-0 z-50 border-b px-4 md:px-6 py-3 md:py-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Flame className="text-rose-500" fill="currentColor" />
+      <header className="app-header sticky top-0 z-50 border-b px-4 md:px-6 py-2 md:py-4 flex items-center justify-between">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <Flame size={18} className="text-rose-500 sm:h-6 sm:w-6" fill="currentColor" />
           <span className="font-bold text-xl tracking-wider hidden sm:inline">75 DAYS</span>
-          <span className="text-rose-500 italic font-bold text-xl">
+          <span className="text-rose-500 italic font-bold text-[17px] leading-tight sm:text-xl">
             {isAuthenticated
               ? user?.onboardingCompleted
                 ? difficulty?.toUpperCase() || 'ACTIVO'
@@ -172,7 +173,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </span>
         </div>
 
-        <div className="flex items-center gap-4 md:gap-6">
+        <div className="flex items-center gap-2.5 md:gap-6">
           {/* Timer - Only visible once onboarding is completed */}
           {isAuthenticated && user?.onboardingCompleted && <HeaderCountdownTimer />}
 
@@ -217,9 +218,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 data-tour="nav-calendar"
                 href="/calendar"
                 aria-label="Abrir calendario"
-                className="lg:hidden inline-flex min-h-11 min-w-11 items-center justify-center app-header-control transition-colors rounded-full border active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
+                className="lg:hidden hit-44 inline-flex h-9 w-9 items-center justify-center app-header-control transition-colors rounded-full border active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
               >
-                <Calendar size={18} />
+                <Calendar size={17} strokeWidth={1.8} />
               </Link>
             )}
             {/* Mobile Settings shortcut: only shown on the Profile screen */}
@@ -228,26 +229,26 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 data-tour="nav-settings-mobile"
                 href="/settings"
                 aria-label="Abrir ajustes"
-                className="lg:hidden inline-flex min-h-11 min-w-11 items-center justify-center app-header-control transition-colors rounded-full border ml-1.5 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
+                className="lg:hidden hit-44 inline-flex h-9 w-9 items-center justify-center app-header-control transition-colors rounded-full border ml-1.5 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
               >
-                <Settings size={18} />
+                <Settings size={17} strokeWidth={1.8} />
               </Link>
             )}
 
             {/* Always visible theme toggle */}
-            <button data-tour="theme-toggle" aria-label={appearance === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'} onClick={(e) => toggleTheme(e)} className="app-header-control inline-flex min-h-11 min-w-11 items-center justify-center transition-colors rounded-full border ml-2 relative overflow-hidden active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400" title={appearance === 'dark' ? 'Cambiar a claro' : 'Cambiar a oscuro'}>
+            <button data-tour="theme-toggle" aria-label={appearance === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'} onClick={(e) => toggleTheme(e)} className="app-header-control hit-44 inline-flex h-9 w-9 items-center justify-center transition-colors rounded-full border ml-1.5 relative overflow-hidden active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400" title={appearance === 'dark' ? 'Cambiar a claro' : 'Cambiar a oscuro'}>
               <span className={`block transition-all duration-200 motion-reduce:transition-none ${appearance === 'dark' ? 'rotate-0 scale-100' : 'rotate-90 scale-0 absolute'}`}>
-                <Sun size={18} />
+                <Sun size={17} strokeWidth={1.8} />
               </span>
               <span className={`block transition-all duration-200 motion-reduce:transition-none ${appearance === 'dark' ? '-rotate-90 scale-0 absolute' : 'rotate-0 scale-100'}`}>
-                <Moon size={18} />
+                <Moon size={17} strokeWidth={1.8} />
               </span>
             </button>
 
             {/* Logout button: shown next to theme toggle only on Settings */}
             {isAuthenticated && pathname === '/settings' && (
-              <button aria-label="Cerrar sesión" onClick={() => setIsLogoutConfirmOpen(true)} className="inline-flex min-h-11 min-w-11 items-center justify-center app-header-control transition-colors rounded-full border ml-2 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400">
-                <LogOut size={18} />
+              <button aria-label="Cerrar sesión" onClick={() => setIsLogoutConfirmOpen(true)} className="hit-44 inline-flex h-9 w-9 items-center justify-center app-header-control transition-colors rounded-full border ml-1.5 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400">
+                <LogOut size={17} strokeWidth={1.8} />
               </button>
             )}
           </nav>
@@ -255,7 +256,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </header>
 
       {/* Main Content */}
-      <main id="main-content" className={`app-main flex-1 max-w-7xl w-full mx-auto px-4 pt-3 md:p-6 ${isAuthenticated && user?.onboardingCompleted ? 'pb-24 md:pb-6' : 'app-main--no-nav pb-3 md:pb-6'} ${!isAuthenticated ? 'flex items-center justify-center' : ''}`}>
+      <main id="main-content" className={`app-main flex-1 max-w-7xl w-full mx-auto px-4 pt-2.5 md:p-6 ${isAuthenticated && user?.onboardingCompleted ? 'pb-20 md:pb-6' : 'app-main--no-nav pb-3 md:pb-6'} ${!isAuthenticated ? 'flex items-center justify-center' : ''}`}>
         {children}
       </main>
 
@@ -276,7 +277,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           onClose={closeQuickActions}
           onMeal={openLogMealModal}
           onWorkout={openLogWorkoutModal}
-          onWeight={openLogWeightModal}
           onPlans={openPlansModal}
         />
       )}
@@ -294,30 +294,31 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       {/* Mobile Bottom Nav - Only visible if logged in */}
       {isAuthenticated && user?.onboardingCompleted && (
-        <nav data-tour="site-nav" aria-label="Navegación principal" className="mobile-bottom-nav lg:hidden fixed bottom-0 left-0 right-0 z-50 flex items-end justify-around gap-1 border-t border-white/10 px-1 pt-1">
-          <Link data-tour="nav-home" href="/dashboard" aria-current={pathname === '/dashboard' ? 'page' : undefined} className={`flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl px-1 py-1.5 text-[11px] font-semibold ${pathname === '/dashboard' ? '' : 'text-white/55'}`}>
-            <Home size={22} strokeWidth={pathname === '/dashboard' ? 2.4 : 1.8} />
+        <nav data-tour="site-nav" aria-label="Navegación principal" className="mobile-bottom-nav lg:hidden fixed bottom-0 left-0 right-0 z-50 flex items-end justify-around gap-1 border-t border-white/10 px-1.5 pt-1">
+          <Link data-tour="nav-home" href="/dashboard" aria-current={pathname === '/dashboard' ? 'page' : undefined} className={`flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1 text-[10px] font-medium leading-none ${pathname === '/dashboard' ? '' : 'text-white/55'}`}>
+            <Home size={20} strokeWidth={pathname === '/dashboard' ? 2.2 : 1.7} />
             <span>Inicio</span>
           </Link>
-          <Link data-tour="nav-nutrition" href="/nutrition" aria-current={pathname === '/nutrition' ? 'page' : undefined} className={`flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl px-1 py-1.5 text-[11px] font-semibold ${pathname === '/nutrition' ? '' : 'text-white/55'}`}>
-            <Utensils size={22} strokeWidth={pathname === '/nutrition' ? 2.4 : 1.8} />
+          <Link data-tour="nav-nutrition" href="/nutrition" aria-current={pathname === '/nutrition' ? 'page' : undefined} className={`flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1 text-[10px] font-medium leading-none ${pathname === '/nutrition' ? '' : 'text-white/55'}`}>
+            <Utensils size={20} strokeWidth={pathname === '/nutrition' ? 2.2 : 1.7} />
             <span>Nutrición</span>
           </Link>
-          <button data-tour="quick-actions" aria-label="Abrir acciones rápidas" aria-expanded={isQuickActionsOpen} onClick={openQuickActions} className="mobile-action-button -mt-6 flex min-w-0 flex-1 flex-col items-center gap-1 pb-1 text-[11px] font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300">
-            <span className="flex h-14 w-14 items-center justify-center rounded-full border-4 border-zinc-950 bg-rose-500 shadow-[0_8px_24px_rgba(244,63,94,0.4)] transition-transform active:scale-95">
-              <Plus size={28} strokeWidth={2.5} />
+          <button data-tour="quick-actions" aria-label="Abrir acciones rápidas" aria-expanded={isQuickActionsOpen} onClick={openQuickActions} className="mobile-action-button -mt-3.5 flex min-w-0 flex-1 flex-col items-center justify-center pb-0.5 text-[10px] font-medium text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300">
+            <span className="flex h-11 w-11 items-center justify-center rounded-full border-[3px] border-zinc-950 bg-rose-500 shadow-[0_6px_18px_rgba(244,63,94,0.38)] transition-transform active:scale-95">
+              <Plus size={22} strokeWidth={2.5} />
             </span>
           </button>
-          <Link data-tour="nav-fitness" href="/fitness" aria-current={pathname === '/fitness' ? 'page' : undefined} className={`flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl px-1 py-1.5 text-[11px] font-semibold ${pathname === '/fitness' ? '' : 'text-white/55'}`}>
-            <Dumbbell size={22} strokeWidth={pathname === '/fitness' ? 2.4 : 1.8} />
+          <Link data-tour="nav-fitness" href="/fitness" aria-current={pathname === '/fitness' ? 'page' : undefined} className={`flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1 text-[10px] font-medium leading-none ${pathname === '/fitness' ? '' : 'text-white/55'}`}>
+            <Dumbbell size={20} strokeWidth={pathname === '/fitness' ? 2.2 : 1.7} />
             <span>Fitness</span>
           </Link>
-          <Link data-tour="nav-profile" href="/profile" aria-current={pathname === '/profile' ? 'page' : undefined} className={`flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl px-1 py-1.5 text-[11px] font-semibold ${pathname === '/profile' ? '' : 'text-white/55'}`}>
-            <User size={22} strokeWidth={pathname === '/profile' ? 2.4 : 1.8} />
+          <Link data-tour="nav-profile" href="/profile" aria-current={pathname === '/profile' ? 'page' : undefined} className={`flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1 text-[10px] font-medium leading-none ${pathname === '/profile' ? '' : 'text-white/55'}`}>
+            <User size={20} strokeWidth={pathname === '/profile' ? 2.2 : 1.7} />
             <span>Perfil</span>
           </Link>
         </nav>
       )}
     </div>
+    </MotionConfig>
   );
 }
