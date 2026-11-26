@@ -1,33 +1,11 @@
 'use client';
 
 import DashboardLoading from '@/app/dashboard/loading';
+import CalendarLoading from '@/app/calendar/loading';
+import SettingsLoading from '@/app/settings/loading';
+import NutritionSkeleton from '@/components/nutrition/NutritionSkeleton';
+import FitnessSkeleton from '@/components/fitness/FitnessSkeleton';
 import ProfileSkeleton from '@/components/profile/ProfileSkeleton';
-
-function CalendarBootSkeleton() {
-  return (
-    <div className="calendar-page" aria-busy="true">
-      <div className="calendar-skeleton mb-4 min-h-[80px]" />
-      <div className="calendar-skeleton mb-4 min-h-[400px]" />
-      <div className="calendar-skeleton min-h-[300px]" />
-    </div>
-  );
-}
-
-function SettingsBootSkeleton() {
-  return (
-    <div className="mx-auto w-full max-w-5xl px-4 pt-5 pb-24 sm:px-6 lg:px-8 lg:py-8">
-      <div className="mb-6 space-y-2">
-        <div className="pv2-skeleton h-8 w-44" />
-        <div className="pv2-skeleton h-4 w-64" />
-      </div>
-      <div className="space-y-4">
-        <div className="pv2-skeleton h-20 w-full rounded-2xl" />
-        <div className="pv2-skeleton h-36 w-full rounded-2xl" />
-        <div className="pv2-skeleton h-28 w-full rounded-2xl" />
-      </div>
-    </div>
-  );
-}
 
 function OnboardingBootSkeleton() {
   return (
@@ -79,24 +57,34 @@ function DefaultAppBootSkeleton() {
   );
 }
 
+export function RouteContentSkeleton({ pathname }: { pathname: string }) {
+  if (pathname.startsWith('/dashboard')) {
+    return <DashboardLoading />;
+  }
+  if (pathname.startsWith('/nutrition')) {
+    return <NutritionSkeleton />;
+  }
+  if (pathname.startsWith('/fitness')) {
+    return <FitnessSkeleton />;
+  }
+  if (pathname.startsWith('/profile')) {
+    return <ProfileSkeleton />;
+  }
+  if (pathname.startsWith('/calendar')) {
+    return <CalendarLoading />;
+  }
+  if (pathname.startsWith('/settings')) {
+    return <SettingsLoading />;
+  }
+  if (pathname.startsWith('/onboarding')) {
+    return <OnboardingBootSkeleton />;
+  }
+  return <DefaultAppBootSkeleton />;
+}
+
 export default function RouteBootSkeleton({ pathname }: { pathname: string }) {
   if (pathname === '/login' || pathname === '/register') {
     return <AuthBootSkeleton />;
-  }
-
-  let content: React.ReactNode;
-  if (pathname.startsWith('/dashboard')) {
-    content = <DashboardLoading />;
-  } else if (pathname.startsWith('/profile')) {
-    content = <ProfileSkeleton />;
-  } else if (pathname.startsWith('/calendar')) {
-    content = <CalendarBootSkeleton />;
-  } else if (pathname.startsWith('/settings')) {
-    content = <SettingsBootSkeleton />;
-  } else if (pathname.startsWith('/onboarding')) {
-    content = <OnboardingBootSkeleton />;
-  } else {
-    content = <DefaultAppBootSkeleton />;
   }
 
   return (
@@ -106,7 +94,9 @@ export default function RouteBootSkeleton({ pathname }: { pathname: string }) {
       aria-label="Cargando"
       className="app-shell min-h-dvh px-4 pt-6 md:p-6"
     >
-      <div className="mx-auto w-full max-w-7xl">{content}</div>
+      <div className="mx-auto w-full max-w-7xl">
+        <RouteContentSkeleton pathname={pathname} />
+      </div>
     </div>
   );
 }

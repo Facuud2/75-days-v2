@@ -17,7 +17,6 @@ import {
   Trash2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import AuthGuard from '@/components/AuthGuard';
 import {
   FitnessOverviewResponse,
   healthService,
@@ -35,6 +34,7 @@ import {
 } from '@/lib/constants/fitness';
 import RoutineBuilderSheet from '@/components/fitness/RoutineBuilderSheet';
 import WorkoutSessionDetailSheet from '@/components/fitness/WorkoutSessionDetailSheet';
+import FitnessSkeleton from '@/components/fitness/FitnessSkeleton';
 
 export default function FitnessPage() {
   const [showHistory, setShowHistory] = useState(false);
@@ -166,9 +166,12 @@ export default function FitnessPage() {
 
   const hasSavedRoutines = routines.length > 0;
 
+  if (loading && !overview && routines.length === 0 && !storeTodayStats) {
+    return <FitnessSkeleton />;
+  }
+
   return (
-    <AuthGuard>
-      <div className="mx-auto w-full max-w-4xl space-y-5 pb-6">
+    <div className="mx-auto w-full max-w-4xl space-y-5 pb-6">
         {/* Top Hub Header + History Icon Shortcut */}
         <div className="flex items-end justify-between gap-3">
           <div>
@@ -650,6 +653,5 @@ export default function FitnessPage() {
           onDelete={handleDeleteWorkout}
         />
       </div>
-    </AuthGuard>
   );
 }

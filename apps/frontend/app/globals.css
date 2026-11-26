@@ -1036,12 +1036,12 @@ body {
   pointer-events: none;
 }
 
-::view-transition-old(root) {
+html[data-theme-transition]::view-transition-old(root) {
   animation: none;
   z-index: 1;
 }
 
-::view-transition-new(root) {
+html[data-theme-transition]::view-transition-new(root) {
   animation: 520ms cubic-bezier(0.23, 1, 0.32, 1) both theme-circle-reveal;
   z-index: 2;
 }
@@ -1057,41 +1057,6 @@ body {
   }
 }
 
-/* ── Route handoff — spatial continuity between primary app pages ────────── */
-@supports (view-transition-name: root) {
-  html[data-page-nav]::view-transition-old(root),
-  html[data-page-nav]::view-transition-new(root) {
-    animation-duration: 220ms;
-    animation-timing-function: var(--ease-smooth-out);
-  }
-
-  html[data-page-nav]::view-transition-old(root) {
-    animation-name: page-old-fade;
-  }
-
-  html[data-page-nav="forward"]::view-transition-new(root) {
-    animation-name: page-new-enter;
-  }
-
-  html[data-page-nav="backward"]::view-transition-new(root) {
-    animation-name: page-new-enter-backward;
-  }
-}
-
-@keyframes page-old-fade {
-  to { opacity: 0; }
-}
-
-@keyframes page-new-enter {
-  from { opacity: 0; transform: translateX(10px); }
-  to { opacity: 1; transform: translateX(0); }
-}
-
-@keyframes page-new-enter-backward {
-  from { opacity: 0; transform: translateX(-10px); }
-  to { opacity: 1; transform: translateX(0); }
-}
-
 /* The reveal remains a colour/state transition for people who prefer less
    motion, but the spatial expansion is removed. */
 @media (prefers-reduced-motion: reduce) {
@@ -1100,22 +1065,8 @@ body {
     transition-duration: 180ms !important;
   }
 
-  ::view-transition-new(root) {
+  html[data-theme-transition]::view-transition-new(root) {
     animation: 180ms ease both theme-fade-reveal;
-  }
-
-  html[data-page-nav]::view-transition-old(root),
-  html[data-page-nav]::view-transition-new(root) {
-    animation-duration: 120ms;
-    animation-timing-function: ease-out;
-  }
-
-  html[data-page-nav]::view-transition-old(root) {
-    animation-name: page-old-fade;
-  }
-
-  html[data-page-nav]::view-transition-new(root) {
-    animation-name: theme-fade-reveal;
   }
 
   @keyframes theme-fade-reveal {

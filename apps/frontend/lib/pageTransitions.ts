@@ -2,47 +2,18 @@ import type { AppRouterInstance } from 'next/dist/shared/lib/app-router-context.
 
 export type PageTransitionDirection = 'forward' | 'backward' | 'none';
 
-type ViewTransitionDocument = Document & {
-  startViewTransition?: (callback: () => void) => { finished: Promise<void> };
-};
-
 /**
- * Navigate between app routes with a small spatial handoff when the platform
- * supports View Transitions. The callback is intentionally synchronous: the
- * App Router queues the route update while the browser captures both states.
+ * Triggers Next.js App Router navigation directly without blocking the frame
+ * in `document.startViewTransition` (which would capture the old DOM twice
+ * while `router.push` resolves asynchronously and freeze fixed nav bars).
+ * Spatial transitions and instant skeletons are synchronized in `AppLayout`.
  */
 export function navigateWithPageTransition(
   router: AppRouterInstance,
   href: string,
-  direction: PageTransitionDirection = 'none',
+  _direction: PageTransitionDirection = 'none',
 ): void {
-  if (typeof window === 'undefined' || typeof document === 'undefined') {
-    router.push(href);
-    return;
-  }
-
-  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const startViewTransition = (document as ViewTransitionDocument).startViewTransition;
-
-  if (prefersReducedMotion || typeof startViewTransition !== 'function') {
-    router.push(href);
-    return;
-  }
-
-  const root = document.documentElement;
-  if (direction !== 'none') root.dataset.pageNav = direction;
-
-  // `startViewTransition` is a Web IDL method: extracting it loses its
-  // required Document receiver in Safari/Chromium.
-  const transition = startViewTransition.call(document, () => {
-    router.push(href);
-  });
-
-  transition.finished
-    .catch(() => undefined)
-    .finally(() => {
-      delete root.dataset.pageNav;
-    });
+  router.push(href);
 }
 
 export function getPageTransitionDirection(currentPath: string, nextPath: string): PageTransitionDirection {

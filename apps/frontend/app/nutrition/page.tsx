@@ -29,6 +29,7 @@ import FoodPhotoGrid from '@/components/FoodPhotoGrid';
 import CaloriesBurnedCard from '@/components/CaloriesBurnedCard';
 import MealsPlanCard from '@/components/MealsPlanCard';
 import FloatingActionButton from '@/components/FloatingActionButton';
+import NutritionSkeleton from '@/components/nutrition/NutritionSkeleton';
 
 const LogMealModal = dynamic(() => import('@/components/LogMealModal'), { ssr: false });
 const EditMealModal = dynamic(() => import('@/components/EditMealModal'), { ssr: false });
@@ -255,6 +256,10 @@ function NutritionPageInner() {
   };
 
   const isToday = selectedDate === today;
+
+  if (isLoadingStats && !stats) {
+    return <NutritionSkeleton />;
+  }
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-4 pb-6">

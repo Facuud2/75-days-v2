@@ -46,6 +46,7 @@ export function startCircularReveal(
     root.style.setProperty('--vt-y', `${y}px`);
     root.style.setProperty('--vt-r', `${maxRadius}px`);
 
+    root.dataset.themeTransition = 'true';
     const vt = (document as any).startViewTransition(() => {
         // Disable per-element CSS transitions so every element snaps to its new
         // value immediately — giving the API a clean, fully-updated "after" snapshot.
@@ -54,5 +55,10 @@ export function startCircularReveal(
     });
 
     // Re-enable element transitions after the circle animation completes.
-    vt.finished.then(() => root.classList.remove('no-transition'));
+    vt.finished
+        .catch(() => undefined)
+        .finally(() => {
+            root.classList.remove('no-transition');
+            delete root.dataset.themeTransition;
+        });
 }
