@@ -13,6 +13,7 @@ import {
   ArrowUp,
   Camera,
   Check,
+  CheckCircle2,
   ChevronRight,
   ImagePlus,
   Keyboard,
@@ -29,6 +30,7 @@ import {
   ZapOff,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { aiService, AiMealItem, blobToBase64 } from '@/lib/api/ai';
 import { FatSecretFoodItem, healthService, Ingredient } from '@/lib/api/health';
 import {
@@ -48,6 +50,7 @@ import {
 } from '@/lib/utils/mealMath';
 import { useVoiceRecorder } from '@/hooks/useVoiceRecorder';
 import { useHealthStore } from '@/store/useHealthStore';
+import { REDUCED_MOTION_TRANSITION, SHEET_ENTER_SPRING } from '@/lib/motion/sheetPhysics';
 
 export type MealTypeOption = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 export type AnalyzerStage = 'CAMERA' | 'TEXT_INPUT' | 'ANALYZING' | 'REVIEW';
@@ -134,6 +137,7 @@ export default function MealPhotoAnalyzer({
   onConfirmMeal,
 }: MealPhotoAnalyzerProps) {
   const [stage, setStageInternal] = useState<AnalyzerStage>('CAMERA');
+  const reduceMotion = useReducedMotion();
   const [cameraStatus, setCameraStatus] = useState<'starting' | 'ready' | 'fallback'>(
     'starting'
   );
@@ -194,7 +198,7 @@ export default function MealPhotoAnalyzer({
     void fetchCatalogIfNeeded();
   }, [fetchCatalogIfNeeded]);
 
-  const stopCameraStream = useCallback(() => {
+  const stopCameraTracks = useCallback(() => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
@@ -202,9 +206,13 @@ export default function MealPhotoAnalyzer({
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
+  }, []);
+
+  const stopCameraStream = useCallback(() => {
+    stopCameraTracks();
     setFlashOn(false);
     setFlashSupported(false);
-  }, []);
+  }, [stopCameraTracks]);
 
   const handleToggleFlash = useCallback(async () => {
     const videoTrack = streamRef.current?.getVideoTracks()[0];
@@ -225,7 +233,7 @@ export default function MealPhotoAnalyzer({
 
   useEffect(() => {
     if (stage !== 'CAMERA') {
-      stopCameraStream();
+      stopCameraTracks();
       return;
     }
 
@@ -283,7 +291,7 @@ export default function MealPhotoAnalyzer({
       cancelled = true;
       stopCameraStream();
     };
-  }, [stage, stopCameraStream]);
+  }, [stage, stopCameraStream, stopCameraTracks]);
 
   useEffect(() => {
     const sourceUrl = capturedImage?.previewUrl;
@@ -939,9 +947,43 @@ export default function MealPhotoAnalyzer({
       ) : null}
 
       {/* STAGE 4: CLEAN iOS NATIVE REVIEW — ZERO BLOAT, DIRECT MANUAL EDITING */}
-      {stage === 'REVIEW' ? (
-        <div className="space-y-3.5 pb-2">
-          {/* 1. Compact Header: Thumbnail + Auto-growing Title + Retake */}
+      <AnimatePresence initial={false} mode="wait">
+        {stage === 'REVIEW' ? (
+          <motion.div
+            key="meal-review"
+            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 18, scale: 0.985 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
+            transition={reduceMotion ? REDUCED_MOTION_TRANSITION : SHEET_ENTER_SPRING}
+            className="space-y-3.5 pb-2"
+          >
+            {/* A short confirmation makes the analysis-to-review handoff feel intentional. */}
+            <motion.div
+              initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={
+                reduceMotion
+                  ? REDUCED_MOTION_TRANSITION
+                  : { ...SHEET_ENTER_SPRING, delay: 0.08 }
+              }
+              className="flex items-center gap-2.5 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-inset)] px-3.5 py-2.5"
+              role="status"
+              aria-live="polite"
+            >
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--accent-fill)] text-[var(--on-accent)]">
+                <CheckCircle2 className="h-4.5 w-4.5" strokeWidth={2.3} aria-hidden="true" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[14px] font-semibold leading-tight text-[var(--text-primary)]">
+                  Comida identificada
+                </p>
+                <p className="mt-0.5 text-[12px] leading-tight text-[var(--text-muted)]">
+                  Revisá los datos antes de registrarla
+                </p>
+              </div>
+            </motion.div>
+
+            {/* 1. Compact Header: Thumbnail + Auto-growing Title + Retake */}
           <div className="flex items-start gap-3">
             {capturedImage ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -1552,8 +1594,9 @@ export default function MealPhotoAnalyzer({
               <span className="tabular-nums">Registrar {totals.calories} kcal</span>
             </button>
           </div>
-        </div>
-      ) : null}
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }

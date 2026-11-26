@@ -124,6 +124,30 @@ export function AppearanceSection() {
             onChange={switchAppearance}
           />
         </div>
+
+        {/* Quick toggle row for easy access */}
+        {(() => {
+          const isEffectiveDark =
+            appearance === 'dark' ||
+            (appearance === 'system' &&
+              typeof window !== 'undefined' &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches);
+          return (
+            <div className="px-3.5 pb-3.5">
+              <SettingsRow
+                icon={isEffectiveDark ? Sun : Moon}
+                iconBgClass="bg-rose-500/15"
+                iconColorClass="text-[var(--accent-text)]"
+                title={isEffectiveDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+                detail={appearance === 'system' ? 'Sincronizado con el sistema' : undefined}
+                onClick={(e) => {
+                  const next: AppearanceMode = isEffectiveDark ? 'light' : 'dark';
+                  switchAppearance(next, e);
+                }}
+              />
+            </div>
+          );
+        })()}
       </SettingsGroup>
 
       <SettingsGroup

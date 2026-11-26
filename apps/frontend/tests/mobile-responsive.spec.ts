@@ -43,7 +43,14 @@ test.describe('mobile platform baseline', () => {
         await expect(page.getByRole('dialog', { name: /¿Qué quieres registrar\?/i })).toBeVisible();
         await expect(page.getByRole('button', { name: 'Registrar comida' })).toBeVisible();
         await expect(page.getByRole('button', { name: 'Registrar entrenamiento' })).toBeVisible();
-        await page.getByRole('button', { name: 'Cancelar' }).click();
+        await page.getByRole('button', { name: 'Registrar entrenamiento' }).click();
+        await expect(page.getByRole('dialog', { name: /Registrar entrenamiento/i })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Registrar uno ya hecho' })).toBeVisible();
+        await page.getByRole('button', { name: 'Nuevo entrenamiento' }).click();
+        await expect(page.getByRole('heading', { name: '¿Dónde entrenaste?' })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Cerrar registro de entrenamiento' })).toBeVisible();
+        await page.getByRole('button', { name: 'Cerrar registro de entrenamiento' }).click();
+        await expect(page.getByRole('dialog', { name: /Registrar entrenamiento/i })).toBeHidden();
         await expect(page.getByRole('dialog', { name: /¿Qué quieres registrar\?/i })).toBeHidden();
       } else {
         await expect(page.locator('.mobile-bottom-nav')).toBeHidden();

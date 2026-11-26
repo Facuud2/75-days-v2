@@ -278,7 +278,7 @@ export default function FitnessPage() {
             {/* Clearly separated secondary path: Log a past / already-finished workout */}
             <button
               type="button"
-              onClick={openLogWorkoutModal}
+              onClick={() => openLogWorkoutModal()}
               className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-2xl border border-zinc-800/90 bg-zinc-900/50 px-4 py-3 text-left transition-colors hover:border-zinc-700 hover:bg-zinc-900 active:scale-[0.99]"
             >
               <span className="flex items-center gap-3">

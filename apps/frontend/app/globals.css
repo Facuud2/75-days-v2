@@ -779,6 +779,35 @@ html[data-appearance="dark"][data-palette="bamboo-green"] {
 .side-quest-card[data-completed='false']:active { transform: scale(0.98); }
 .side-quest-card:focus-visible { outline: 2px solid var(--color-rose-300); outline-offset: 3px; }
 
+/* ══════════════════════════════════════════════════════════════
+   DASHBOARD CARD — semantic surface tokens, not flat rose tints
+   ══════════════════════════════════════════════════════════════ */
+.dashboard-card {
+  background-color: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  transition: background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.dashboard-card:hover {
+  border-color: var(--border-interactive);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .dashboard-card:hover {
+    background-color: var(--surface-card-hover);
+    box-shadow: 0 2px 12px rgb(0 0 0 / 12%);
+  }
+}
+
+/* Frosted glass header — enhanced with stronger saturation and subtle border */
+.app-header {
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+  background-color: color-mix(in srgb, var(--app-surface) 85%, transparent);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
 /* ── Foco visible ───────────────────────────────────────────────────────── */
 .pv2-page :where(button, a, [role="button"], summary, input, select, textarea):focus-visible {
   outline: 2px solid var(--focus-ring);
@@ -1028,6 +1057,41 @@ body {
   }
 }
 
+/* ── Route handoff — spatial continuity between primary app pages ────────── */
+@supports (view-transition-name: root) {
+  html[data-page-nav]::view-transition-old(root),
+  html[data-page-nav]::view-transition-new(root) {
+    animation-duration: 220ms;
+    animation-timing-function: var(--ease-smooth-out);
+  }
+
+  html[data-page-nav]::view-transition-old(root) {
+    animation-name: page-old-fade;
+  }
+
+  html[data-page-nav="forward"]::view-transition-new(root) {
+    animation-name: page-new-enter;
+  }
+
+  html[data-page-nav="backward"]::view-transition-new(root) {
+    animation-name: page-new-enter-backward;
+  }
+}
+
+@keyframes page-old-fade {
+  to { opacity: 0; }
+}
+
+@keyframes page-new-enter {
+  from { opacity: 0; transform: translateX(10px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes page-new-enter-backward {
+  from { opacity: 0; transform: translateX(-10px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
 /* The reveal remains a colour/state transition for people who prefer less
    motion, but the spatial expansion is removed. */
 @media (prefers-reduced-motion: reduce) {
@@ -1038,6 +1102,20 @@ body {
 
   ::view-transition-new(root) {
     animation: 180ms ease both theme-fade-reveal;
+  }
+
+  html[data-page-nav]::view-transition-old(root),
+  html[data-page-nav]::view-transition-new(root) {
+    animation-duration: 120ms;
+    animation-timing-function: ease-out;
+  }
+
+  html[data-page-nav]::view-transition-old(root) {
+    animation-name: page-old-fade;
+  }
+
+  html[data-page-nav]::view-transition-new(root) {
+    animation-name: theme-fade-reveal;
   }
 
   @keyframes theme-fade-reveal {
@@ -2655,6 +2733,39 @@ html[data-appearance="light"] .calendar-page .calendar-day--rest { background: c
 /* ══════════════════════════════════════════════════════════════════════════════
    TRANSITIONS.DEV MOTION TOKENS & MICRO-INTERACTIONS (.t-check, .t-think)
    ══════════════════════════════════════════════════════════════════════════════ */
+/* Occasional list entrance: spatial consistency, not a reading animation. */
+.ios-stagger > * {
+  --stagger-index: 0;
+  animation: ios-stagger-in var(--duration-fast) var(--ease-smooth-out) both;
+  animation-delay: calc(var(--stagger-index) * var(--duration-stagger));
+}
+
+.ios-stagger > *:nth-child(1) { --stagger-index: 0; }
+.ios-stagger > *:nth-child(2) { --stagger-index: 1; }
+.ios-stagger > *:nth-child(3) { --stagger-index: 2; }
+.ios-stagger > *:nth-child(4) { --stagger-index: 3; }
+.ios-stagger > *:nth-child(5) { --stagger-index: 4; }
+.ios-stagger > *:nth-child(6) { --stagger-index: 5; }
+.ios-stagger > *:nth-child(7) { --stagger-index: 6; }
+.ios-stagger > *:nth-child(8) { --stagger-index: 7; }
+
+@keyframes ios-stagger-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ios-stagger > * {
+    animation-duration: 120ms;
+    animation-delay: 0ms;
+  }
+
+  @keyframes ios-stagger-in {
+    from { opacity: 0; transform: none; }
+    to { opacity: 1; transform: none; }
+  }
+}
+
 :root {
   --duration-stagger: 40ms;
   --duration-micro: 80ms;

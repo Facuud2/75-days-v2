@@ -261,16 +261,15 @@ describe('Fitness Module Rework — Metrics, Validation, Catalog & Anti-IDOR Sec
       },
     ];
 
-    // Gym includes machines & bodyweight (excludes outdoor-only cardio)
+    // Gym includes machines & gym-specific equipment (mutually exclusive with home/outdoor)
     expect(filterExercises(sample, { environment: 'gym' }).map((e) => e.id)).toEqual([
       'Leg_Press',
-      'Plank',
     ]);
-    // Home includes no-machinery exercises (e.g. plank/abs/legs), excludes gym machines & cardio
+    // Home includes no-machinery exercises (e.g. plank/abs/legs), excludes gym machines & outdoor cardio
     expect(filterExercises(sample, { environment: 'home' }).map((e) => e.id)).toEqual([
       'Plank',
     ]);
-    // Outdoor includes outdoor cardio activities
+    // Outdoor includes outdoor cardio activities (mutually exclusive with home/gym)
     expect(filterExercises(sample, { environment: 'outdoor' }).map((e) => e.id)).toEqual([
       'Trail_Running_Walking',
     ]);

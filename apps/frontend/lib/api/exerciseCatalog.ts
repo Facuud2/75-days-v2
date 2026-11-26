@@ -177,6 +177,7 @@ export function normalizeSearchText(value: string): string {
 
 export type ExerciseEnvironment = 'all' | 'gym' | 'home' | 'outdoor';
 
+/** Equipment that can be used at home without a gym setup */
 export const HOME_EQUIPMENT_KEYS = new Set<string>([
   'body only',
   'none',
@@ -184,32 +185,72 @@ export const HOME_EQUIPMENT_KEYS = new Set<string>([
   'exercise ball',
   'foam roll',
   'medicine ball',
+  'kettlebells',
+  'dumbbell',
 ]);
 
-const OUTDOOR_CARDIO_IDS = new Set<string>([
-  'Trail_Running_Walking',
-  'Bicycling',
-  'Skating',
+/** Equipment that requires a gym or professional setup */
+const GYM_EQUIPMENT_KEYS = new Set<string>([
+  'machine',
+  'cable',
+  'barbell',
+  'e-z curl bar',
 ]);
 
+/**
+ * Classify an exercise into one of the three mutually exclusive environments.
+ *
+ * Decision logic (evaluated in order, first match wins):
+ * 1. OUTDOOR: cardio exercise NOT done on a gym machine (running, cycling,
+ *    skating, rope jumping, prowler sprints, etc.)
+ * 2. GYM: exercise requires gym-specific equipment (machines, cables, barbells,
+ *    e-z curl bars) or 'other' equipment in gym-centric categories
+ *    (strongman, powerlifting, olympic weightlifting)
+ * 3. HOME: exercise uses only home-friendly equipment (bodyweight, bands, balls,
+ *    dumbbells, kettlebells, and 'other' equipment that is not gym-specific)
+ * 4. FALLBACK: everything else → home (stretching, plyometrics, bodyweight)
+ */
 export function matchesExerciseEnvironment(
   exercise: CatalogExercise,
   environment: ExerciseEnvironment
 ): boolean {
   if (environment === 'all') return true;
-  if (environment === 'home') {
-    return exercise.category !== 'cardio' && HOME_EQUIPMENT_KEYS.has(exercise.equipment);
-  }
+
+  const { equipment, category } = exercise;
+
   if (environment === 'outdoor') {
+    // Cardio on non-machine equipment = outdoor activity
+    return category === 'cardio' && equipment !== 'machine';
+  }
+
+  if (environment === 'gym') {
+    // Explicit gym equipment
+    if (GYM_EQUIPMENT_KEYS.has(equipment)) return true;
+    // 'other' equipment in gym-centric categories
+    if (
+      equipment === 'other' &&
+      ['strongman', 'powerlifting', 'olympic weightlifting'].includes(category)
+    )
+      return true;
+    // Machine-based cardio (stationary bike, treadmill, elliptical, rowing, stairmaster)
+    if (category === 'cardio' && equipment === 'machine') return true;
+    return false;
+  }
+
+  if (environment === 'home') {
+    // Outdoor cardio (non-machine cardio) belongs exclusively to 'outdoor'
+    if (category === 'cardio' && equipment !== 'machine') return false;
     return (
-      exercise.category === 'cardio' &&
-      (OUTDOOR_CARDIO_IDS.has(exercise.id) ||
-        exercise.equipment === 'none' ||
-        exercise.equipment === 'other')
+      HOME_EQUIPMENT_KEYS.has(equipment) ||
+      // 'other' equipment that is NOT gym-specific → home-friendly
+      (equipment === 'other' &&
+        !['strongman', 'powerlifting', 'olympic weightlifting'].includes(
+          category
+        ))
     );
   }
-  // 'gym': machines, cables, weights, and physical/bodyweight exercises, excluding outdoor-only cardio
-  return !(exercise.category === 'cardio' && OUTDOOR_CARDIO_IDS.has(exercise.id));
+
+  return false;
 }
 
 export interface ExerciseFilterOptions {

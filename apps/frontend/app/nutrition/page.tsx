@@ -320,10 +320,10 @@ function NutritionPageInner() {
               </p>
               <div className="mt-0.5 flex items-baseline gap-1.5 whitespace-nowrap">
                 <span className="text-[28px] font-bold leading-none tracking-[-0.03em] text-[var(--text-primary)]">
-                  {consumed}
+                  {consumed.toLocaleString('es-AR')}
                 </span>
                 <span className="text-[14px] font-medium text-[var(--text-muted)]">
-                  / {dailyGoal} kcal
+                  / {dailyGoal.toLocaleString('es-AR')} kcal
                 </span>
               </div>
             </div>
@@ -337,8 +337,8 @@ function NutritionPageInner() {
                 }`}
               >
                 {overGoal
-                  ? `+${Math.abs(remaining)} kcal`
-                  : `${Math.max(0, remaining)} restantes`}
+                  ? `+${Math.abs(remaining).toLocaleString('es-AR')} kcal`
+                  : `${Math.max(0, remaining).toLocaleString('es-AR')} restantes`}
               </span>
               <button
                 type="button"
@@ -448,7 +448,7 @@ function NutritionPageInner() {
 
           {/* Food Photo Grid */}
           <div className="pt-1">
-            <FoodPhotoGrid meals={mealsForPhotos} />
+            <FoodPhotoGrid meals={mealsForPhotos} onMealPress={(meal) => setEditingMeal(meal)} />
           </div>
 
           {/* Goal meta with quick toggle */}

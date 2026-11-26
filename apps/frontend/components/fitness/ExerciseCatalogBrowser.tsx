@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   Check,
   ChevronRight,
@@ -10,6 +11,9 @@ import {
   Sparkles,
   Trash2,
   X,
+  Dumbbell,
+  Home,
+  Tent,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
@@ -139,6 +143,12 @@ export default function ExerciseCatalogBrowser({
         (eq) => eq.key === 'all' || HOME_EQUIPMENT_KEYS.has(eq.key)
       );
     }
+    if (effectiveEnvironment === 'outdoor') {
+      // Outdoor: show only equipment relevant to outdoor activities
+      return EQUIPMENT_CHIPS.filter(
+        (eq) => eq.key === 'all' || eq.key === 'none'
+      );
+    }
     return EQUIPMENT_CHIPS;
   }, [effectiveEnvironment]);
 
@@ -153,6 +163,7 @@ export default function ExerciseCatalogBrowser({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [detailExercise, setDetailExercise] = useState<CatalogExercise | null>(null);
   const [isCreateCustomOpen, setIsCreateCustomOpen] = useState(false);
+  const prefersReducedMotion = useReducedMotion();
 
   useEffect(() => {
     let cancelled = false;
@@ -288,30 +299,43 @@ export default function ExerciseCatalogBrowser({
 
       {/* Environment Filter Pills (when not fixed by parent) */}
       {!controlledEnvironment && (
-        <div className="flex items-center gap-1.5">
+        <div className="-mx-1 flex items-center gap-1.5 overflow-x-auto overscroll-behavior-contain px-1 py-0.5 pr-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {[
-            { key: 'all' as const, label: 'Todos' },
-            { key: 'gym' as const, label: 'En gimnasio' },
-            { key: 'home' as const, label: 'En casa' },
-          ].map((env) => (
-            <button
-              key={env.key}
-              type="button"
-              onClick={() => setLocalEnvironment(env.key)}
-              className={`min-h-8 cursor-pointer rounded-full border px-3 text-xs font-semibold transition-colors active:scale-95 ${
-                localEnvironment === env.key
-                  ? 'border-rose-600/70 bg-rose-600/15 text-rose-400'
-                  : 'border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              {env.label}
-            </button>
-          ))}
+            { key: 'all' as const, label: 'Todos', icon: null },
+            { key: 'home' as const, label: 'En casa', icon: Home },
+            { key: 'gym' as const, label: 'Gimnasio', icon: Dumbbell },
+            { key: 'outdoor' as const, label: 'Outdoor', icon: Tent },
+          ].map((env) => {
+            const Icon = env.icon;
+            const isActive = localEnvironment === env.key;
+            return (
+              <button
+                key={env.key}
+                type="button"
+                onClick={() => setLocalEnvironment(env.key)}
+                className="relative flex min-h-[44px] min-w-[44px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-semibold transition-colors duration-200 ease-out active:scale-95 touch-action-manipulation select-none"
+                style={{
+                  borderColor: isActive ? 'rgba(244, 63, 94, 0.7)' : 'rgba(39, 39, 42, 0.8)',
+                  backgroundColor: isActive ? 'rgba(244, 63, 94, 0.12)' : 'rgba(9, 9, 11, 0.6)',
+                  color: isActive ? '#f43f5e' : '#a1a1aa',
+                  boxShadow: isActive ? '0 0 0 1px rgba(244, 63, 94, 0.3), 0 2px 8px rgba(244, 63, 94, 0.1)' : 'none',
+                }}
+                aria-pressed={isActive}
+              >
+                {Icon && <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={isActive ? 2.5 : 2} />}
+                <span>{env.label}</span>
+                {/* Inline active indicator dot — never clips at container edge */}
+                {isActive && (
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-500" aria-hidden="true" />
+                )}
+              </button>
+            );
+          })}
         </div>
       )}
 
-      {/* Horizontal Body Zone Chips */}
-      <div className="-mx-1 flex items-center gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {/* Horizontal Body Zone Chips — mobile-native: overscroll-contain prevents page scroll hijack */}
+      <div className="-mx-1 flex items-center gap-1.5 overflow-x-auto overscroll-behavior-contain px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {BODY_ZONE_CHIPS.map((chip) => {
           const active = !onlyCustom && bodyZone === chip.key;
           return (
@@ -322,11 +346,13 @@ export default function ExerciseCatalogBrowser({
                 setOnlyCustom(false);
                 setBodyZone(chip.key);
               }}
-              className={`min-h-9 shrink-0 cursor-pointer rounded-full border px-3.5 text-xs font-semibold transition-colors active:scale-95 ${
-                active
-                  ? 'border-rose-600 bg-rose-600 text-[#ffffff] shadow-sm shadow-rose-600/25'
-                  : 'border-zinc-800 bg-zinc-900/80 text-zinc-300 hover:border-zinc-700'
-              }`}
+              className="min-h-9 shrink-0 cursor-pointer rounded-full border px-3.5 text-xs font-semibold transition-colors active:scale-95 touch-action-manipulation select-none"
+              style={{
+                borderColor: active ? 'rgba(244, 63, 94, 0.8)' : 'rgba(39, 39, 42, 0.8)',
+                backgroundColor: active ? 'rgba(244, 63, 94, 1)' : 'rgba(9, 9, 11, 0.8)',
+                color: active ? '#ffffff' : '#d4d4d8',
+                boxShadow: active ? '0 0 0 1px rgba(244, 63, 94, 0.4), 0 2px 8px rgba(244, 63, 94, 0.15)' : 'none',
+              }}
             >
               {chip.label}
             </button>
@@ -349,9 +375,9 @@ export default function ExerciseCatalogBrowser({
         </button>
       </div>
 
-      {/* Expandable Equipment Filter Chips */}
+      {/* Expandable Equipment Filter Chips — mobile-native: overscroll-contain */}
       {showEquipmentFilter && (
-        <div className="flex flex-wrap gap-1.5 rounded-2xl border border-zinc-800/80 bg-zinc-900/50 p-3">
+        <div className="flex flex-wrap gap-1.5 overscroll-behavior-contain rounded-2xl border border-zinc-800/80 bg-zinc-900/50 p-3">
           {availableEquipmentChips.map((eq) => (
             <button
               key={eq.key}
@@ -396,37 +422,65 @@ export default function ExerciseCatalogBrowser({
       </div>
 
       {/* Catalog Grid / List — strictly non-nested interactive controls */}
-      {loading ? (
-        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-          {Array.from({ length: 8 }).map((_, idx) => (
-            <div
-              key={idx}
-              className="h-20 animate-pulse rounded-2xl border border-zinc-800/70 bg-zinc-900/60"
-            />
-          ))}
-        </div>
-      ) : loadError ? (
-        <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-6 text-center text-sm text-red-400">
-          {loadError}
-        </div>
-      ) : visibleItems.length === 0 ? (
-        <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/40 p-8 text-center">
-          <p className="text-sm font-semibold text-white">No encontramos ejercicios con esos filtros</p>
-          <p className="mt-1 text-xs text-zinc-400">
-            Prueba buscando en español o inglés, o crea tu propio ejercicio personalizado.
-          </p>
-          <button
-            type="button"
-            onClick={() => setIsCreateCustomOpen(true)}
-            className="mt-4 inline-flex min-h-11 cursor-pointer items-center gap-1.5 rounded-xl bg-rose-600 px-4 text-xs font-bold text-[#ffffff] hover:bg-rose-700"
+      <AnimatePresence mode="wait">
+        {loading ? (
+          <motion.div
+            key="loading"
+            initial={prefersReducedMotion ? undefined : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={prefersReducedMotion ? undefined : { opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="grid grid-cols-1 gap-2.5 sm:grid-cols-2"
           >
-            <Plus className="h-4 w-4" />
-            Crear ejercicio propio
-          </button>
-        </div>
-      ) : (
-        <>
-          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+            {Array.from({ length: 8 }).map((_, idx) => (
+              <div
+                key={idx}
+                className="h-20 animate-pulse rounded-2xl border border-zinc-800/70 bg-zinc-900/60"
+              />
+            ))}
+          </motion.div>
+        ) : loadError ? (
+          <motion.div
+            key="error"
+            initial={prefersReducedMotion ? undefined : { opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={prefersReducedMotion ? undefined : { opacity: 0, y: -8 }}
+            transition={{ duration: 0.25, ease: 'easeOut' }}
+            className="rounded-2xl border border-red-500/20 bg-red-500/10 p-6 text-center text-sm text-red-400"
+          >
+            {loadError}
+          </motion.div>
+        ) : visibleItems.length === 0 ? (
+          <motion.div
+            key="empty"
+            initial={prefersReducedMotion ? undefined : { opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={prefersReducedMotion ? undefined : { opacity: 0, y: -8 }}
+            transition={{ duration: 0.25, ease: 'easeOut' }}
+            className="rounded-2xl border border-zinc-800/80 bg-zinc-900/40 p-8 text-center"
+          >
+            <p className="text-sm font-semibold text-white">No encontramos ejercicios con esos filtros</p>
+            <p className="mt-1 text-xs text-zinc-400">
+              Prueba buscando en español o inglés, o crea tu propio ejercicio personalizado.
+            </p>
+            <button
+              type="button"
+              onClick={() => setIsCreateCustomOpen(true)}
+              className="mt-4 inline-flex min-h-11 cursor-pointer items-center gap-1.5 rounded-xl bg-rose-600 px-4 text-xs font-bold text-[#ffffff] hover:bg-rose-700"
+            >
+              <Plus className="h-4 w-4" />
+              Crear ejercicio propio
+            </button>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="list"
+            initial={prefersReducedMotion ? undefined : { opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={prefersReducedMotion ? undefined : { opacity: 0, y: -6 }}
+            transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+            className="grid grid-cols-1 gap-2.5 sm:grid-cols-2"
+          >
             {visibleItems.map((exercise) => {
               const isSelected = selectedIds.has(exercise.id);
               return (
@@ -497,23 +551,23 @@ export default function ExerciseCatalogBrowser({
                 </article>
               );
             })}
-          </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-          {visibleCount < filtered.length && (
-            <button
-              type="button"
-              onClick={() =>
-                setPagination((prev) => ({
-                  key: filterKey,
-                  count: (prev.key === filterKey ? prev.count : PAGE_SIZE) + PAGE_SIZE,
-                }))
-              }
-              className="mx-auto mt-1 min-h-11 w-full max-w-xs cursor-pointer rounded-2xl border border-zinc-800 bg-zinc-900 px-5 text-xs font-semibold text-zinc-200 transition-colors hover:border-zinc-700 hover:bg-zinc-800 active:scale-[0.98]"
-            >
-              Mostrar más ({filtered.length - visibleCount} restantes)
-            </button>
-          )}
-        </>
+      {visibleCount < filtered.length && (
+        <button
+          type="button"
+          onClick={() =>
+            setPagination((prev) => ({
+              key: filterKey,
+              count: (prev.key === filterKey ? prev.count : PAGE_SIZE) + PAGE_SIZE,
+            }))
+          }
+          className="mx-auto mt-1 min-h-11 w-full max-w-xs cursor-pointer rounded-2xl border border-zinc-800 bg-zinc-900 px-5 text-xs font-semibold text-zinc-200 transition-colors hover:border-zinc-700 hover:bg-zinc-800 active:scale-[0.98]"
+        >
+          Mostrar más ({filtered.length - visibleCount} restantes)
+        </button>
       )}
 
       {/* Picker sticky confirmation bar */}

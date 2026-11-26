@@ -54,6 +54,7 @@ interface LogWorkoutModalProps {
   onSaved: () => void;
   initialData?: any;
   onDelete?: (id: string) => void;
+  quickLog?: boolean;
 }
 
 const SPORT_OPTIONS = [
@@ -104,6 +105,7 @@ export default function LogWorkoutModal(props: LogWorkoutModalProps) {
       onSaved={props.onSaved}
       initialData={props.initialData}
       onDelete={props.onDelete}
+      quickLog={props.quickLog}
     />
   );
 }
@@ -114,6 +116,7 @@ function LogWorkoutModalContent({
   onSaved,
   initialData,
   onDelete,
+  quickLog,
 }: Omit<LogWorkoutModalProps, 'isOpen'>) {
   const {
     profileData,
@@ -130,7 +133,7 @@ function LogWorkoutModalContent({
   const reduceMotion = useReducedMotion();
 
   const [step, setStep] = useState<'environment' | 'details'>(() =>
-    initialData ? 'details' : 'environment'
+    quickLog ? 'details' : initialData ? 'details' : 'environment'
   );
   const [stepDirection, setStepDirection] = useState<1 | -1>(1);
   const [environment, setEnvironment] = useState<LogEnvironment>(

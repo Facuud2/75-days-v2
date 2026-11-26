@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowDown, ArrowUp, Plus, Save, Trash2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { CatalogExercise } from '@/lib/api/exerciseCatalog';
@@ -43,6 +43,19 @@ function RoutineBuilderSheetContent({
   );
   const [showPicker, setShowPicker] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (showPicker) {
+        setShowPicker(false);
+      } else {
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [showPicker, onClose]);
 
   const isEditingExisting = Boolean(
     initialRoutine && !initialRoutine.id.startsWith('template-')

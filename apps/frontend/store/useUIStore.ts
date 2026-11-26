@@ -11,8 +11,12 @@ interface UIState {
   openLogMealModal: () => void;
   closeLogMealModal: () => void;
   isLogWorkoutModalOpen: boolean;
-  openLogWorkoutModal: () => void;
+  isQuickLogWorkout: boolean;
+  openLogWorkoutModal: (quickLog?: boolean) => void;
   closeLogWorkoutModal: () => void;
+  isLogWorkoutMenuOpen: boolean;
+  openLogWorkoutMenu: () => void;
+  closeLogWorkoutMenu: () => void;
   isLogWeightModalOpen: boolean;
   openLogWeightModal: () => void;
   closeLogWeightModal: () => void;
@@ -32,8 +36,17 @@ export const useUIStore = create<UIState>((set) => ({
   openLogMealModal: () => set({ isLogMealModalOpen: true }),
   closeLogMealModal: () => set({ isLogMealModalOpen: false }),
   isLogWorkoutModalOpen: false,
-  openLogWorkoutModal: () => set({ isLogWorkoutModalOpen: true }),
-  closeLogWorkoutModal: () => set({ isLogWorkoutModalOpen: false }),
+  isQuickLogWorkout: false,
+  openLogWorkoutModal: (quickLog = false) =>
+    set({
+      isLogWorkoutModalOpen: true,
+      isQuickLogWorkout: quickLog,
+      isLogWorkoutMenuOpen: false,
+    }),
+  closeLogWorkoutModal: () => set({ isLogWorkoutModalOpen: false, isQuickLogWorkout: false }),
+  isLogWorkoutMenuOpen: false,
+  openLogWorkoutMenu: () => set({ isLogWorkoutMenuOpen: true }),
+  closeLogWorkoutMenu: () => set({ isLogWorkoutMenuOpen: false }),
   isLogWeightModalOpen: false,
   openLogWeightModal: () => set({ isLogWeightModalOpen: true }),
   closeLogWeightModal: () => set({ isLogWeightModalOpen: false }),

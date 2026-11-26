@@ -9,8 +9,9 @@ import { Home, Calendar, User, Settings, LogOut, Moon, Sun, Flame, Plus, Dumbbel
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
-import { MotionConfig } from 'motion/react';
+import { MotionConfig, motion } from 'motion/react';
 import { startCircularReveal } from '@/lib/themeTransition';
+import { getPageTransitionDirection, navigateWithPageTransition } from '@/lib/pageTransitions';
 import { getLocalDateString } from '@/lib/utils/date';
 import HeaderCountdownTimer from '@/components/HeaderCountdownTimer';
 
@@ -20,6 +21,7 @@ const LogMealModal = dynamic(() => import('@/components/LogMealModal'), { ssr: f
 const LogWorkoutModal = dynamic(() => import('@/components/LogWorkoutModal'), { ssr: false });
 const LogWeightModal = dynamic(() => import('@/components/LogWeightModal'), { ssr: false });
 const QuickActionsSheet = dynamic(() => import('@/components/QuickActionsSheet'), { ssr: false });
+const LogWorkoutMenu = dynamic(() => import('@/components/LogWorkoutMenu'), { ssr: false });
 const LogoutConfirmSheet = dynamic(() => import('@/components/profile/LogoutConfirmSheet'), { ssr: false });
 const LiveWorkoutOverlay = dynamic(() => import('@/components/fitness/LiveWorkoutOverlay'), { ssr: false });
 const ActiveWorkoutBanner = dynamic(() => import('@/components/fitness/ActiveWorkoutBanner'), { ssr: false });
@@ -56,10 +58,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     openPlansModal,
     openLogMealModal,
     openLogWorkoutModal,
+    openLogWorkoutMenu,
+    closeLogWorkoutMenu,
     closeLogWeightModal,
     isPlansModalOpen,
     isLogMealModalOpen,
     isLogWorkoutModalOpen,
+    isLogWorkoutMenuOpen,
+    isQuickLogWorkout,
     isLogWeightModalOpen,
     isQuickActionsOpen,
     openQuickActions,
@@ -131,6 +137,36 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [appearance, colorPalette, customPalette]);
 
+  // Prefetch primary navigation tabs for snappier mobile/tablet transitions
+  useEffect(() => {
+    if (!isAuthenticated || !user?.onboardingCompleted) return;
+    ['/dashboard', '/nutrition', '/fitness', '/profile'].forEach((route) => {
+      router.prefetch(route);
+    });
+  }, [isAuthenticated, user?.onboardingCompleted, router]);
+
+  const navigateFromAppNav = useCallback((href: string) => {
+    const direction = getPageTransitionDirection(pathname, href);
+    navigateWithPageTransition(router, href, direction);
+  }, [pathname, router]);
+
+  const appNavLinkProps = useCallback((href: string) => ({
+    href,
+    onClick: (event: React.MouseEvent<HTMLAnchorElement>) => {
+      if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      ) return;
+
+      event.preventDefault();
+      if (href !== pathname) navigateFromAppNav(href);
+    },
+  }), [navigateFromAppNav, pathname]);
+
   // Auth surfaces own the full viewport (safe areas, status bar, scroll) and
   // must not inherit the app header or the padded content shell.
   if (pathname === '/login' || pathname === '/register' || (!isAuthenticated && pathname === '/')) {
@@ -148,7 +184,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       setAppearance(nextMode);
     });
   };
-
 
   return (
     <MotionConfig reducedMotion="user">
@@ -181,15 +216,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <nav className="app-nav flex items-center gap-1 md:gap-2">
             {isAuthenticated && user?.onboardingCompleted && (
               <div data-tour="site-nav" className="hidden lg:flex items-center gap-1 md:gap-2">
-                <Link data-tour="nav-home" href="/dashboard" className={`app-header-nav flex flex-col items-center p-2 transition-colors ${pathname === '/dashboard' ? 'is-active' : ''}`}>
+                <Link data-tour="nav-home" {...appNavLinkProps('/dashboard')} className={`app-header-nav flex flex-col items-center p-2 transition-colors ${pathname === '/dashboard' ? 'is-active' : ''}`}>
                   <Home size={20} strokeWidth={pathname === '/dashboard' ? 2.4 : 1.8} />
                   <span className="text-[10px] mt-1 hidden sm:block">Inicio</span>
                 </Link>
-                <Link data-tour="nav-calendar" href="/calendar" className={`app-header-nav flex flex-col items-center p-2 transition-colors ${pathname === '/calendar' ? 'is-active' : ''}`}>
+                <Link data-tour="nav-calendar" {...appNavLinkProps('/calendar')} className={`app-header-nav flex flex-col items-center p-2 transition-colors ${pathname === '/calendar' ? 'is-active' : ''}`}>
                   <Calendar size={20} strokeWidth={pathname === '/calendar' ? 2.4 : 1.8} />
                   <span className="text-[10px] mt-1 hidden sm:block">Calendario</span>
                 </Link>
-                <Link data-tour="nav-nutrition" href="/nutrition" className={`app-header-nav flex flex-col items-center p-2 transition-colors ${pathname === '/nutrition' ? 'is-active' : ''}`}>
+                <Link data-tour="nav-nutrition" {...appNavLinkProps('/nutrition')} className={`app-header-nav flex flex-col items-center p-2 transition-colors ${pathname === '/nutrition' ? 'is-active' : ''}`}>
                   <Utensils size={20} strokeWidth={pathname === '/nutrition' ? 2.4 : 1.8} />
                   <span className="text-[10px] mt-1 hidden sm:block">Nutrición</span>
                 </Link>
@@ -197,15 +232,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   <Plus size={20} strokeWidth={2.2} />
 
                 </button>
-                <Link data-tour="nav-fitness" href="/fitness" className={`app-header-nav flex flex-col items-center p-2 transition-colors ${pathname === '/fitness' ? 'is-active' : ''}`}>
+                <Link data-tour="nav-fitness" {...appNavLinkProps('/fitness')} className={`app-header-nav flex flex-col items-center p-2 transition-colors ${pathname === '/fitness' ? 'is-active' : ''}`}>
                   <Dumbbell size={20} strokeWidth={pathname === '/fitness' ? 2.4 : 1.8} />
                   <span className="text-[10px] mt-1 hidden sm:block">Fitness</span>
                 </Link>
-                <Link data-tour="nav-profile" href="/profile" className={`app-header-nav flex flex-col items-center p-2 transition-colors ${pathname === '/profile' ? 'is-active' : ''}`}>
+                <Link data-tour="nav-profile" {...appNavLinkProps('/profile')} className={`app-header-nav flex flex-col items-center p-2 transition-colors ${pathname === '/profile' ? 'is-active' : ''}`}>
                   <User size={20} strokeWidth={pathname === '/profile' ? 2.4 : 1.8} />
                   <span className="text-[10px] mt-1 hidden sm:block">Perfil</span>
                 </Link>
-                <Link data-tour="nav-settings" href="/settings" className={`app-header-nav flex flex-col items-center p-2 transition-colors ${pathname === '/settings' ? 'is-active' : ''}`}>
+                <Link data-tour="nav-settings" {...appNavLinkProps('/settings')} className={`app-header-nav flex flex-col items-center p-2 transition-colors ${pathname === '/settings' ? 'is-active' : ''}`}>
                   <Settings size={20} strokeWidth={pathname === '/settings' ? 2.4 : 1.8} />
                   <span className="text-[10px] mt-1 hidden sm:block">Ajustes</span>
                 </Link>
@@ -216,39 +251,39 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             {isAuthenticated && user?.onboardingCompleted && pathname !== '/calendar' && (
               <Link
                 data-tour="nav-calendar"
-                href="/calendar"
+                {...appNavLinkProps('/calendar')}
                 aria-label="Abrir calendario"
-                className="lg:hidden hit-44 inline-flex h-9 w-9 items-center justify-center app-header-control transition-colors rounded-full border active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
+                className="lg:hidden hit-44 inline-flex h-11 w-11 items-center justify-center app-header-control transition-colors rounded-full border active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
               >
-                <Calendar size={17} strokeWidth={1.8} />
+                <Calendar size={18} strokeWidth={1.8} />
               </Link>
             )}
             {/* Mobile Settings shortcut: only shown on the Profile screen */}
             {isAuthenticated && user?.onboardingCompleted && pathname === '/profile' && (
               <Link
                 data-tour="nav-settings-mobile"
-                href="/settings"
+                {...appNavLinkProps('/settings')}
                 aria-label="Abrir ajustes"
-                className="lg:hidden hit-44 inline-flex h-9 w-9 items-center justify-center app-header-control transition-colors rounded-full border ml-1.5 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
+                className="lg:hidden hit-44 inline-flex h-11 w-11 items-center justify-center app-header-control transition-colors rounded-full border ml-1.5 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
               >
-                <Settings size={17} strokeWidth={1.8} />
+                <Settings size={18} strokeWidth={1.8} />
               </Link>
             )}
 
             {/* Always visible theme toggle */}
-            <button data-tour="theme-toggle" aria-label={appearance === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'} onClick={(e) => toggleTheme(e)} className="app-header-control hit-44 inline-flex h-9 w-9 items-center justify-center transition-colors rounded-full border ml-1.5 relative overflow-hidden active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400" title={appearance === 'dark' ? 'Cambiar a claro' : 'Cambiar a oscuro'}>
+            <button data-tour="theme-toggle" aria-label={appearance === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'} onClick={(e) => toggleTheme(e)} className="app-header-control hit-44 inline-flex h-11 w-11 items-center justify-center transition-colors rounded-full border ml-1.5 relative overflow-hidden active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 bg-[var(--surface-inset)] hover:bg-[var(--surface-raised)]" title={appearance === 'dark' ? 'Cambiar a claro' : 'Cambiar a oscuro'}>
               <span className={`block transition-all duration-200 motion-reduce:transition-none ${appearance === 'dark' ? 'rotate-0 scale-100' : 'rotate-90 scale-0 absolute'}`}>
-                <Sun size={17} strokeWidth={1.8} />
+                <Sun size={18} strokeWidth={1.8} />
               </span>
               <span className={`block transition-all duration-200 motion-reduce:transition-none ${appearance === 'dark' ? '-rotate-90 scale-0 absolute' : 'rotate-0 scale-100'}`}>
-                <Moon size={17} strokeWidth={1.8} />
+                <Moon size={18} strokeWidth={1.8} />
               </span>
             </button>
 
             {/* Logout button: shown next to theme toggle only on Settings */}
             {isAuthenticated && pathname === '/settings' && (
-              <button aria-label="Cerrar sesión" onClick={() => setIsLogoutConfirmOpen(true)} className="hit-44 inline-flex h-9 w-9 items-center justify-center app-header-control transition-colors rounded-full border ml-1.5 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400">
-                <LogOut size={17} strokeWidth={1.8} />
+              <button aria-label="Cerrar sesión" onClick={() => setIsLogoutConfirmOpen(true)} className="hit-44 inline-flex h-11 w-11 items-center justify-center app-header-control transition-colors rounded-full border ml-1.5 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400">
+                <LogOut size={18} strokeWidth={1.8} />
               </button>
             )}
           </nav>
@@ -262,7 +297,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       {isAuthenticated && isPlansModalOpen && <PlansModal />}
       {isAuthenticated && isLogMealModalOpen && <LogMealModal isOpen={isLogMealModalOpen} onClose={() => { useUIStore.getState().closeLogMealModal(); }} date={getLocalDateString()} onSaved={() => { }} />}
-      {isAuthenticated && isLogWorkoutModalOpen && <LogWorkoutModal isOpen={isLogWorkoutModalOpen} onClose={() => { useUIStore.getState().closeLogWorkoutModal(); }} date={getLocalDateString()} onSaved={() => { }} />}
+      {isAuthenticated && isLogWorkoutModalOpen && <LogWorkoutModal isOpen={isLogWorkoutModalOpen} quickLog={isQuickLogWorkout} onClose={() => { useUIStore.getState().closeLogWorkoutModal(); }} date={getLocalDateString()} onSaved={() => { }} />}
       {isAuthenticated && isLogWeightModalOpen && <LogWeightModal isOpen={isLogWeightModalOpen} onClose={closeLogWeightModal} date={getLocalDateString()} />}
       {isAuthenticated && user?.onboardingCompleted && (
         <>
@@ -276,8 +311,22 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           isActive={isActive}
           onClose={closeQuickActions}
           onMeal={openLogMealModal}
-          onWorkout={openLogWorkoutModal}
+          onWorkout={openLogWorkoutMenu}
           onPlans={openPlansModal}
+        />
+      )}
+      {isAuthenticated && (
+        <LogWorkoutMenu
+          isOpen={isLogWorkoutMenuOpen}
+          onClose={closeLogWorkoutMenu}
+          onNewWorkout={() => {
+            closeLogWorkoutMenu();
+            openLogWorkoutModal(false);
+          }}
+          onQuickLog={() => {
+            closeLogWorkoutMenu();
+            openLogWorkoutModal(true);
+          }}
         />
       )}
       {isAuthenticated && isLogoutConfirmOpen && (
@@ -295,11 +344,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Mobile Bottom Nav - Only visible if logged in */}
       {isAuthenticated && user?.onboardingCompleted && (
         <nav data-tour="site-nav" aria-label="Navegación principal" className="mobile-bottom-nav lg:hidden fixed bottom-0 left-0 right-0 z-50 flex items-end justify-around gap-1 border-t border-white/10 px-1.5 pt-1">
-          <Link data-tour="nav-home" href="/dashboard" aria-current={pathname === '/dashboard' ? 'page' : undefined} className={`flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1 text-[10px] font-medium leading-none ${pathname === '/dashboard' ? '' : 'text-white/55'}`}>
+          <Link data-tour="nav-home" {...appNavLinkProps('/dashboard')} aria-current={pathname === '/dashboard' ? 'page' : undefined} className={`relative flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1 text-[10px] font-medium leading-none ${pathname === '/dashboard' ? '' : 'text-white/55'}`}>
+            {pathname === '/dashboard' && <motion.span layoutId="bottom-nav-active" className="pointer-events-none absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-rose-400" transition={{ type: 'spring', bounce: 0.18, duration: 0.32 }} />}
             <Home size={20} strokeWidth={pathname === '/dashboard' ? 2.2 : 1.7} />
             <span>Inicio</span>
           </Link>
-          <Link data-tour="nav-nutrition" href="/nutrition" aria-current={pathname === '/nutrition' ? 'page' : undefined} className={`flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1 text-[10px] font-medium leading-none ${pathname === '/nutrition' ? '' : 'text-white/55'}`}>
+          <Link data-tour="nav-nutrition" {...appNavLinkProps('/nutrition')} aria-current={pathname === '/nutrition' ? 'page' : undefined} className={`relative flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1 text-[10px] font-medium leading-none ${pathname === '/nutrition' ? '' : 'text-white/55'}`}>
+            {pathname === '/nutrition' && <motion.span layoutId="bottom-nav-active" className="pointer-events-none absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-rose-400" transition={{ type: 'spring', bounce: 0.18, duration: 0.32 }} />}
             <Utensils size={20} strokeWidth={pathname === '/nutrition' ? 2.2 : 1.7} />
             <span>Nutrición</span>
           </Link>
@@ -308,11 +359,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <Plus size={22} strokeWidth={2.5} />
             </span>
           </button>
-          <Link data-tour="nav-fitness" href="/fitness" aria-current={pathname === '/fitness' ? 'page' : undefined} className={`flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1 text-[10px] font-medium leading-none ${pathname === '/fitness' ? '' : 'text-white/55'}`}>
+          <Link data-tour="nav-fitness" {...appNavLinkProps('/fitness')} aria-current={pathname === '/fitness' ? 'page' : undefined} className={`relative flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1 text-[10px] font-medium leading-none ${pathname === '/fitness' ? '' : 'text-white/55'}`}>
+            {pathname === '/fitness' && <motion.span layoutId="bottom-nav-active" className="pointer-events-none absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-rose-400" transition={{ type: 'spring', bounce: 0.18, duration: 0.32 }} />}
             <Dumbbell size={20} strokeWidth={pathname === '/fitness' ? 2.2 : 1.7} />
             <span>Fitness</span>
           </Link>
-          <Link data-tour="nav-profile" href="/profile" aria-current={pathname === '/profile' ? 'page' : undefined} className={`flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1 text-[10px] font-medium leading-none ${pathname === '/profile' ? '' : 'text-white/55'}`}>
+          <Link data-tour="nav-profile" {...appNavLinkProps('/profile')} aria-current={pathname === '/profile' ? 'page' : undefined} className={`relative flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1 text-[10px] font-medium leading-none ${pathname === '/profile' ? '' : 'text-white/55'}`}>
+            {pathname === '/profile' && <motion.span layoutId="bottom-nav-active" className="pointer-events-none absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-rose-400" transition={{ type: 'spring', bounce: 0.18, duration: 0.32 }} />}
             <User size={20} strokeWidth={pathname === '/profile' ? 2.2 : 1.7} />
             <span>Perfil</span>
           </Link>

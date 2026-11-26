@@ -410,7 +410,8 @@ export default function Profile() {
   const logrosSummary = `${formatNumber(unlockedCount)}/${formatNumber(activeAchievements.length)}`;
 
   const headerLoading = !hasLoadedProfile && !profileData;
-  const isInitialLoading = !user || headerLoading || !challengeReady || authBlocked;
+  // Hydrate immediately from useAuthStore once user is available instead of blocking on secondary stats fetch
+  const isInitialLoading = !user || authBlocked;
 
   if (isInitialLoading) return <ProfileSkeleton />;
 

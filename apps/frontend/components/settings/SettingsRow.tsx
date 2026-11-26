@@ -10,7 +10,7 @@ interface SettingsRowProps {
   title: string;
   subtitle?: string;
   detail?: React.ReactNode;
-  onClick?: () => void;
+  onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
   rightElement?: React.ReactNode;
   showChevron?: boolean;
   destructive?: boolean;

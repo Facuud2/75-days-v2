@@ -221,7 +221,7 @@ export function ChallengeMembershipSummary({
         icon={Crown}
         iconBgClass="bg-amber-500/15"
         iconColorClass="text-amber-500"
-        title="Membresía Premium"
+        title="Plan Premium"
         subtitle="Gestioná tu suscripción y beneficios"
         detail={currentPlanLabel}
         onClick={onOpenPlansSheet}

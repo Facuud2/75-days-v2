@@ -9,10 +9,10 @@ export type DevDataset = (typeof DEV_DATASETS)[number];
 
 export const DEV_DATASET_OPTIONS: DatasetOption[] = [
   { value: 'demo', label: 'Demo data' },
-  { value: 'worst', label: 'Worst case (plausible extremes)' },
+  { value: 'worst', label: 'Worst case' },
   { value: 'empty', label: 'Empty / no results' },
   { value: 'one', label: 'Just one row' },
-  { value: 'thousand', label: '1,000 rows (performance stress)' },
+  { value: 'thousand', label: '1,000 rows' },
 ];
 
 /** Lee `?data=` al montar (cliente). Fuera de dev siempre devuelve 'demo'. */
@@ -51,7 +51,7 @@ export default function DevDatasetPicker({
         positionClassName ?? 'bottom-4'
       }`}
     >
-      <div className="pointer-events-auto flex items-center gap-2">
+      <div className="pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-2 px-2">
         <DatasetToggle
           selected={selected}
           options={DEV_DATASET_OPTIONS}

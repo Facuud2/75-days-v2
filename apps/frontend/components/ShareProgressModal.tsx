@@ -87,7 +87,9 @@ export default function ShareProgressModal({
     return initialKind;
   }, [initialKind, hasDaily, hasProfile]);
 
-  const [kind, setKind] = useState<ShareCardKind>(resolveInitialKind);
+  const [selectedKind, setSelectedKind] = useState<ShareCardKind | null>(null);
+  const kind = open ? (selectedKind ?? resolveInitialKind()) : resolveInitialKind();
+  const setKind = setSelectedKind;
   const [format, setFormat] = useState<ShareCardFormat>('story');
   const [theme, setTheme] = useState<ShareCardTheme>('dark');
   const [showGoalTitles, setShowGoalTitles] = useState(true);
@@ -95,12 +97,6 @@ export default function ShareProgressModal({
   const [copied, setCopied] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  useEffect(() => {
-    if (open) {
-      setKind(resolveInitialKind());
-    }
-  }, [open, resolveInitialKind]);
 
   useEffect(() => {
     if (!open) return;

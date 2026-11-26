@@ -162,13 +162,13 @@ export default function MealsPlanCard({
               <div className="min-w-0 flex-1">
                 <p
                   id={`meal-plan-name-${meal.id}`}
-                  className="text-[15px] font-medium leading-[1.35] text-[var(--text-primary)] [overflow-wrap:anywhere]"
+                  className="line-clamp-2 text-[15px] font-medium leading-[1.35] text-[var(--text-primary)] [overflow-wrap:anywhere]"
                 >
                   {meal.name}
                 </p>
                 <p className="mt-0.5 flex items-center gap-1.5 text-[12px] text-[var(--text-muted)] tabular-nums">
                   <Check className="h-3 w-3 text-emerald-500" aria-hidden="true" />
-                  {meal.calories} kcal · {meal.prepTimeMin ?? 5} min
+                  {meal.calories.toLocaleString('es-AR')} kcal · {meal.prepTimeMin ?? 5} min
                 </p>
               </div>
               <ChevronRight className="h-4 w-4 shrink-0 text-[var(--text-muted)]" aria-hidden="true" />

@@ -211,35 +211,37 @@ export default function Dashboard() {
     return (
       <div
         key={goal.id}
-        role="button"
-        tabIndex={0}
-        onClick={handleToggle}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            handleToggle();
-          }
-        }}
-        aria-pressed={goal.completed}
-        className={`group cursor-pointer w-full text-left bg-rose-950/20 border rounded-xl sm:rounded-2xl px-3 py-2.5 sm:p-5 flex flex-col gap-2.5 sm:gap-3 transition-all duration-200 min-h-12 sm:min-h-14 ${goal.completed
-          ? 'border-rose-500/30 bg-rose-500/5 hover:border-rose-500/50 hover:bg-rose-500/10'
-          : 'border-[#361726] hover:border-rose-500/50 hover:bg-rose-950/40'
+        className={`w-full text-left dashboard-card px-3 py-2.5 sm:p-5 flex flex-col gap-2.5 sm:gap-3 min-h-12 sm:min-h-14 ${goal.completed
+          ? ''
+          : 'hover:border-rose-500/50'
           }`}
       >
-        <div className="flex items-center gap-3 sm:gap-5">
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={handleToggle}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              handleToggle();
+            }
+          }}
+          aria-pressed={goal.completed}
+          className="group cursor-pointer flex items-center gap-3 sm:gap-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] rounded-lg"
+        >
           <div className={`w-9 h-9 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0 transition-colors ${goal.completed
             ? 'bg-rose-500/20 text-rose-500'
-            : 'bg-rose-950/60 text-rose-500/70 group-hover:text-rose-500'
+            : 'bg-[var(--surface-inset)] text-rose-400/70 group-hover:text-rose-500'
             }`}>
             <IconComponent size={18} strokeWidth={1.6} className="sm:w-6 sm:h-6" />
           </div>
 
           <div className="flex-1 min-w-0">
-            <h3 className={`font-semibold text-[15px] leading-snug sm:text-lg ${goal.description ? 'mb-0.5 sm:mb-1' : ''} transition-colors ${goal.completed ? 'text-white/70 line-through' : 'text-white'}`}>
+            <h3 className={`font-semibold text-[15px] leading-snug sm:text-lg ${goal.description ? 'mb-0.5 sm:mb-1' : ''} transition-colors ${goal.completed ? 'text-[var(--text-secondary)] line-through' : 'text-[var(--text-primary)]'}`}>
               {goal.title}
             </h3>
             {goal.description ? (
-              <p className={`text-xs sm:text-sm transition-colors ${goal.completed ? 'text-white/50' : 'text-white/60'}`}>
+              <p className={`text-xs sm:text-sm transition-colors ${goal.completed ? 'text-[var(--text-muted)]' : 'text-[var(--text-secondary)]'}`}>
                 {goal.description}
               </p>
             ) : null}
@@ -257,12 +259,12 @@ export default function Dashboard() {
           <div className="flex items-center gap-3 pl-0 sm:pl-[68px]" onClick={(e) => e.stopPropagation()}>
             <div className="flex-1 min-w-0 space-y-1">
               <div className="flex items-center justify-between text-xs font-medium tabular-nums">
-                <span className={goal.completed ? 'text-emerald-400 font-semibold' : 'text-white/75'}>
+                <span className={goal.completed ? 'text-emerald-400 font-semibold' : 'text-[var(--text-secondary)]'}>
                   {formatMetricReadout(currentValue, targetValue, goal.targetUnit)}
                 </span>
-                <span className="text-white/45">{pct}%</span>
+                <span className="text-[var(--text-muted)]">{pct}%</span>
               </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+              <div className="h-1.5 overflow-hidden rounded-full bg-[var(--surface-inset)]">
                 <div
                   className={`h-full rounded-full transition-all duration-200 ${goal.completed ? 'bg-emerald-500' : 'bg-rose-500'}`}
                   style={{ width: `${pct}%` }}
@@ -275,7 +277,7 @@ export default function Dashboard() {
                 onClick={(e) => handleDelta(e, -step)}
                 disabled={currentValue <= 0}
                 aria-label={`Restar ${step} a ${goal.title}`}
-                className="h-8 w-8 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 disabled:opacity-30 flex items-center justify-center text-white transition-transform active:scale-90 cursor-pointer"
+                className="h-8 w-8 rounded-lg border border-white/10 bg-[var(--surface-inset)] hover:bg-white/10 disabled:opacity-30 flex items-center justify-center text-[var(--text-secondary)] transition-transform active:scale-90 cursor-pointer"
               >
                 <Minus size={14} />
               </button>
@@ -333,19 +335,21 @@ export default function Dashboard() {
     return (
       <div
         key={pg.id}
-        role="button"
-        tabIndex={0}
-        onClick={handleToggle}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            handleToggle();
-          }
-        }}
-        aria-pressed={isCompleted}
-        className={`group cursor-pointer w-full text-left border rounded-2xl px-3.5 py-3 sm:p-5 flex flex-col gap-3 transition-all duration-200 ${accentBorder}`}
+        className={`w-full text-left border rounded-2xl px-3.5 py-3 sm:p-5 flex flex-col gap-3 transition-colors duration-200 ${accentBorder}`}
       >
-        <div className="flex items-center gap-3 sm:gap-5">
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={handleToggle}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              handleToggle();
+            }
+          }}
+          aria-pressed={isCompleted}
+          className="group cursor-pointer flex items-center gap-3 sm:gap-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] rounded-lg"
+        >
           <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0 transition-colors ${isCompleted
             ? 'bg-emerald-500/20 text-emerald-400'
             : pg.cadence === 'monthly'
@@ -357,15 +361,15 @@ export default function Dashboard() {
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h3 className={`font-semibold text-base sm:text-lg transition-colors ${isCompleted ? 'text-white/75 line-through' : 'text-white'}`}>
+              <h3 className={`font-semibold text-base sm:text-lg transition-colors ${isCompleted ? 'text-[var(--text-secondary)] line-through' : 'text-[var(--text-primary)]'}`}>
                 {pg.title}
               </h3>
-              <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${pg.cadence === 'monthly' ? 'bg-violet-500/20 text-violet-300' : 'bg-sky-500/20 text-sky-300'}`}>
+              <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${pg.cadence === 'monthly' ? 'bg-violet-500/20 text-violet-700 dark:text-violet-300' : 'bg-sky-500/20 text-sky-700 dark:text-sky-300'}`}>
                 {pg.cadence === 'monthly' ? `Mes ${pg.periodNumber}` : `Sem ${pg.periodNumber}`}
               </span>
             </div>
             {pg.description ? (
-              <p className={`text-sm mt-0.5 transition-colors ${isCompleted ? 'text-white/50' : 'text-white/60'}`}>
+              <p className={`text-sm mt-0.5 transition-colors ${isCompleted ? 'text-[var(--text-muted)]' : 'text-[var(--text-secondary)]'}`}>
                 {pg.description}
               </p>
             ) : null}
@@ -383,12 +387,12 @@ export default function Dashboard() {
           <div className="flex items-center gap-3 pl-0 sm:pl-[68px]" onClick={(e) => e.stopPropagation()}>
             <div className="flex-1 min-w-0 space-y-1">
               <div className="flex items-center justify-between text-xs font-medium tabular-nums">
-                <span className={isCompleted ? 'text-emerald-400 font-semibold' : 'text-white/80'}>
+                <span className={isCompleted ? 'text-emerald-400 font-semibold' : 'text-[var(--text-secondary)]'}>
                   {formatMetricReadout(currentValue, targetValue, pg.targetUnit)}
                 </span>
-                <span className="text-white/45">{pct}%</span>
+                <span className="text-[var(--text-muted)]">{pct}%</span>
               </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+              <div className="h-1.5 overflow-hidden rounded-full bg-[var(--surface-inset)]">
                 <div
                   className={`h-full rounded-full transition-all duration-200 ${accentBar}`}
                   style={{ width: `${pct}%` }}
@@ -600,25 +604,25 @@ export default function Dashboard() {
       <div className="min-w-0 space-y-3 sm:space-y-6 lg:col-span-4">
 
         {/* RESUMEN DEL DÍA: une avance del desafío y estado de las tareas */}
-        <section data-tour="daily-summary" className="bg-rose-950/20 border border-rose-950/40 rounded-2xl sm:rounded-3xl p-3.5 sm:p-6 shadow-lg" aria-labelledby="today-summary-title">
+        <section data-tour="daily-summary" className="dashboard-card p-3.5 sm:p-6 shadow-lg" aria-labelledby="today-summary-title">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
               <p className="text-rose-500 text-[10px] font-bold tracking-[0.16em] uppercase whitespace-nowrap">Resumen de hoy</p>
-              <h2 id="today-summary-title" className="mt-0.5 text-xs sm:text-sm font-semibold text-white/70">Día actual</h2>
+              <h2 id="today-summary-title" className="mt-0.5 text-xs sm:text-sm font-semibold text-[var(--text-secondary)]">Día actual</h2>
             </div>
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
               <button
                 type="button"
                 onClick={() => setShareModal({ open: true, initialKind: 'challenge' })}
                 aria-label="Compartir progreso del reto"
-                className="hit-44 inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] sm:text-xs font-semibold text-white/80 transition-colors hover:bg-white/10 hover:text-white active:scale-95"
+                className="hit-44 inline-flex min-h-11 items-center gap-1 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] sm:text-xs font-semibold text-white/80 transition-colors hover:bg-white/10 hover:text-white active:scale-95"
               >
                 <Share2 className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-rose-400" aria-hidden="true" />
                 <span>Compartir</span>
               </button>
               <Link
                 href="/calendar"
-                className="hit-44 inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] sm:text-xs font-semibold text-white/80 transition-colors hover:bg-white/10 hover:text-white active:scale-95"
+                className="hit-44 inline-flex min-h-11 items-center gap-1 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] sm:text-xs font-semibold text-white/80 transition-colors hover:bg-white/10 hover:text-white active:scale-95"
               >
                 <CalendarRange className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-rose-400" aria-hidden="true" />
                 <span>Calendario</span>
@@ -627,16 +631,16 @@ export default function Dashboard() {
           </div>
 
           <div className="mt-2 sm:mt-3 flex items-baseline gap-1.5">
-            <span className="text-[28px] leading-none font-bold tracking-[-0.03em] text-white tabular-nums whitespace-nowrap sm:text-6xl">{currentDay}</span>
-            <span className="text-sm font-semibold text-white/45 sm:text-xl whitespace-nowrap">/ 75 días</span>
+            <span className="text-[28px] leading-none font-bold tracking-[-0.03em] text-[var(--text-primary)] tabular-nums whitespace-nowrap sm:text-6xl">{currentDay}</span>
+            <span className="text-sm font-semibold text-[var(--text-muted)] sm:text-xl whitespace-nowrap">/ 75 días</span>
           </div>
 
           <div className="mt-2.5 sm:mt-4 space-y-1.5 sm:space-y-2">
-            <div className="flex justify-between text-[11px] sm:text-xs font-medium text-white/60 tabular-nums">
+            <div className="flex justify-between text-[11px] sm:text-xs font-medium text-[var(--text-secondary)] tabular-nums">
               <span>Progreso del desafío</span>
               <span>{Math.round((currentDay / 75) * 100)}%</span>
             </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-white/5">
+            <div className="h-1.5 overflow-hidden rounded-full bg-[var(--surface-inset)]">
               <div
                 className="h-full bg-rose-500 transition-all duration-250 ease-out"
                 style={{ width: `${(currentDay / 75) * 100}%` }}
@@ -676,18 +680,20 @@ export default function Dashboard() {
                 </span>
               </div>
             </div>
-            <p className="mt-1.5 sm:mt-2.5 text-xs sm:text-sm leading-snug text-white/60">
+            <p className="mt-1.5 sm:mt-2.5 text-xs sm:text-sm leading-snug text-[var(--text-secondary)]">
               {totalTasks === 0
                 ? 'Tu plan actual se enfoca en metas semanales o mensuales.'
                 : remainingTasks === 0
                   ? '¡Todas las tareas diarias completadas por hoy! Gran trabajo.'
-                  : `${remainingTasks} tareas diarias restantes para terminar el día.`}
+                  : remainingTasks === 1
+                    ? '1 tarea diaria restante para terminar el día.'
+                    : `${remainingTasks} tareas diarias restantes para terminar el día.`}
             </p>
             <div className="mt-2.5 sm:mt-4">
               <button
                 type="button"
                 onClick={() => setShareModal({ open: true, initialKind: 'daily' })}
-                className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl sm:rounded-2xl border border-white/10 bg-white/5 px-3 py-2 sm:py-2.5 text-xs font-semibold text-white/85 transition-colors hover:bg-white/10 hover:text-white active:scale-[0.98]"
+                className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl sm:rounded-2xl border border-white/10 bg-[var(--surface-inset)] px-3 py-2 sm:py-2.5 text-xs font-semibold text-[var(--text-secondary)] transition-colors hover:bg-white/10 hover:text-white active:scale-[0.98]"
               >
                 <Share2 className="h-3.5 w-3.5 text-rose-400" aria-hidden="true" />
                 <span>Compartir estado de hoy</span>
@@ -717,8 +723,8 @@ export default function Dashboard() {
                 <Scale size={15} strokeWidth={1.8} aria-hidden="true" />
               </span>
               <div className="min-w-0">
-                <p className="text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.14em] text-white/50">Peso de hoy</p>
-                <p className="text-[13px] sm:text-sm font-bold text-white tabular-nums truncate">
+                <p className="text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--text-muted)]">Peso de hoy</p>
+                <p className="text-[13px] sm:text-sm font-bold text-[var(--text-primary)] tabular-nums truncate">
                   {devLog?.weight ? `${devLog.weight} kg` : 'Sin registrar'}
                 </p>
               </div>
@@ -726,7 +732,7 @@ export default function Dashboard() {
             <button
               type="button"
               onClick={openLogWeightModal}
-              className="hit-44 inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-lg sm:rounded-xl border border-rose-500/30 bg-rose-500/15 px-2.5 py-1.5 text-xs font-bold text-rose-300 transition-colors hover:bg-rose-500/25 active:scale-95"
+              className="hit-44 inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-1 rounded-lg sm:rounded-xl border border-rose-500/30 bg-rose-500/15 px-3 py-2 text-xs font-bold text-rose-700 dark:text-rose-200 transition-colors hover:bg-rose-500/25 active:scale-95"
             >
               <Plus size={13} strokeWidth={2.2} aria-hidden="true" />
               <span>{devLog?.weight ? 'Actualizar' : 'Registrar'}</span>
@@ -741,18 +747,18 @@ export default function Dashboard() {
         <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-3 sm:mb-6 gap-2.5 sm:gap-4">
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-rose-400 tracking-tight">Tareas de Hoy</h1>
-            <span className="text-white/60 text-xs sm:text-sm font-medium capitalize">
+            <span className="text-[var(--text-secondary)] text-xs sm:text-sm font-medium capitalize">
               {format(now, "EEEE, d 'de' MMMM", { locale: es })}
             </span>
           </div>
 
           {/* Pills Toggle */}
-          <div className="flex w-full sm:w-auto bg-rose-950/20 p-1 rounded-xl sm:rounded-2xl border border-rose-950/40">
+          <div className="flex w-full sm:w-auto bg-[var(--surface-inset)] p-1 rounded-xl sm:rounded-2xl border border-[var(--border-subtle)]">
             <button
               onClick={() => setActiveTab('plan')}
               className={`flex-1 sm:flex-none min-h-9 sm:min-h-11 px-3 sm:px-6 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-sm font-bold transition-all ${activeTab === 'plan'
                 ? 'bg-rose-400 text-zinc-950 shadow-lg shadow-rose-500/20'
-                : 'text-white/60 hover:text-white hover:bg-white/5'
+                : 'text-[var(--text-muted)] hover:text-white hover:bg-white/5'
                 }`}
             >
               Plan Activo
@@ -762,7 +768,7 @@ export default function Dashboard() {
               onClick={() => setActiveTab('missions')}
               className={`flex-1 sm:flex-none min-h-9 sm:min-h-11 px-3 sm:px-6 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-1.5 sm:gap-2 ${activeTab === 'missions'
                 ? 'bg-rose-400 text-zinc-950 shadow-lg shadow-rose-500/20'
-                : 'text-white/60 hover:text-white hover:bg-white/5'
+                : 'text-[var(--text-muted)] hover:text-white hover:bg-white/5'
                 }`}
             >
               Misiones
@@ -802,7 +808,7 @@ export default function Dashboard() {
                     <h2 className="text-xs sm:text-sm font-bold tracking-widest text-emerald-300 uppercase mb-2.5 sm:mb-4 flex items-center gap-2">
                     <PlusCircle size={15} /> Metas Personalizadas
                   </h2>
-                  <div className="space-y-2 sm:space-y-3">
+                  <div className="ios-stagger space-y-2 sm:space-y-3">
                     {devLog.goals.map(renderGoalItem)}
                   </div>
                 </div>
@@ -810,14 +816,14 @@ export default function Dashboard() {
                 <>
                   {/* TAREAS DEL PLAN BASE (Soft / Medium / Hard) */}
                   <div>
-                    <h2 className="text-xs sm:text-sm font-bold tracking-widest text-rose-300 uppercase mb-2.5 sm:mb-4 flex items-center gap-2">
+                    <h2 className="text-xs sm:text-sm font-bold tracking-widest text-rose-700 dark:text-rose-200 uppercase mb-2.5 sm:mb-4 flex items-center gap-2">
                       <Target size={15} /> Plan {currentPlanName}
                       </h2>
-                    <div className="space-y-2 sm:space-y-3">
+                    <div className="ios-stagger space-y-2 sm:space-y-3">
                       {baseGoals.length > 0 ? (
                         baseGoals.map(renderGoalItem)
                       ) : (
-                        <p className="text-white/40 text-sm italic p-4 bg-white/5 rounded-2xl border border-white/5">
+                        <p className="text-white/40 text-sm italic p-4 bg-[var(--surface-inset)] rounded-2xl border border-[var(--border-subtle)]">
                           No hay tareas base para este plan.
                         </p>
                       )}
@@ -830,7 +836,7 @@ export default function Dashboard() {
                         <h2 className="text-xs sm:text-sm font-bold tracking-widest text-emerald-300 uppercase mb-2.5 sm:mb-4 flex items-center gap-2">
                         <PlusCircle size={15} /> Metas Personalizadas
                       </h2>
-                      <div className="space-y-2 sm:space-y-3">
+                      <div className="ios-stagger space-y-2 sm:space-y-3">
                         {customGoals.map(renderGoalItem)}
                       </div>
                     </div>
@@ -1020,7 +1026,7 @@ export default function Dashboard() {
                       onClick={() => setSelectedSideQuest(quest)}
                       aria-label={`Abrir misión ${quest.title}: ${quest.progress} de ${quest.durationDays} días, dificultad ${quest.difficulty}`}
                       aria-haspopup="dialog"
-                      className="side-quest-card group w-full text-left bg-rose-950/20 border rounded-xl sm:rounded-2xl px-3.5 py-3 sm:p-4 transition-all duration-200" data-completed={quest.completed ? 'true' : 'false'}
+                      className="side-quest-card group w-full text-left dashboard-card border rounded-xl sm:rounded-2xl px-3.5 py-3 sm:p-4 transition-all duration-200" data-completed={quest.completed ? 'true' : 'false'}
                     >
                       <div className="flex items-center gap-3 sm:gap-4">
                         <div className={`w-9 h-9 sm:w-11 sm:h-11 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0 transition-colors ${quest.completed
@@ -1032,7 +1038,7 @@ export default function Dashboard() {
 
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap mb-0.5 sm:mb-1">
-                            <h3 className={`font-semibold text-[15px] leading-snug sm:text-base transition-colors ${quest.completed ? 'text-white/70 line-through' : 'text-white'}`}>
+                            <h3 className={`font-semibold text-[15px] leading-snug sm:text-base transition-colors ${quest.completed ? 'text-[var(--text-secondary)] line-through' : 'text-[var(--text-primary)]'}`}>
                               {quest.title}
                             </h3>
                             {quest.completed ? (
@@ -1045,7 +1051,7 @@ export default function Dashboard() {
                               </span>
                             ) : null}
                           </div>
-                          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] sm:text-xs font-medium text-white/50 tabular-nums">
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] sm:text-xs font-medium text-[var(--text-muted)] tabular-nums">
                             <span>
                               Dificultad:{' '}
                               <span className={
@@ -1054,7 +1060,7 @@ export default function Dashboard() {
                               }>{quest.difficulty}</span>
                             </span>
                             <span>
-                              Progreso: <span className="text-white font-semibold">{quest.progress}</span>/{quest.durationDays} días
+                              Progreso: <span className="text-[var(--text-primary)] font-semibold">{quest.progress}</span>/{quest.durationDays} días
                             </span>
                             <span>
                               Completada: <span className="text-emerald-300 font-semibold">{quest.completionCount} {quest.completionCount === 1 ? 'vez' : 'veces'}</span>
@@ -1085,8 +1091,8 @@ export default function Dashboard() {
                   ))
                 ) : (
                   <div className="text-center py-12 border border-dashed border-white/10 rounded-2xl bg-white/5">
-                    <Trophy className="mx-auto w-12 h-12 text-white/20 mb-3" />
-                    <p className="text-white/60 mb-4">No tienes misiones activas.</p>
+                    <Trophy className="mx-auto w-12 h-12 text-[var(--text-muted)] mb-3" />
+                    <p className="text-[var(--text-secondary)] mb-4">No tienes misiones activas.</p>
                     <button
                       onClick={() => setIsSideQuestsModalOpen(true)}
                       className="px-6 py-2 bg-rose-500/10 text-rose-500 rounded-xl hover:bg-rose-500/20 transition-colors font-medium border border-rose-500/20"
