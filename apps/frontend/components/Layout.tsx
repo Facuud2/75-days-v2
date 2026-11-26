@@ -8,7 +8,7 @@ import dynamic from 'next/dynamic';
 import { Home, Calendar, User, Settings, LogOut, Moon, Sun, Flame, Plus, Dumbbell, Utensils } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { MotionConfig, motion } from 'motion/react';
 import { startCircularReveal } from '@/lib/themeTransition';
 import { getPageTransitionDirection, type PageTransitionDirection } from '@/lib/pageTransitions';
@@ -76,15 +76,24 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
-  const [pendingNav, setPendingNav] = useState<{
-    href: string;
+  const [navState, setNavState] = useState<{
+    pendingHref: string | null;
     direction: PageTransitionDirection;
-  } | null>(null);
-  const lastDirectionRef = useRef<PageTransitionDirection>('none');
-  const hasNavigatedRef = useRef(false);
+    hasNavigated: boolean;
+  }>({
+    pendingHref: null,
+    direction: 'none',
+    hasNavigated: false,
+  });
 
-  const activeHref = pendingNav?.href ?? pathname;
-  const isShowingPendingSkeleton = pendingNav !== null && pendingNav.href !== pathname;
+  const isShowingPendingSkeleton =
+    navState.pendingHref !== null &&
+    navState.pendingHref !== pathname &&
+    pathname !== '/login' &&
+    pathname !== '/register' &&
+    pathname !== '/onboarding';
+
+  const activeHref = isShowingPendingSkeleton ? navState.pendingHref! : pathname;
 
   // ── Applies dark/light class + data-appearance synchronously on <html> ──────
   // This must run synchronously inside startViewTransition's callback so the API
@@ -147,27 +156,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [appearance, colorPalette, customPalette]);
 
-  // Clear optimistic pending navigation once Next.js commits the target route
-  useEffect(() => {
-    if (!pendingNav) return;
-    if (
-      pathname === pendingNav.href ||
-      pathname === '/login' ||
-      pathname === '/register' ||
-      pathname === '/onboarding'
-    ) {
-      setPendingNav(null);
-    }
-  }, [pathname, pendingNav]);
-
   // Safety valve so an aborted/failed navigation never traps the UI on a skeleton
   useEffect(() => {
-    if (!pendingNav) return;
+    if (!isShowingPendingSkeleton) return;
     const timer = window.setTimeout(() => {
-      setPendingNav(null);
+      setNavState((prev) => ({ ...prev, pendingHref: null }));
     }, 8000);
     return () => window.clearTimeout(timer);
-  }, [pendingNav]);
+  }, [isShowingPendingSkeleton, navState.pendingHref]);
 
   // Prefetch primary navigation tabs for snappier mobile/tablet transitions
   useEffect(() => {
@@ -178,25 +174,22 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [isAuthenticated, user?.onboardingCompleted, router]);
 
   const navigateFromAppNav = useCallback((href: string) => {
-    const currentVisibleHref = pendingNav?.href ?? pathname;
-    if (href === currentVisibleHref) return;
+    if (href === activeHref) return;
 
-    const direction = getPageTransitionDirection(currentVisibleHref, href);
-    hasNavigatedRef.current = true;
-    lastDirectionRef.current = direction;
+    const direction = getPageTransitionDirection(activeHref, href);
 
     if (href === pathname) {
-      setPendingNav(null);
+      setNavState({ pendingHref: null, direction, hasNavigated: true });
       router.push(href);
       return;
     }
 
-    setPendingNav({ href, direction });
+    setNavState({ pendingHref: href, direction, hasNavigated: true });
     if (typeof window !== 'undefined') {
       window.scrollTo({ top: 0, behavior: 'instant' });
     }
     router.push(href);
-  }, [pathname, pendingNav, router]);
+  }, [activeHref, pathname, router]);
 
   const appNavLinkProps = useCallback((href: string) => ({
     href,
@@ -233,12 +226,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const transitionDirection = pendingNav?.direction ?? lastDirectionRef.current;
-  const contentInitial = !hasNavigatedRef.current
+  const contentInitial = !navState.hasNavigated
     ? false
-    : transitionDirection === 'forward'
+    : navState.direction === 'forward'
       ? { opacity: 0, x: 12 }
-      : transitionDirection === 'backward'
+      : navState.direction === 'backward'
         ? { opacity: 0, x: -12 }
         : { opacity: 0, x: 0 };
 
@@ -357,7 +349,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           className="w-full"
         >
           {isShowingPendingSkeleton ? (
-            <RouteContentSkeleton pathname={pendingNav.href} />
+            <RouteContentSkeleton pathname={activeHref} />
           ) : (
             children
           )}
