@@ -307,17 +307,7 @@ function LogMealModalContent({ onClose, onSaved, date, initialTab, initialMealTy
         });
     };
 
-    if (step === 'MAIN' && activeTab === 'AI' && aiStage === 'CAMERA') {
-        return (
-            <MealPhotoAnalyzer
-                mealType={mealType}
-                onMealTypeChange={setMealType}
-                onStageChange={setAiStage}
-                onClose={onClose}
-                onConfirmMeal={handleConfirmAiMeal}
-            />
-        );
-    }
+    const isCameraFullscreen = step === 'MAIN' && activeTab === 'AI' && aiStage === 'CAMERA';
 
     const mealTypeSelector = (
         <div className="flex bg-[var(--surface-inset)] p-1 rounded-xl border border-[var(--border-subtle)]">
@@ -344,15 +334,17 @@ function LogMealModalContent({ onClose, onSaved, date, initialTab, initialMealTy
 
     return (
         <div
-            className="mobile-sheet-root fixed inset-0 z-[100] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center sm:p-4"
+            className={isCameraFullscreen ? undefined : 'mobile-sheet-root fixed inset-0 z-[100] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center sm:p-4'}
             role="dialog"
             aria-modal="true"
-            aria-labelledby="meal-modal-title"
-            onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+            aria-labelledby={isCameraFullscreen ? undefined : 'meal-modal-title'}
+            aria-label={isCameraFullscreen ? 'Cámara para registrar comida' : undefined}
+            onClick={(e) => { if (!isCameraFullscreen && e.target === e.currentTarget) onClose(); }}
         >
-            <div className="mobile-sheet-panel bg-[var(--surface-page)] border border-[var(--border-subtle)] rounded-t-[24px] sm:rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[92dvh] sm:max-h-[85vh] overflow-hidden">
+            <div className={isCameraFullscreen ? undefined : 'mobile-sheet-panel bg-[var(--surface-page)] border border-[var(--border-subtle)] rounded-t-[24px] sm:rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[92dvh] sm:max-h-[85vh] overflow-hidden'}>
 
                 {/* Header */}
+                {!isCameraFullscreen && (
                 <div className="flex items-center justify-between px-4 py-3 sm:px-5 border-b border-[var(--border-subtle)] shrink-0">
                     <div className="flex items-center gap-2.5">
                         {step !== 'MAIN' && (
@@ -397,12 +389,13 @@ function LogMealModalContent({ onClose, onSaved, date, initialTab, initialMealTy
                         <X className="w-5 h-5" aria-hidden="true" />
                     </button>
                 </div>
+                )}
 
                 {/* Body Content */}
-                <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-3.5 sm:px-5 sm:py-4 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent">
+                <div className={isCameraFullscreen ? undefined : 'flex-1 overflow-y-auto overscroll-contain px-4 py-3.5 sm:px-5 sm:py-4 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent'}>
 
                     {step === 'MAIN' && (
-                        <div className={activeTab === 'AI' ? 'space-y-3' : 'space-y-4'}>
+                        <div className={isCameraFullscreen ? undefined : (activeTab === 'AI' ? 'space-y-3' : 'space-y-4')}>
                             {activeTab === 'CUSTOM' && mealTypeSelector}
 
                             {activeTab === 'AI' && (
