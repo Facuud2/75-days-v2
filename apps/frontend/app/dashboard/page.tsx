@@ -992,20 +992,21 @@ export default function Dashboard() {
           ) : (
             /* TAB: MISIONES */
             <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-sm font-bold tracking-widest text-amber-400 uppercase flex items-center gap-2">
-                  <Trophy size={16} /> Misiones Secundarias
+              <div className="flex items-center justify-between gap-2 mb-3 sm:mb-5">
+                <h2 className="text-xs sm:text-sm font-bold tracking-widest text-amber-400 uppercase flex items-center gap-2 min-w-0">
+                  <Trophy size={15} className="shrink-0" />
+                  <span className="truncate">Misiones Secundarias</span>
                 </h2>
                 <button
                   data-tour="new-mission-btn"
                   onClick={() => setIsSideQuestsModalOpen(true)}
-                  className="text-xs font-bold text-rose-500 hover:text-white bg-rose-500/10 hover:bg-rose-500 transition-colors px-4 py-2 rounded-xl flex items-center gap-2"
+                  className="hit-44 shrink-0 text-xs font-bold text-rose-500 hover:text-white bg-rose-500/10 hover:bg-rose-500 transition-colors px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl flex items-center gap-1.5 whitespace-nowrap active:scale-95"
                 >
-                  <PlusCircle size={14} /> Nueva Misión
+                  <PlusCircle size={14} aria-hidden="true" /> Nueva Misión
                 </button>
               </div>
 
-              <div className="space-y-4">
+              <div className="space-y-2.5 sm:space-y-3">
                 {isQuestsLoading && devQuests.length === 0 && devDataset === 'demo' ? (
                   <div className="flex flex-col items-center justify-center py-12">
                     <div className="pv2-skeleton w-8 h-8 rounded-full" />
@@ -1019,62 +1020,63 @@ export default function Dashboard() {
                       onClick={() => setSelectedSideQuest(quest)}
                       aria-label={`Abrir misión ${quest.title}: ${quest.progress} de ${quest.durationDays} días, dificultad ${quest.difficulty}`}
                       aria-haspopup="dialog"
-                      className="side-quest-card group w-full text-left bg-rose-950/20 border rounded-2xl p-5 transition-all duration-200" data-completed={quest.completed ? 'true' : 'false'}
+                      className="side-quest-card group w-full text-left bg-rose-950/20 border rounded-xl sm:rounded-2xl px-3.5 py-3 sm:p-4 transition-all duration-200" data-completed={quest.completed ? 'true' : 'false'}
                     >
-                      <div className="flex items-center gap-5">
-                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${quest.completed
+                      <div className="flex items-center gap-3 sm:gap-4">
+                        <div className={`w-9 h-9 sm:w-11 sm:h-11 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0 transition-colors ${quest.completed
                           ? 'bg-emerald-500/20 text-emerald-500'
                           : 'bg-rose-950/60 text-emerald-500/70 group-hover:text-emerald-500'
                           }`}>
-                          <Trophy size={24} strokeWidth={1.5} />
+                          <Trophy size={18} strokeWidth={1.6} className="sm:w-5 sm:h-5" />
                         </div>
 
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <h3 className={`font-bold text-lg transition-colors ${quest.completed ? 'text-white/70 line-through' : 'text-white'}`}>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap mb-0.5 sm:mb-1">
+                            <h3 className={`font-semibold text-[15px] leading-snug sm:text-base transition-colors ${quest.completed ? 'text-white/70 line-through' : 'text-white'}`}>
                               {quest.title}
                             </h3>
                             {quest.completed ? (
-                              <span className="text-[10px] uppercase font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-md">
+                              <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-400 bg-emerald-500/15 px-2 py-0.5 rounded-full shrink-0">
                                 Completada
                               </span>
                             ) : quest.todayCompleted ? (
-                              <span className="text-[10px] uppercase font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md">
+                              <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-400 bg-emerald-500/15 px-2 py-0.5 rounded-full shrink-0">
                                 Hoy listo
                               </span>
                             ) : null}
                           </div>
-                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                            <span className="text-xs font-semibold text-white/40">
-                              Dificultad: <span className={
-                                quest.difficulty === 'Easy' ? 'text-emerald-400' :
-                                  quest.difficulty === 'Medium' ? 'text-amber-400' : 'text-red-400'
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] sm:text-xs font-medium text-white/50 tabular-nums">
+                            <span>
+                              Dificultad:{' '}
+                              <span className={
+                                quest.difficulty === 'Easy' ? 'text-emerald-400 font-semibold' :
+                                  quest.difficulty === 'Medium' ? 'text-amber-400 font-semibold' : 'text-red-400 font-semibold'
                               }>{quest.difficulty}</span>
                             </span>
-                            <span className="text-xs font-semibold text-white/40">
-                              Progreso: <span className="text-white">{quest.progress}</span> / {quest.durationDays} días
+                            <span>
+                              Progreso: <span className="text-white font-semibold">{quest.progress}</span>/{quest.durationDays} días
                             </span>
-                            <span className="text-xs font-semibold text-white/40">
-                              Completada: <span className="text-emerald-300">{quest.completionCount} {quest.completionCount === 1 ? 'vez' : 'veces'}</span>
+                            <span>
+                              Completada: <span className="text-emerald-300 font-semibold">{quest.completionCount} {quest.completionCount === 1 ? 'vez' : 'veces'}</span>
                             </span>
                           </div>
                         </div>
 
-                        <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all duration-200 ease-out ${quest.completed
-                          ? 'bg-emerald-500 border-emerald-500 scale-125 shadow-[0_0_15px_var(--color-emerald-500)]'
-                          : 'border-rose-950/40 group-hover:border-emerald-500/50 group-active:scale-75 scale-100'
+                        <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 flex items-center justify-center shrink-0 transition-all duration-200 ease-out ${quest.completed
+                          ? 'bg-emerald-500 border-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.45)]'
+                          : 'border-rose-950/40 group-hover:border-emerald-500/50 group-active:scale-90'
                           }`}>
-                          {quest.completed && <Check size={16} className="text-white" strokeWidth={3} />}
+                          {quest.completed && <Check size={14} className="text-white sm:w-4 sm:h-4" strokeWidth={3} />}
                         </div>
                       </div>
 
                       {/* Progress bar */}
                       {!quest.completed && (
-                        <div className="mt-4 flex flex-col gap-1.5">
+                        <div className="mt-2.5 sm:mt-3 flex flex-col gap-1">
                           <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
                             <div
                               className="h-full bg-emerald-500 transition-all duration-200 ease-out"
-                              style={{ width: `${(quest.progress / quest.durationDays) * 100}%` }}
+                              style={{ width: `${Math.min(100, (quest.progress / quest.durationDays) * 100)}%` }}
                             />
                           </div>
                         </div>
