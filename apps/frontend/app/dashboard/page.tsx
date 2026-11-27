@@ -5,6 +5,7 @@ import { useChallengeStore } from '@/store/useChallengeStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useQuestStore } from '@/store/useQuestStore';
 import { useUIStore } from '@/store/useUIStore';
+import InlineMetricEditor from '@/components/InlineMetricEditor';
 import dynamic from 'next/dynamic';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -30,7 +31,6 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { DEFAULT_GOALS } from '@/lib/constants/plans';
 import { syncCoreStores } from '@/lib/api/sync';
 import { isTutorialPending, markTutorialSeen } from '@/lib/tutorial';
@@ -156,6 +156,7 @@ export default function Dashboard() {
   });
 
   const hasCheckedReset = React.useRef(false);
+  const [isInitialSyncing, setIsInitialSyncing] = useState(() => !isActive);
 
   useEffect(() => {
     if (hasCheckedReset.current || !user) return;
@@ -163,10 +164,14 @@ export default function Dashboard() {
 
     // Fase 2 (Patrón /api/sync de appManifestV2): sincroniza reto + daily reset + misiones en 1 round-trip
     (async () => {
-      await syncCoreStores({ includeProfile: false });
-      const current = useChallengeStore.getState();
-      if (!current.isActive) {
-        if (user.onboardingCompleted !== true) router.push('/onboarding');
+      try {
+        await syncCoreStores({ includeProfile: false });
+        const current = useChallengeStore.getState();
+        if (!current.isActive) {
+          if (user.onboardingCompleted !== true) router.push('/onboarding');
+        }
+      } finally {
+        setIsInitialSyncing(false);
       }
     })();
   }, [user, router]);
@@ -256,40 +261,21 @@ export default function Dashboard() {
         </div>
 
         {isQuantified && (
-          <div className="flex items-center gap-3 pl-0 sm:pl-[68px]" onClick={(e) => e.stopPropagation()}>
-            <div className="flex-1 min-w-0 space-y-1">
-              <div className="flex items-center justify-between text-xs font-medium tabular-nums">
-                <span className={goal.completed ? 'text-emerald-400 font-semibold' : 'text-[var(--text-secondary)]'}>
-                  {formatMetricReadout(currentValue, targetValue, goal.targetUnit)}
-                </span>
-                <span className="text-[var(--text-muted)]">{pct}%</span>
-              </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-[var(--surface-inset)]">
-                <div
-                  className={`h-full rounded-full transition-all duration-200 ${goal.completed ? 'bg-emerald-500' : 'bg-rose-500'}`}
-                  style={{ width: `${pct}%` }}
-                />
-              </div>
-            </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <button
-                type="button"
-                onClick={(e) => handleDelta(e, -step)}
-                disabled={currentValue <= 0}
-                aria-label={`Restar ${step} a ${goal.title}`}
-                className="h-8 w-8 rounded-lg border border-white/10 bg-[var(--surface-inset)] hover:bg-white/10 disabled:opacity-30 flex items-center justify-center text-[var(--text-secondary)] transition-transform active:scale-90 cursor-pointer"
-              >
-                <Minus size={14} />
-              </button>
-              <button
-                type="button"
-                onClick={(e) => handleDelta(e, step)}
-                aria-label={`Sumar ${step} a ${goal.title}`}
-                className="h-8 w-8 rounded-lg border border-rose-500/30 bg-rose-500/15 hover:bg-rose-500/25 flex items-center justify-center text-rose-300 transition-transform active:scale-90 cursor-pointer"
-              >
-                <Plus size={14} />
-              </button>
-            </div>
+          <div className="pl-0 sm:pl-[68px]" onClick={(e) => e.stopPropagation()}>
+            <InlineMetricEditor
+              currentValue={currentValue}
+              targetValue={targetValue}
+              targetUnit={goal.targetUnit}
+              measurementType={measurementType}
+              isCompleted={goal.completed}
+              compact
+              onDelta={(delta) =>
+                void logDailyGoalProgress(todayStr, goal.id, { delta }).catch(() => {})
+              }
+              onSetValue={(value) =>
+                void logDailyGoalProgress(todayStr, goal.id, { currentValue: value }).catch(() => {})
+              }
+            />
           </div>
         )}
       </div>
@@ -384,45 +370,24 @@ export default function Dashboard() {
         </div>
 
         {pg.measurementType !== 'boolean' && (
-          <div className="flex items-center gap-3 pl-0 sm:pl-[68px]" onClick={(e) => e.stopPropagation()}>
-            <div className="flex-1 min-w-0 space-y-1">
-              <div className="flex items-center justify-between text-xs font-medium tabular-nums">
-                <span className={isCompleted ? 'text-emerald-400 font-semibold' : 'text-[var(--text-secondary)]'}>
-                  {formatMetricReadout(currentValue, targetValue, pg.targetUnit)}
-                </span>
-                <span className="text-[var(--text-muted)]">{pct}%</span>
-              </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-[var(--surface-inset)]">
-                <div
-                  className={`h-full rounded-full transition-all duration-200 ${accentBar}`}
-                  style={{ width: `${pct}%` }}
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center gap-1.5 shrink-0">
-              <button
-                type="button"
-                onClick={(e) => handleDelta(e, -step)}
-                disabled={currentValue <= 0 || isFailed}
-                aria-label={`Restar ${step} a ${pg.title}`}
-                className="h-8 w-8 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 disabled:opacity-30 flex items-center justify-center text-white transition-transform active:scale-90 cursor-pointer"
-              >
-                <Minus size={14} />
-              </button>
-              <button
-                type="button"
-                onClick={(e) => handleDelta(e, step)}
-                disabled={isFailed}
-                aria-label={`Sumar ${step} a ${pg.title}`}
-                className={`h-8 w-8 rounded-lg border flex items-center justify-center transition-transform active:scale-90 cursor-pointer ${pg.cadence === 'monthly'
-                  ? 'border-violet-400/30 bg-violet-500/20 hover:bg-violet-500/30 text-violet-200'
-                  : 'border-sky-400/30 bg-sky-500/20 hover:bg-sky-500/30 text-sky-200'
-                  }`}
-              >
-                <Plus size={14} />
-              </button>
-            </div>
+          <div className="pl-0 sm:pl-[68px]" onClick={(e) => e.stopPropagation()}>
+            <InlineMetricEditor
+              currentValue={currentValue}
+              targetValue={targetValue}
+              targetUnit={pg.targetUnit}
+              measurementType={pg.measurementType}
+              isCompleted={isCompleted}
+              isFailed={isFailed}
+              compact
+              onDelta={(delta) => {
+                if (isFailed) return;
+                void logPeriodGoalProgress(pg.id, { delta }).catch(() => {});
+              }}
+              onSetValue={(value) => {
+                if (isFailed) return;
+                void logPeriodGoalProgress(pg.id, { currentValue: value }).catch(() => {});
+              }}
+            />
           </div>
         )}
       </div>
@@ -430,7 +395,7 @@ export default function Dashboard() {
   }, [logPeriodGoalProgress]);
 
   // Stale-While-Revalidate: solo muestra el esqueleto completo en el primer arranque en frío sin datos en caché
-  if (isChallengeLoading && !todayLog) {
+  if ((isChallengeLoading || isInitialSyncing) && !todayLog) {
     return <DashboardLoading />;
   }
 
@@ -613,20 +578,13 @@ export default function Dashboard() {
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
               <button
                 type="button"
-                onClick={() => setShareModal({ open: true, initialKind: 'challenge' })}
-                aria-label="Compartir progreso del reto"
-                className="hit-44 inline-flex min-h-11 items-center gap-1 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] sm:text-xs font-semibold text-white/80 transition-colors hover:bg-white/10 hover:text-white active:scale-95"
+                onClick={() => setShareModal({ open: true, initialKind: 'daily' })}
+                aria-label="Compartir progreso"
+                className="hit-44 inline-flex min-h-11 items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3.5 py-1.5 text-[11px] sm:text-xs font-semibold text-white/80 transition-colors hover:bg-white/10 hover:text-white active:scale-95"
               >
                 <Share2 className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-rose-400" aria-hidden="true" />
                 <span>Compartir</span>
               </button>
-              <Link
-                href="/calendar"
-                className="hit-44 inline-flex min-h-11 items-center gap-1 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] sm:text-xs font-semibold text-white/80 transition-colors hover:bg-white/10 hover:text-white active:scale-95"
-              >
-                <CalendarRange className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-rose-400" aria-hidden="true" />
-                <span>Calendario</span>
-              </Link>
             </div>
           </div>
 
@@ -689,32 +647,86 @@ export default function Dashboard() {
                     ? '1 tarea diaria restante para terminar el día.'
                     : `${remainingTasks} tareas diarias restantes para terminar el día.`}
             </p>
-            <div className="mt-2.5 sm:mt-4">
-              <button
-                type="button"
-                onClick={() => setShareModal({ open: true, initialKind: 'daily' })}
-                className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl sm:rounded-2xl border border-white/10 bg-[var(--surface-inset)] px-3 py-2 sm:py-2.5 text-xs font-semibold text-[var(--text-secondary)] transition-colors hover:bg-white/10 hover:text-white active:scale-[0.98]"
-              >
-                <Share2 className="h-3.5 w-3.5 text-rose-400" aria-hidden="true" />
-                <span>Compartir estado de hoy</span>
-              </button>
-            </div>
-            {(currentWeeklyGoals.length > 0 || currentMonthlyGoals.length > 0) && (
-              <div className="mt-2.5 flex flex-wrap gap-1.5 sm:gap-2">
-                {currentWeeklyGoals.length > 0 && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-400/25 bg-sky-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-sky-300 tabular-nums">
-                    <CalendarRange size={12} aria-hidden="true" />
-                    Sem {currentWeekNumber}: {completedWeeklyCount}/{currentWeeklyGoals.length}
-                  </span>
-                )}
-                {currentMonthlyGoals.length > 0 && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-400/25 bg-violet-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-violet-300 tabular-nums">
-                    <CalendarClock size={12} aria-hidden="true" />
-                    Mes {currentMonthNumber}: {completedMonthlyCount}/{currentMonthlyGoals.length}
-                  </span>
-                )}
-              </div>
-            )}
+            {(() => {
+              const calcHorizonPct = (
+                items: Array<{
+                  completed?: boolean;
+                  status?: string;
+                  measurementType?: string;
+                  currentValue?: number;
+                  targetValue?: number;
+                }>
+              ) => {
+                if (items.length === 0) return 0;
+                const totalRatio = items.reduce((acc, item) => {
+                  const isDone = item.completed === true || item.status === 'success';
+                  if (isDone) return acc + 1;
+                  if (
+                    item.measurementType &&
+                    item.measurementType !== 'boolean' &&
+                    typeof item.targetValue === 'number' &&
+                    item.targetValue > 0
+                  ) {
+                    const cur = typeof item.currentValue === 'number' ? item.currentValue : 0;
+                    return acc + Math.min(1, Math.max(0, cur / item.targetValue));
+                  }
+                  return acc;
+                }, 0);
+                return Math.round((totalRatio / items.length) * 100);
+              };
+
+              const dailyGoalsList = devLog?.goals || [];
+              const dailyPct = calcHorizonPct(dailyGoalsList);
+              const weeklyPct = calcHorizonPct(currentWeeklyGoals);
+              const monthlyPct = calcHorizonPct(currentMonthlyGoals);
+
+              return (
+                <div className="mt-3 space-y-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-inset)] p-3">
+                  <div className="flex items-center justify-between text-[11px] font-bold">
+                    <span className="text-[var(--text-muted)] uppercase tracking-wider">Progreso multi-horizonte</span>
+                  </div>
+                  {dailyGoalsList.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-xs tabular-nums">
+                        <span className="text-[var(--text-secondary)] font-medium">Hoy (Diario)</span>
+                        <span className="font-bold text-rose-600 dark:text-rose-400">{dailyPct}%</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-[var(--progress-track,rgba(148,163,184,0.22))] overflow-hidden">
+                        <div className="h-full rounded-full bg-rose-500 transition-all duration-300" style={{ width: `${dailyPct}%` }} />
+                      </div>
+                    </div>
+                  )}
+                  {currentWeeklyGoals.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-xs tabular-nums">
+                        <span className="inline-flex items-center gap-1 text-sky-700 dark:text-sky-300 font-medium">
+                          <CalendarRange size={12} aria-hidden="true" />
+                          Semana {currentWeekNumber} ({completedWeeklyCount}/{currentWeeklyGoals.length})
+                        </span>
+                        <span className="font-bold text-sky-700 dark:text-sky-300">{weeklyPct}%</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-[var(--progress-track,rgba(148,163,184,0.22))] overflow-hidden">
+                        <div className="h-full rounded-full bg-sky-500 transition-all duration-300" style={{ width: `${weeklyPct}%` }} />
+                      </div>
+                    </div>
+                  )}
+                  {currentMonthlyGoals.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-xs tabular-nums">
+                        <span className="inline-flex items-center gap-1 text-violet-700 dark:text-violet-300 font-medium">
+                          <CalendarClock size={12} aria-hidden="true" />
+                          Mes {currentMonthNumber} ({completedMonthlyCount}/{currentMonthlyGoals.length})
+                        </span>
+                        <span className="font-bold text-violet-700 dark:text-violet-300">{monthlyPct}%</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-[var(--progress-track,rgba(148,163,184,0.22))] overflow-hidden">
+                        <div className="h-full rounded-full bg-violet-500 transition-all duration-300" style={{ width: `${monthlyPct}%` }} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
 
           <div className="mt-3.5 border-t border-white/10 pt-3 sm:mt-5 sm:pt-4 flex items-center justify-between gap-3">

@@ -26,6 +26,7 @@ export interface SideQuestTask {
   icon: string | null;
   order: number;
   frequency: string;
+  measurementType?: 'boolean' | 'count' | 'numeric';
   targetValue: number | null;
   targetUnit: string | null;
   completed: boolean;
@@ -44,6 +45,8 @@ export interface SideQuestRun {
   currentDay?: number;
   currentWeek?: number;
   totalWeeks?: number;
+  currentMonth?: number;
+  totalMonths?: number;
   tasks: SideQuestTask[];
 }
 
@@ -65,13 +68,14 @@ interface QuestStore {
   error: string | null;
   fetchQuests: () => Promise<void>;
   fetchAvailableQuests: () => Promise<void>;
-  subscribeToQuest: (title: string, difficulty: string, durationDays: number) => Promise<void>;
+  subscribeToQuest: (title: string, difficulty: string, durationDays: number) => Promise<boolean>;
   createCustomQuest: (quest: CreateQuestInput) => Promise<boolean>;
   progressQuest: (id: string) => Promise<void>;
   toggleTask: (
     questId: string,
     taskId: string,
-    action?: 'toggle' | 'increment' | 'decrement'
+    action?: 'toggle' | 'increment' | 'decrement' | 'set',
+    options?: { delta?: number; value?: number }
   ) => Promise<void>;
   restartQuest: (id: string) => Promise<void>;
   hydrateFromSync: (quests: SideQuest[], availableQuests: SideQuestTemplate[]) => void;
@@ -84,7 +88,12 @@ export interface CreateQuestInput {
   icon: string;
   difficulty: string;
   durationDays: number;
-  tasks: Array<Pick<SideQuestTask, 'title' | 'description' | 'icon' | 'frequency' | 'targetValue' | 'targetUnit'>>;
+  tasks: Array<
+    Pick<
+      SideQuestTask,
+      'title' | 'description' | 'icon' | 'frequency' | 'measurementType' | 'targetValue' | 'targetUnit'
+    >
+  >;
 }
 
 let questSyncSeq = 0;
@@ -123,11 +132,14 @@ const getTaskPeriodTargetClient = (task: SideQuestTask): number => {
     return task.periodTarget;
   }
   if (
-    task.frequency === 'weekly' &&
+    task.measurementType &&
+    task.measurementType !== 'boolean' &&
     typeof task.targetValue === 'number' &&
-    task.targetValue > 1 &&
-    task.targetValue <= 14
+    task.targetValue > 0
   ) {
+    return task.targetValue;
+  }
+  if (typeof task.targetValue === 'number' && task.targetValue > 1) {
     return task.targetValue;
   }
   return 1;
@@ -146,14 +158,17 @@ const normalizeQuestForToday = (quest: SideQuest): SideQuest => {
   );
   const currentDay = Math.min(Math.max(1, quest.durationDays || 1), dayOffset + 1);
   const currentWeek = Math.floor(dayOffset / 7) + 1;
+  const currentMonth = Math.floor(dayOffset / 30) + 1;
 
   const tasks = (quest.currentRun.tasks || []).map((task) => {
     const expectedPeriodKey =
       task.frequency === 'once'
         ? 'once'
-        : task.frequency === 'weekly'
-          ? `week-${currentWeek}`
-          : todayStr;
+        : task.frequency === 'monthly'
+          ? `month-${currentMonth}`
+          : task.frequency === 'weekly'
+            ? `week-${currentWeek}`
+            : todayStr;
     if (task.periodKey && task.periodKey !== expectedPeriodKey) {
       return {
         ...task,
@@ -241,12 +256,14 @@ export const useQuestStore = create<QuestStore>()(
         const trimmedTitle = title.trim();
         const normalized = normalizeQuestTitle(trimmedTitle);
         const previousQuests = get().quests || [];
+        if (!normalized) {
+          return false;
+        }
         if (
-          !normalized ||
           inFlightQuestTitles.has(normalized) ||
           previousQuests.some((q) => normalizeQuestTitle(q.title) === normalized)
         ) {
-          return;
+          return true;
         }
 
         inFlightQuestTitles.add(normalized);
@@ -308,12 +325,14 @@ export const useQuestStore = create<QuestStore>()(
             ),
             isLoading: false,
           }));
+          return true;
         } catch (error: any) {
           set({
             quests: previousQuests,
             error: error.message || 'Failed to subscribe to quest',
             isLoading: false,
           });
+          return false;
         } finally {
           inFlightQuestTitles.delete(normalized);
         }
@@ -427,11 +446,12 @@ export const useQuestStore = create<QuestStore>()(
         }
       },
 
-      toggleTask: async (questId, taskId, action = 'toggle') => {
+      toggleTask: async (questId, taskId, action = 'toggle', options) => {
         ++questSyncSeq;
         const previousQuests = get().quests || [];
         const nowIso = new Date().toISOString();
         const tzOffset = new Date().getTimezoneOffset();
+        const step = options?.delta ?? 1;
 
         // Optimistic update completo en Frame 0 (0ms): tarea, progreso por días, estado completado y contador
         set({
@@ -445,6 +465,9 @@ export const useQuestStore = create<QuestStore>()(
             const updatedTasks = prevTasks.map((task) => {
               if (task.id !== taskId) return task;
               const periodTarget = getTaskPeriodTargetClient(task);
+              const isDynamic =
+                (task.measurementType && task.measurementType !== 'boolean') ||
+                periodTarget > 1;
               const currentValue =
                 typeof task.currentValue === 'number'
                   ? task.currentValue
@@ -452,16 +475,15 @@ export const useQuestStore = create<QuestStore>()(
                     ? periodTarget
                     : 0;
               let nextValue = currentValue;
-              if (periodTarget > 1) {
+              if (action === 'set' && typeof options?.value === 'number') {
+                nextValue = Math.round(Math.max(0, options.value) * 100) / 100;
+              } else if (isDynamic) {
                 if (action === 'decrement') {
-                  nextValue = Math.max(0, currentValue - 1);
+                  nextValue = Math.round(Math.max(0, currentValue - step) * 100) / 100;
                 } else if (action === 'increment') {
-                  nextValue = Math.min(periodTarget, currentValue + 1);
+                  nextValue = Math.round((currentValue + step) * 100) / 100;
                 } else {
-                  nextValue =
-                    currentValue >= periodTarget
-                      ? 0
-                      : Math.min(periodTarget, currentValue + 1);
+                  nextValue = currentValue >= periodTarget ? 0 : periodTarget;
                 }
               } else {
                 if (action === 'decrement') nextValue = 0;
@@ -534,7 +556,12 @@ export const useQuestStore = create<QuestStore>()(
         try {
           const response = await apiClient<SideQuest>(`/quests/${questId}/tasks/${taskId}`, {
             method: 'PATCH',
-            body: JSON.stringify({ action, timezoneOffset: tzOffset }),
+            body: JSON.stringify({
+              action,
+              ...(typeof options?.delta === 'number' ? { delta: options.delta } : {}),
+              ...(typeof options?.value === 'number' ? { value: options.value } : {}),
+              timezoneOffset: tzOffset,
+            }),
           });
           set({ quests: (get().quests || []).map((q) => (q.id === questId ? response : q)) });
         } catch (error: any) {

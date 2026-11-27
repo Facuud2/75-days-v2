@@ -23,6 +23,13 @@ export const EQUIPMENT_CHIPS = [
   { key: 'bands', label: 'Bandas' },
 ] as const;
 
+export function formatEquipmentLabel(equipment?: string | null): string {
+  if (!equipment) return '';
+  const key = equipment.trim().toLowerCase();
+  const match = EQUIPMENT_CHIPS.find((c) => c.key === key);
+  return match ? match.label : equipment;
+}
+
 export const MUSCLE_LABELS_ES: Record<string, string> = {
   abdominals: 'Abdominales',
   abductors: 'Abductores',

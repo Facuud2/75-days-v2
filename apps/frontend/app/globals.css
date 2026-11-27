@@ -1215,6 +1215,10 @@ a,
 }
 
 @media (max-width: 1023px) {
+  html {
+    scroll-padding-bottom: 6rem;
+  }
+
   .app-header {
     padding-top: max(0.5rem, env(safe-area-inset-top, 0px));
     padding-bottom: 0.5rem;

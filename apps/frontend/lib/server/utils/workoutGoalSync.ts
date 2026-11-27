@@ -302,6 +302,19 @@ export async function syncWorkoutsToChallengeGoals(params: {
     }
   }
 
+  // Also sync dynamic distance/steps/calories/sessions metrics across Challenge and SideQuests
+  try {
+    const { syncHealthMetricsToGoals } = await import('./dynamicGoalSync');
+    await syncHealthMetricsToGoals({
+      userId,
+      date,
+      timezoneOffset,
+      sources: ['workout'],
+    });
+  } catch (err) {
+    console.warn('[workoutGoalSync] dynamic sync skipped:', err);
+  }
+
   return {
     synced: true,
     date,

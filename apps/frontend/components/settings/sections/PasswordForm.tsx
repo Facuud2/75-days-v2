@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -26,6 +26,9 @@ export function PasswordForm({ onSuccess }: PasswordFormProps) {
   const router = useRouter();
   const { user, logout } = useAuthStore();
   const isGoogleUser = Boolean(user?.isGoogleUser);
+  const currentPwId = useId();
+  const newPwId = useId();
+  const confirmPwId = useId();
 
   const [showPasswords, setShowPasswords] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -238,13 +241,13 @@ export function PasswordForm({ onSuccess }: PasswordFormProps) {
 
       <div className="space-y-1.5">
         <label
-          htmlFor="settings-current-password"
+          htmlFor={currentPwId}
           className="block text-xs font-semibold text-[var(--text-secondary)]"
         >
           Contraseña actual
         </label>
         <input
-          id="settings-current-password"
+          id={currentPwId}
           type={inputType}
           autoComplete="current-password"
           placeholder="••••••••"
@@ -262,13 +265,13 @@ export function PasswordForm({ onSuccess }: PasswordFormProps) {
       <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
         <div className="space-y-1.5">
           <label
-            htmlFor="settings-new-password"
+            htmlFor={newPwId}
             className="block text-xs font-semibold text-[var(--text-secondary)]"
           >
             Nueva contraseña
           </label>
           <input
-            id="settings-new-password"
+            id={newPwId}
             type={inputType}
             autoComplete="new-password"
             placeholder="••••••••"
@@ -285,13 +288,13 @@ export function PasswordForm({ onSuccess }: PasswordFormProps) {
 
         <div className="space-y-1.5">
           <label
-            htmlFor="settings-confirm-password"
+            htmlFor={confirmPwId}
             className="block text-xs font-semibold text-[var(--text-secondary)]"
           >
             Confirmar contraseña
           </label>
           <input
-            id="settings-confirm-password"
+            id={confirmPwId}
             type={inputType}
             autoComplete="new-password"
             placeholder="••••••••"

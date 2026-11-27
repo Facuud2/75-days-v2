@@ -29,11 +29,11 @@ export default function RestTimerPill({
 
   return (
     <div className="shrink-0 border-t border-zinc-800/90 bg-zinc-900/95 px-4 pb-[calc(0.85rem+env(safe-area-inset-bottom,0px))] pt-3 backdrop-blur-md">
-      <div className="mx-auto flex max-w-2xl items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-3">
+      <div className="mx-auto flex max-w-2xl items-center justify-between gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-2.5">
           {/* Circular SVG countdown ring */}
-          <div className="relative flex h-11 w-11 shrink-0 items-center justify-center">
-            <svg className="h-11 w-11 -rotate-90" viewBox="0 0 40 40" aria-hidden="true">
+          <div className="relative flex h-10 w-10 shrink-0 items-center justify-center">
+            <svg className="h-10 w-10 -rotate-90" viewBox="0 0 40 40" aria-hidden="true">
               <circle
                 cx="20"
                 cy="20"
@@ -59,22 +59,21 @@ export default function RestTimerPill({
             <Timer className="absolute h-4 w-4 text-rose-400" />
           </div>
 
-          <div className="min-w-0">
-            <div className="flex items-baseline gap-2">
-              <span className="text-lg font-bold text-white tabular-nums">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-base font-bold text-white tabular-nums">
                 {formatDurationClock(remainingSec)}
               </span>
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+              <span className="hidden text-[10px] font-semibold uppercase tracking-wider text-zinc-400 sm:inline">
                 Descanso
               </span>
             </div>
             {nextSetPreview && (
               <p className="truncate text-[11px] text-zinc-400">
-                Siguiente:{' '}
                 <span className="font-semibold text-zinc-200">
                   {nextSetPreview.exerciseName}
                 </span>{' '}
-                · Serie {nextSetPreview.setNumber}
+                · S{nextSetPreview.setNumber}
               </p>
             )}
           </div>

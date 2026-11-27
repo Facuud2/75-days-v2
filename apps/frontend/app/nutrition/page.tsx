@@ -6,18 +6,15 @@ import { useSearchParams } from 'next/navigation';
 import { addDays, format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import {
-  Beef,
   Bookmark,
-  Camera,
   Check,
   ChevronLeft,
   ChevronRight,
-  Droplet,
+  ChevronsUpDown,
+  Plus,
   Search,
   SlidersHorizontal,
-  Wheat,
   X,
-  type LucideIcon,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { healthService, Meal, MealRoutineItem, MealRoutineMode } from '@/lib/api/health';
@@ -86,6 +83,9 @@ function NutritionPageInner() {
     items: MealRoutineItem[];
   } | null>(null);
 
+  // Toggle vista principal de la tarjeta de calorías (consumidas ↔ restantes)
+  const [calorieViewMode, setCalorieViewMode] = useState<'consumed' | 'remaining'>('consumed');
+
   // Inline Nutritional Goals Editor
   const [isEditingGoals, setIsEditingGoals] = useState(false);
   const [savingGoals, setSavingGoals] = useState(false);
@@ -145,7 +145,11 @@ function NutritionPageInner() {
   // Pasos: el backend aún no expone este dato; se mantiene en 0 hasta integrarlo.
   const steps = 0;
 
-  const mealsForPhotos = useMemo(() => meals.slice(0, 3), [meals]);
+  const mealsForPhotos = useMemo(() => meals.slice(0, 5), [meals]);
+
+  const ringRadius = 30;
+  const ringCircumference = 2 * Math.PI * ringRadius;
+  const ringDashOffset = ringCircumference * (1 - Math.min(100, Math.max(0, progressPct)) / 100);
 
   const allMealsForPlan = useMemo(
     () =>
@@ -312,86 +316,102 @@ function NutritionPageInner() {
 
       {/* Three Card Layout */}
       <div className="space-y-4">
-        {/* Card 1: Calorías consumidas */}
+        {/* Card 1: Calorías consumidas (estilo BitePal) */}
         <section
           aria-label="Calorías consumidas"
           aria-busy={isLoadingStats && !stats}
-          className="rounded-[20px] border border-[var(--border-subtle)] bg-[var(--surface-card)] p-4 space-y-3.5"
+          className="rounded-[28px] border border-[var(--border-subtle)] bg-[var(--surface-card)] p-5 sm:p-6 space-y-5 shadow-[0_2px_14px_rgba(0,0,0,0.04)] dark:shadow-none"
         >
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div className={`tabular-nums transition-opacity ${isLoadingStats && !stats ? 'opacity-60' : ''}`}>
-              <p className="text-[12px] font-medium text-[var(--text-muted)]">
-                Calorías consumidas
-              </p>
-              <div className="mt-0.5 flex items-baseline gap-1.5 whitespace-nowrap">
-                <span className="text-[28px] font-bold leading-none tracking-[-0.03em] text-[var(--text-primary)]">
-                  {consumed.toLocaleString('es-AR')}
+          {/* Top row: Title + giant calorie number on left, circular progress ring + "+" button on right */}
+          <div className="flex items-center justify-between gap-4">
+            <div
+              className={`min-w-0 tabular-nums transition-opacity ${isLoadingStats && !stats ? 'opacity-60' : ''}`}
+            >
+              <button
+                type="button"
+                onClick={() =>
+                  setCalorieViewMode((mode) => (mode === 'consumed' ? 'remaining' : 'consumed'))
+                }
+                title={
+                  calorieViewMode === 'consumed'
+                    ? 'Cambiar a calorías restantes'
+                    : 'Cambiar a calorías consumidas'
+                }
+                className="inline-flex cursor-pointer items-center gap-1.5 rounded-md text-[15px] font-semibold text-[var(--text-muted)] transition-colors hover:text-[var(--text-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+              >
+                <span>
+                  {calorieViewMode === 'consumed'
+                    ? 'Calorías consumidas'
+                    : overGoal
+                      ? 'Calorías excedidas'
+                      : 'Calorías restantes'}
                 </span>
-                <span className="text-[14px] font-medium text-[var(--text-muted)]">
-                  / {dailyGoal.toLocaleString('es-AR')} kcal
+                <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 opacity-75" aria-hidden="true" />
+              </button>
+
+              <div className="mt-1.5 flex items-baseline gap-2 whitespace-nowrap">
+                <span className="text-[42px] sm:text-[46px] font-black leading-none tracking-[-0.04em] text-[var(--text-primary)]">
+                  {calorieViewMode === 'consumed'
+                    ? consumed.toLocaleString('es-AR')
+                    : overGoal
+                      ? `+${Math.abs(remaining).toLocaleString('es-AR')}`
+                      : Math.max(0, remaining).toLocaleString('es-AR')}
                 </span>
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5">
-              <span
-                className={`rounded-full px-2.5 py-1 text-xs font-semibold tabular-nums whitespace-nowrap ${
-                  overGoal
-                    ? 'bg-[var(--surface-raised)] text-[var(--status-warning)]'
-                    : 'bg-[var(--surface-inset)] text-[var(--text-secondary)]'
-                }`}
+            {/* BitePal circular progress ring with centered "+" action */}
+            <button
+              type="button"
+              onClick={() => openLogForSlot(undefined, 'AI')}
+              aria-label="Registrar comida"
+              className="relative flex h-[74px] w-[74px] shrink-0 cursor-pointer items-center justify-center rounded-full transition-transform duration-150 hover:scale-[1.03] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+            >
+              <svg
+                className="pointer-events-none absolute inset-0 h-full w-full -rotate-90"
+                viewBox="0 0 72 72"
+                aria-hidden="true"
               >
-                {overGoal
-                  ? `+${Math.abs(remaining).toLocaleString('es-AR')} kcal`
-                  : `${Math.max(0, remaining).toLocaleString('es-AR')} restantes`}
-              </span>
-              <button
-                type="button"
-                onClick={() =>
-                  isEditingGoals ? setIsEditingGoals(false) : handleOpenGoalsEditor()
-                }
-                aria-label="Editar metas nutricionales"
-                aria-expanded={isEditingGoals}
-                className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-[var(--border-subtle)] bg-[var(--surface-inset)] text-[var(--text-secondary)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
-              >
-                {isEditingGoals ? (
-                  <X className="h-4 w-4" aria-hidden="true" />
-                ) : (
-                  <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
-                )}
-              </button>
-            </div>
+                <circle
+                  cx="36"
+                  cy="36"
+                  r={ringRadius}
+                  fill="none"
+                  stroke="var(--progress-track)"
+                  strokeWidth="7"
+                />
+                {progressPct > 0 ? (
+                  <circle
+                    cx="36"
+                    cy="36"
+                    r={ringRadius}
+                    fill="none"
+                    stroke={overGoal ? 'var(--status-warning)' : '#b8d420'}
+                    strokeWidth="7"
+                    strokeLinecap="round"
+                    strokeDasharray={ringCircumference}
+                    strokeDashoffset={ringDashOffset}
+                    className="transition-[stroke-dashoffset] duration-300 ease-out"
+                  />
+                ) : null}
+              </svg>
+              <Plus
+                className="relative z-10 h-6 w-6 text-[var(--text-primary)]"
+                strokeWidth={2.6}
+                aria-hidden="true"
+              />
+            </button>
           </div>
 
-          {/* Calorie Progress Bar */}
-          <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--progress-track)]">
-            <div
-              className="h-full rounded-full transition-[width] duration-200"
-              style={{
-                width: `${progressPct}%`,
-                backgroundColor: overGoal ? 'var(--status-warning)' : 'var(--progress-fill)',
-              }}
-            />
-          </div>
-
-          {/* 3 Clean Macro Columns */}
-          <div className="grid grid-cols-3 gap-2.5 pt-0.5 tabular-nums">
+          {/* 3 Clean Macro Columns (BitePal order: Carbohid. / Grasas / Proteínas) */}
+          <div className="grid grid-cols-3 gap-4 sm:gap-5 tabular-nums">
             {[
               {
-                key: 'protein',
-                label: 'Proteínas',
-                val: Math.round(macros.proteinG * 10) / 10,
-                goal: Math.round(macros.goals?.proteinG ?? 150),
-                color: 'var(--chart-protein)',
-                Icon: Beef as LucideIcon,
-              },
-              {
                 key: 'carb',
-                label: 'Carbos',
+                label: 'Carbohid.',
                 val: Math.round(macros.carbG * 10) / 10,
                 goal: Math.round(macros.goals?.carbG ?? 200),
                 color: 'var(--chart-carb)',
-                Icon: Wheat as LucideIcon,
               },
               {
                 key: 'fat',
@@ -399,42 +419,31 @@ function NutritionPageInner() {
                 val: Math.round(macros.fatG * 10) / 10,
                 goal: Math.round(macros.goals?.fatG ?? 65),
                 color: 'var(--chart-fat)',
-                Icon: Droplet as LucideIcon,
+              },
+              {
+                key: 'protein',
+                label: 'Proteínas',
+                val: Math.round(macros.proteinG * 10) / 10,
+                goal: Math.round(macros.goals?.proteinG ?? 150),
+                color: 'var(--chart-protein)',
               },
             ].map((m) => {
               const pct = m.goal > 0 ? Math.min(100, Math.round((m.val / m.goal) * 100)) : 0;
-              const MacroIcon = m.Icon;
               return (
-                <div
-                  key={m.key}
-                  className="min-w-0 rounded-xl bg-[var(--surface-inset)] px-3 py-2"
-                >
-                  <div className="flex flex-wrap items-center gap-1">
-                    <MacroIcon
-                      className="h-3.5 w-3.5 shrink-0"
-                      style={{ color: m.color }}
-                      strokeWidth={2.2}
-                      aria-hidden="true"
-                    />
-                    <span
-                      className="min-w-0 break-words text-[11px] font-semibold"
-                      style={{ color: m.color }}
-                    >
-                      {m.label}
-                    </span>
-                  </div>
-                  <span className="mt-0.5 block text-[13px] font-semibold text-[var(--text-primary)]">
-                    {m.val}
-                    <span className="font-normal text-[var(--text-muted)]">
-                      /{m.goal}g
-                    </span>
-                  </span>
-                  <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-[var(--progress-track)]">
+                <div key={m.key} className="min-w-0">
+                  <p className="truncate text-[14px] font-semibold text-[var(--text-muted)]">
+                    {m.label}
+                  </p>
+                  <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-[var(--progress-track)]">
                     <div
                       className="h-full rounded-full transition-[width] duration-200"
                       style={{ width: `${pct}%`, backgroundColor: m.color }}
                     />
                   </div>
+                  <p className="mt-2 truncate text-[13px] leading-none">
+                    <span className="font-bold text-[var(--text-primary)]">{m.val}</span>
+                    <span className="font-medium text-[var(--text-muted)]">/{m.goal}g</span>
+                  </p>
                 </div>
               );
             })}
@@ -451,25 +460,59 @@ function NutritionPageInner() {
             </div>
           ) : null}
 
-          {/* Food Photo Grid */}
-          <div className="pt-1">
-            <FoodPhotoGrid meals={mealsForPhotos} onMealPress={(meal) => setEditingMeal(meal)} />
-          </div>
+          {/* Overlapping Circular Meal Photos */}
+          {mealsForPhotos.length > 0 ? (
+            <div className="pt-0.5">
+              <FoodPhotoGrid
+                meals={mealsForPhotos}
+                totalCount={meals.length}
+                onMealPress={(meal) => setEditingMeal(meal)}
+              />
+            </div>
+          ) : null}
 
-          {/* Goal meta with quick toggle */}
-          <div className="flex items-center justify-between pt-1 border-t border-[var(--divider)]">
-            <span className="text-[13px] font-medium text-[var(--text-secondary)] tabular-nums">
-              Meta: {dailyGoal} kcal
-            </span>
+          {/* Subtle footer: Goal toggle + compact quick-log shortcuts */}
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--divider)] pt-3">
             <button
               type="button"
               onClick={() =>
                 isEditingGoals ? setIsEditingGoals(false) : handleOpenGoalsEditor()
               }
-              className="min-h-8 cursor-pointer rounded-lg px-2 text-xs font-semibold text-[var(--accent-text)] hover:bg-[var(--surface-inset)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+              title="Editar metas nutricionales"
+              aria-expanded={isEditingGoals}
+              className="inline-flex min-h-8 cursor-pointer items-center gap-1.5 rounded-full px-2 text-[12px] font-semibold text-[var(--text-secondary)] tabular-nums transition-colors hover:bg-[var(--surface-inset)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
             >
-              {isEditingGoals ? 'Cerrar' : 'Ajustar metas'}
+              {isEditingGoals ? (
+                <>
+                  <X className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>Cerrar metas</span>
+                </>
+              ) : (
+                <>
+                  <SlidersHorizontal className="h-3.5 w-3.5 text-[var(--text-muted)]" aria-hidden="true" />
+                  <span>Meta: {dailyGoal.toLocaleString('es-AR')} kcal</span>
+                </>
+              )}
             </button>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => openLogForSlot(undefined, 'SEARCH')}
+                className="inline-flex min-h-8 cursor-pointer items-center gap-1.5 rounded-full bg-[var(--surface-inset)] px-3 text-[12px] font-semibold text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-raised)] hover:text-[var(--text-primary)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+              >
+                <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                Buscador
+              </button>
+              <button
+                type="button"
+                onClick={() => openLogForSlot(undefined, 'CUSTOM')}
+                className="inline-flex min-h-8 cursor-pointer items-center gap-1.5 rounded-full bg-[var(--surface-inset)] px-3 text-[12px] font-semibold text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-raised)] hover:text-[var(--text-primary)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+              >
+                <Bookmark className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                Mis comidas
+              </button>
+            </div>
           </div>
 
           {/* Optional Inline Goals Editor */}
@@ -560,36 +603,7 @@ function NutritionPageInner() {
                 Guardar metas
               </button>
             </form>
-          ) : (
-            <div className="space-y-2">
-              <button
-                type="button"
-                onClick={() => openLogForSlot(undefined, 'AI')}
-                className="flex min-h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-[var(--accent-fill)] px-4 text-[15px] font-semibold text-[var(--on-accent)] transition-transform duration-100 active:scale-[0.98]"
-              >
-                <Camera className="h-4 w-4 shrink-0" aria-hidden="true" />
-                Registrar comida
-              </button>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => openLogForSlot(undefined, 'SEARCH')}
-                  className="flex min-h-10 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-inset)] px-3 text-[13px] font-semibold text-[var(--text-primary)] transition-transform duration-100 active:scale-[0.98] hover:bg-[var(--surface-raised)]"
-                >
-                  <Search className="h-4 w-4 shrink-0 text-[var(--text-secondary)]" aria-hidden="true" />
-                  Buscador
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openLogForSlot(undefined, 'CUSTOM')}
-                  className="flex min-h-10 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-inset)] px-3 text-[13px] font-semibold text-[var(--text-primary)] transition-transform duration-100 active:scale-[0.98] hover:bg-[var(--surface-raised)]"
-                >
-                  <Bookmark className="h-4 w-4 shrink-0 text-[var(--text-secondary)]" aria-hidden="true" />
-                  Mis comidas
-                </button>
-              </div>
-            </div>
-          )}
+          ) : null}
         </section>
 
         {/* Card 2: Calorías por quemar */}

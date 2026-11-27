@@ -18,7 +18,7 @@ import {
   X,
 } from 'lucide-react';
 import type { WorkoutEntryRecord } from '@/lib/api/health';
-import { formatMuscleLabel, SPORT_LABELS_ES } from '@/lib/constants/fitness';
+import { formatEquipmentLabel, formatMuscleLabel, SPORT_LABELS_ES } from '@/lib/constants/fitness';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import {
   REDUCED_MOTION_TRANSITION,
@@ -384,7 +384,7 @@ export default function WorkoutSessionDetailSheet({
                     {workout.exercises.map((ex, idx) => {
                       const subtitleParts = [
                         ex.primaryMuscle ? formatMuscleLabel(ex.primaryMuscle) : null,
-                        ex.equipment || null,
+                        ex.equipment ? formatEquipmentLabel(ex.equipment) : null,
                       ].filter(Boolean);
 
                       return (

@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Check, Clock, Minus, RotateCcw, Target, Trophy, X } from 'lucide-react';
+import { Check, Clock, RotateCcw, Trophy, X } from 'lucide-react';
 import { SideQuest, SideQuestTask, useQuestStore } from '@/store/useQuestStore';
+import InlineMetricEditor from './InlineMetricEditor';
 
 interface Props {
   quest: SideQuest;
@@ -10,6 +11,7 @@ interface Props {
 const FREQUENCY_LABELS: Record<string, string> = {
   daily: 'Diaria',
   weekly: 'Semanal',
+  monthly: 'Mensual',
   once: 'Única',
 };
 
@@ -18,14 +20,24 @@ function getPeriodTarget(task: SideQuestTask): number {
     return task.periodTarget;
   }
   if (
-    task.frequency === 'weekly' &&
+    task.measurementType &&
+    task.measurementType !== 'boolean' &&
     typeof task.targetValue === 'number' &&
-    task.targetValue > 1 &&
-    task.targetValue <= 14
+    task.targetValue > 0
   ) {
     return task.targetValue;
   }
+  if (typeof task.targetValue === 'number' && task.targetValue > 1) {
+    return task.targetValue;
+  }
   return 1;
+}
+
+function isDynamicTask(task: SideQuestTask): boolean {
+  if (task.measurementType === 'count' || task.measurementType === 'numeric') {
+    return true;
+  }
+  return getPeriodTarget(task) > 1;
 }
 
 export default function SideQuestDetailModal({ quest, onClose }: Props) {
@@ -36,10 +48,14 @@ export default function SideQuestDetailModal({ quest, onClose }: Props) {
   const done = tasks.filter(task => task.completed).length;
   const currentDay = liveQuest.currentRun?.currentDay ?? Math.max(1, liveQuest.progress || 1);
 
-  const handleTask = (taskId: string, action: 'toggle' | 'increment' | 'decrement' = 'toggle') => {
+  const handleTask = (
+    taskId: string,
+    action: 'toggle' | 'increment' | 'decrement' | 'set' = 'toggle',
+    options?: { delta?: number; value?: number }
+  ) => {
     if (inFlightTasksRef.has(taskId)) return;
     inFlightTasksRef.add(taskId);
-    void toggleTask(liveQuest.id, taskId, action).finally(() => {
+    void toggleTask(liveQuest.id, taskId, action, options).finally(() => {
       inFlightTasksRef.delete(taskId);
     });
   };
@@ -98,7 +114,7 @@ export default function SideQuestDetailModal({ quest, onClose }: Props) {
             <div className="space-y-3">
               {tasks.map(task => {
                 const periodTarget = getPeriodTarget(task);
-                const isCountable = periodTarget > 1;
+                const dynamic = isDynamicTask(task);
                 const currentValue =
                   typeof task.currentValue === 'number'
                     ? task.currentValue
@@ -109,7 +125,7 @@ export default function SideQuestDetailModal({ quest, onClose }: Props) {
                 return (
                   <div
                     key={task.id}
-                    className={`flex w-full items-center gap-2 rounded-2xl border transition-colors ${
+                    className={`w-full rounded-2xl border p-4 transition-colors ${
                       task.completed
                         ? 'border-emerald-500/35 bg-emerald-500/10'
                         : 'border-[var(--border-subtle)] bg-[var(--surface-inset)] hover:border-emerald-500/40 hover:bg-[var(--surface-raised)]'
@@ -117,9 +133,9 @@ export default function SideQuestDetailModal({ quest, onClose }: Props) {
                   >
                     <button
                       type="button"
-                      onClick={() => handleTask(task.id, isCountable ? 'increment' : 'toggle')}
+                      onClick={() => handleTask(task.id, 'toggle')}
                       disabled={liveQuest.completed}
-                      className="flex min-w-0 flex-1 items-start gap-3 p-4 text-left disabled:cursor-not-allowed disabled:opacity-70"
+                      className="flex w-full min-w-0 items-start gap-3 text-left disabled:cursor-not-allowed disabled:opacity-70"
                     >
                       <span
                         className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
@@ -131,15 +147,11 @@ export default function SideQuestDetailModal({ quest, onClose }: Props) {
                       >
                         {task.completed ? (
                           <Check size={14} strokeWidth={3} />
-                        ) : isCountable && currentValue > 0 ? (
-                          <span className="text-[11px] font-bold text-emerald-500">
-                            {currentValue}
-                          </span>
                         ) : null}
                       </span>
                       <span className="min-w-0 flex-1">
                         <span
-                          className={`block font-semibold ${
+                          className={`block font-semibold break-words ${
                             task.completed
                               ? 'text-[var(--status-success)] line-through'
                               : 'text-[var(--text-primary)]'
@@ -148,39 +160,37 @@ export default function SideQuestDetailModal({ quest, onClose }: Props) {
                           {task.title}
                         </span>
                         {task.description && (
-                          <span className="mt-1 block text-xs leading-relaxed text-[var(--text-secondary)]">
+                          <span className="mt-1 block text-xs leading-relaxed text-[var(--text-secondary)] break-words">
                             {task.description}
                           </span>
                         )}
-                        <span className="mt-2 flex flex-wrap items-center gap-3 text-[11px] font-medium uppercase tracking-wide text-[var(--text-muted)]">
-                          <span className="flex items-center gap-1">
-                            <Clock size={12} />{' '}
+                        <span className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-[var(--text-muted)]">
+                          <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                            <Clock size={12} className="shrink-0" />{' '}
                             {FREQUENCY_LABELS[task.frequency] ?? task.frequency}
                           </span>
-                          {isCountable ? (
-                            <span className="flex items-center gap-1 tabular-nums text-[var(--status-success)]">
-                              <Target size={12} /> {currentValue} / {periodTarget}{' '}
-                              {task.targetUnit || 'veces'}
-                            </span>
-                          ) : (
-                            task.targetValue && (
-                              <span className="flex items-center gap-1">
-                                <Target size={12} /> {task.targetValue} {task.targetUnit}
-                              </span>
-                            )
-                          )}
                         </span>
                       </span>
                     </button>
-                    {isCountable && currentValue > 0 && !liveQuest.completed && (
-                      <button
-                        type="button"
-                        onClick={() => handleTask(task.id, 'decrement')}
-                        aria-label={`Restar 1 a ${task.title}`}
-                        className="mr-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[var(--border-subtle)] bg-[var(--surface-card)] text-[var(--text-muted)] transition-colors hover:border-rose-500/40 hover:text-[var(--accent-text)]"
-                      >
-                        <Minus size={14} />
-                      </button>
+
+                    {dynamic && (
+                      <InlineMetricEditor
+                        currentValue={currentValue}
+                        targetValue={periodTarget}
+                        targetUnit={task.targetUnit || (task.measurementType === 'count' ? 'veces' : '')}
+                        measurementType={task.measurementType || 'numeric'}
+                        disabled={liveQuest.completed}
+                        isCompleted={task.completed}
+                        compact
+                        onDelta={(delta) =>
+                          handleTask(task.id, delta > 0 ? 'increment' : 'decrement', {
+                            delta: Math.abs(delta),
+                          })
+                        }
+                        onSetValue={(val) =>
+                          handleTask(task.id, 'set', { value: val })
+                        }
+                      />
                     )}
                   </div>
                 );

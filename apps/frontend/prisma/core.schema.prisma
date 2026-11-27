@@ -155,15 +155,16 @@ model SideQuestTemplate {
 }
 
 model SideQuestTaskTemplate {
-  id          String  @id @default(uuid())
-  templateId  String
-  title       String
-  description String?
-  icon        String?
-  order       Int     @default(0)
-  frequency   String  @default("daily")
-  targetValue Int?
-  targetUnit  String?
+  id              String  @id @default(uuid())
+  templateId      String
+  title           String
+  description     String?
+  icon            String?
+  order           Int     @default(0)
+  frequency       String  @default("daily") // daily, weekly, monthly, once
+  measurementType String  @default("boolean") // boolean, count, numeric
+  targetValue     Float?
+  targetUnit      String?
 
   template SideQuestTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
   tasks    SideQuestTask[]
@@ -185,18 +186,19 @@ model SideQuestRun {
 }
 
 model SideQuestTask {
-  id             String    @id @default(uuid())
-  runId          String
-  templateTaskId String?
-  title          String
-  description    String?
-  icon           String?
-  order          Int       @default(0)
-  frequency      String    @default("daily")
-  targetValue    Int?
-  targetUnit     String?
-  completed      Boolean   @default(false)
-  completedAt    DateTime?
+  id              String    @id @default(uuid())
+  runId           String
+  templateTaskId  String?
+  title           String
+  description     String?
+  icon            String?
+  order           Int       @default(0)
+  frequency       String    @default("daily") // daily, weekly, monthly, once
+  measurementType String    @default("boolean") // boolean, count, numeric
+  targetValue     Float?
+  targetUnit      String?
+  completed       Boolean   @default(false)
+  completedAt     DateTime?
 
   run          SideQuestRun           @relation(fields: [runId], references: [id], onDelete: Cascade)
   templateTask SideQuestTaskTemplate? @relation(fields: [templateTaskId], references: [id], onDelete: SetNull)
@@ -209,7 +211,7 @@ model SideQuestTaskLog {
   id          String   @id @default(uuid())
   taskId      String
   periodKey   String
-  value       Int      @default(1)
+  value       Float    @default(1)
   completedAt DateTime @default(now())
 
   task SideQuestTask @relation(fields: [taskId], references: [id], onDelete: Cascade)

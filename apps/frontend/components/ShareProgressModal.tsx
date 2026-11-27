@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Check,
   Copy,
@@ -120,9 +121,10 @@ export default function ShareProgressModal({
       difficulty,
       goals: dailySource.goals,
       streak,
+      logs,
       userName,
     });
-  }, [dailySource, difficulty, streak, userName]);
+  }, [dailySource, difficulty, streak, logs, userName]);
 
   const challengePayload = useMemo(() => {
     return buildChallengeSharePayload({
@@ -154,8 +156,9 @@ export default function ShareProgressModal({
       difficulty,
       unlockedAchievements: profileSource.unlockedAchievements,
       totalAchievements: profileSource.totalAchievements,
+      dayGrid: isActive ? challengePayload.dayGrid : [],
     });
-  }, [profileSource, streak, points, currentDay, isActive, difficulty]);
+  }, [profileSource, streak, points, currentDay, isActive, difficulty, challengePayload.dayGrid]);
 
   useEffect(() => {
     if (!open || !canvasRef.current) return;
@@ -260,11 +263,11 @@ export default function ShareProgressModal({
     }
   };
 
-  if (!open) return null;
+  if (!open || typeof document === 'undefined') return null;
 
   const clipboardSupported = canCopyImageToClipboard();
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-[100] flex items-end justify-center bg-black/75 p-0 backdrop-blur-sm sm:items-center sm:p-4"
       role="dialog"
@@ -274,6 +277,7 @@ export default function ShareProgressModal({
     >
       <div
         className="flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border border-white/10 bg-[#120b0e] text-white shadow-2xl sm:rounded-3xl"
+        style={{ '--color-white': '#ffffff' } as React.CSSProperties}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -282,7 +286,11 @@ export default function ShareProgressModal({
             <p className="text-[10px] font-bold tracking-[0.2em] text-rose-400 uppercase">
               {kind === 'profile' ? 'Compartir perfil' : 'Compartir progreso'}
             </p>
-            <h2 id="share-modal-title" className="text-base font-bold text-white">
+            <h2
+              id="share-modal-title"
+              className="text-base font-bold text-white"
+              style={{ color: '#ffffff' }}
+            >
               {kind === 'profile' ? 'Tarjeta de perfil' : 'Generar tarjeta de estado'}
             </h2>
           </div>
@@ -291,6 +299,7 @@ export default function ShareProgressModal({
             onClick={onClose}
             aria-label="Cerrar modal de compartir"
             className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+            style={{ color: 'rgba(255, 255, 255, 0.85)', borderColor: 'rgba(255, 255, 255, 0.14)' }}
           >
             <X className="h-4 w-4" />
           </button>
@@ -483,6 +492,7 @@ export default function ShareProgressModal({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

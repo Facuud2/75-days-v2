@@ -5,10 +5,12 @@ import { localChallengeDate, parseTimezoneOffset } from '../../utils/challengeDa
 import {
   evaluateSideQuestRun,
   getRunCurrentWeekAndDay,
+  getTaskMeasurementType,
   getTaskPeriodKey,
   getTaskPeriodTarget,
-  isCountableWeeklyTask,
+  isDynamicSideQuestTask,
 } from '../../utils/sideQuestRules';
+import { inferGoalMeasurement, roundDynamicValue } from '../../../utils/goalInference';
 
 const taskInclude = {
   tasks: {
@@ -53,6 +55,7 @@ export const serializeQuest = (quest: any, rawTimezoneOffset?: unknown) => {
     const { logs: _logs, ...taskWithoutLogs } = task;
     return {
       ...taskWithoutLogs,
+      measurementType: state?.measurementType ?? getTaskMeasurementType(task),
       completed: state?.completed ?? false,
       completedAt: state?.completedAt ?? null,
       currentValue: state?.currentValue ?? 0,
@@ -84,6 +87,8 @@ export const serializeQuest = (quest: any, rawTimezoneOffset?: unknown) => {
       currentDay: evaluated.currentDay,
       currentWeek: evaluated.currentWeek,
       totalWeeks: evaluated.totalWeeks,
+      currentMonth: evaluated.currentMonth,
+      totalMonths: evaluated.totalMonths,
       tasks: serializedTasks,
     },
   };
@@ -182,8 +187,9 @@ const addQuestSchema = z.object({
         title: z.string().min(1).max(200),
         description: z.string().max(1000).nullish().transform((v) => v || null),
         icon: z.string().max(40).nullish().transform((v) => v || 'target'),
-        frequency: z.enum(['daily', 'weekly', 'once']).default('daily'),
-        targetValue: z.number().int().positive().nullable().optional(),
+        frequency: z.enum(['daily', 'weekly', 'monthly', 'once']).default('daily'),
+        measurementType: z.enum(['boolean', 'count', 'numeric']).optional(),
+        targetValue: z.number().positive().nullable().optional(),
         targetUnit: z.string().max(40).nullish().transform((v) => v || null),
       }).strict()
     )
@@ -191,6 +197,59 @@ const addQuestSchema = z.object({
     .max(20)
     .optional(),
 }).strict();
+
+const normalizeQuestTaskForCreate = (task: any, index: number) => {
+  const hasExplicitMeasurement =
+    task.measurementType === 'count' ||
+    task.measurementType === 'numeric' ||
+    task.measurementType === 'boolean';
+  const hasExplicitTarget =
+    typeof task.targetValue === 'number' &&
+    Number.isFinite(task.targetValue) &&
+    task.targetValue > 0;
+
+  let measurementType: 'boolean' | 'count' | 'numeric' = hasExplicitMeasurement
+    ? task.measurementType
+    : getTaskMeasurementType(task);
+  let targetValue: number | null = hasExplicitTarget ? roundDynamicValue(task.targetValue) : null;
+  let targetUnit: string | null = task.targetUnit?.trim() || null;
+  let frequency: string = task.frequency || 'daily';
+
+  // Auto-infer measurement if neither explicit measurementType nor targetValue was provided
+  if (!hasExplicitMeasurement && !hasExplicitTarget) {
+    const inferred = inferGoalMeasurement(task.title, task.description);
+    if (inferred) {
+      measurementType = inferred.measurementType;
+      targetValue = inferred.targetValue;
+      targetUnit = inferred.targetUnit;
+      if (frequency === 'daily' && inferred.cadence !== 'daily') {
+        frequency = inferred.cadence;
+      }
+    }
+  }
+
+  if (measurementType === 'boolean') {
+    targetValue = null;
+    targetUnit = null;
+  } else if (measurementType === 'count') {
+    targetValue = Math.max(1, Math.round(targetValue ?? 1));
+    targetUnit = targetUnit || 'veces';
+  } else {
+    targetValue = roundDynamicValue(targetValue ?? 1);
+  }
+
+  return {
+    templateTaskId: task.id,
+    title: task.title,
+    description: task.description,
+    icon: task.icon,
+    order: task.order ?? index,
+    frequency,
+    measurementType,
+    targetValue,
+    targetUnit,
+  };
+};
 
 const createRun = async (
   tx: any,
@@ -204,16 +263,9 @@ const createRun = async (
       sideQuestId: sideQuest.id,
       runNumber,
       tasks: {
-        create: templateTasks.map((task: any, index: number) => ({
-          templateTaskId: task.id,
-          title: task.title,
-          description: task.description,
-          icon: task.icon,
-          order: task.order ?? index,
-          frequency: task.frequency,
-          targetValue: task.targetValue,
-          targetUnit: task.targetUnit,
-        })),
+        create: templateTasks.map((task: any, index: number) =>
+          normalizeQuestTaskForCreate(task, index)
+        ),
       },
     },
     include: taskInclude,
@@ -295,7 +347,9 @@ const getOwnedQuest = async (id: string, userId: string) => {
 
 const toggleTaskBodySchema = z
   .object({
-    action: z.enum(['toggle', 'increment', 'decrement']).optional().default('toggle'),
+    action: z.enum(['toggle', 'increment', 'decrement', 'set']).optional().default('toggle'),
+    delta: z.number().positive().optional(),
+    value: z.number().min(0).optional(),
     timezoneOffset: z.number().optional(),
   })
   .optional();
@@ -308,6 +362,8 @@ export const toggleQuestTask = async (
     const prisma = getCorePrisma();
     const parsedBody = toggleTaskBodySchema.parse(req.body ?? {}) ?? {
       action: 'toggle' as const,
+      delta: undefined,
+      value: undefined,
       timezoneOffset: undefined,
     };
     const rawTzOffset =
@@ -332,27 +388,31 @@ export const toggleQuestTask = async (
       return res.status(404).json({ error: 'Side quest task not found' });
     }
 
-    const { currentWeek } = getRunCurrentWeekAndDay(
+    const { currentWeek, currentMonth } = getRunCurrentWeekAndDay(
       run.startedAt,
       todayStr,
       quest.durationDays,
       tzOffset
     );
-    const periodKey = getTaskPeriodKey(task.frequency, todayStr, currentWeek);
+    const periodKey = getTaskPeriodKey(task.frequency, todayStr, currentWeek, currentMonth);
     const periodTarget = getTaskPeriodTarget(task);
+    const isDynamic = isDynamicSideQuestTask(task);
     const existingLogs = task.logs ?? [];
     const currentLog = existingLogs.find((l: any) => l.periodKey === periodKey);
-    const currentValue = currentLog ? Math.max(0, currentLog.value) : 0;
+    const currentValue = currentLog ? roundDynamicValue(Math.max(0, currentLog.value)) : 0;
 
+    const step = parsedBody.delta ?? 1;
     let nextValue = currentValue;
-    if (isCountableWeeklyTask(task)) {
+    if (parsedBody.action === 'set' && typeof parsedBody.value === 'number') {
+      nextValue = roundDynamicValue(Math.max(0, parsedBody.value));
+    } else if (isDynamic) {
       if (parsedBody.action === 'decrement') {
-        nextValue = Math.max(0, currentValue - 1);
+        nextValue = roundDynamicValue(Math.max(0, currentValue - step));
       } else if (parsedBody.action === 'increment') {
-        nextValue = Math.min(periodTarget, currentValue + 1);
+        nextValue = roundDynamicValue(currentValue + step);
       } else {
-        nextValue =
-          currentValue >= periodTarget ? 0 : Math.min(periodTarget, currentValue + 1);
+        // toggle on a dynamic task completes it or resets to 0
+        nextValue = currentValue >= periodTarget ? 0 : periodTarget;
       }
     } else {
       if (parsedBody.action === 'decrement') {

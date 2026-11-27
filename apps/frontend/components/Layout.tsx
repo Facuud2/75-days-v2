@@ -4,6 +4,7 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { useThemeStore } from '@/store/useThemeStore';
 import { useUIStore } from '@/store/useUIStore';
 import { useChallengeStore } from '@/store/useChallengeStore';
+import { useActiveWorkoutStore } from '@/store/useActiveWorkoutStore';
 import dynamic from 'next/dynamic';
 import { Home, Calendar, User, Settings, LogOut, Moon, Sun, Flame, Plus, Dumbbell, Utensils } from 'lucide-react';
 import Link from 'next/link';
@@ -382,7 +383,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           onClose={closeLogWorkoutMenu}
           onNewWorkout={() => {
             closeLogWorkoutMenu();
-            openLogWorkoutModal(false);
+            const workoutStore = useActiveWorkoutStore.getState();
+            if (workoutStore.isActive) {
+              workoutStore.setMinimized(false);
+            } else {
+              workoutStore.openPreStartPicker();
+            }
           }}
           onQuickLog={() => {
             closeLogWorkoutMenu();

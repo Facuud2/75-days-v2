@@ -71,7 +71,7 @@ export default function QuickActionsSheet({
           onClick={onClose}
         >
           <motion.div
-            className="quick-actions-sheet w-full rounded-t-[24px] border border-white/10 bg-zinc-950/95 px-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] pt-3 shadow-2xl"
+            className="quick-actions-sheet max-h-[88dvh] w-full overflow-y-auto overscroll-contain rounded-t-[24px] border border-white/10 bg-zinc-950/95 px-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] pt-3 shadow-2xl"
             role="dialog"
             aria-modal="true"
             aria-labelledby="quick-actions-title"
@@ -114,7 +114,7 @@ export default function QuickActionsSheet({
               </button>
             </div>
 
-            <div className="mt-6 grid gap-3">
+            <div className="mt-4 grid gap-2.5">
               {isActive ? (
                 <>
                   <button

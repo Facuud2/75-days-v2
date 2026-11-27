@@ -1,5 +1,9 @@
 import { differenceInCalendarDays, parseISO } from 'date-fns';
 import { localChallengeDate, parseTimezoneOffset } from './challengeDate';
+import { roundDynamicValue } from '../../utils/goalInference';
+
+export type SideQuestTaskFrequency = 'daily' | 'weekly' | 'monthly' | 'once';
+export type SideQuestMeasurementType = 'boolean' | 'count' | 'numeric';
 
 export interface TaskLogLike {
   periodKey: string;
@@ -10,6 +14,7 @@ export interface TaskLogLike {
 export interface SideQuestTaskLike {
   id: string;
   frequency: string;
+  measurementType?: string | null;
   targetValue?: number | null;
   targetUnit?: string | null;
   completed?: boolean;
@@ -26,18 +31,71 @@ export interface SideQuestRunLike {
   tasks: SideQuestTaskLike[];
 }
 
-export function isCountableWeeklyTask(task: Pick<SideQuestTaskLike, 'frequency' | 'targetValue'>): boolean {
+export function getTaskMeasurementType(
+  task: Pick<SideQuestTaskLike, 'frequency' | 'measurementType' | 'targetValue' | 'targetUnit'>
+): SideQuestMeasurementType {
+  if (task.measurementType === 'count' || task.measurementType === 'numeric') {
+    return task.measurementType;
+  }
+  if (
+    typeof task.targetValue === 'number' &&
+    Number.isFinite(task.targetValue) &&
+    task.targetValue > 0
+  ) {
+    // Legacy compatibility: if measurementType was left default 'boolean' but a real target > 1 exists
+    if (task.targetValue > 1) {
+      const unit = (task.targetUnit ?? '').trim().toLowerCase();
+      if (
+        task.frequency === 'weekly' &&
+        (!unit || ['veces', 'sesiones', 'días', 'dias', 'fotos', 'comidas'].includes(unit)) &&
+        Number.isInteger(task.targetValue)
+      ) {
+        return 'count';
+      }
+      return 'numeric';
+    }
+    if (task.targetValue !== 1) {
+      return 'numeric';
+    }
+  }
+  return 'boolean';
+}
+
+export function isDynamicSideQuestTask(
+  task: Pick<SideQuestTaskLike, 'frequency' | 'measurementType' | 'targetValue' | 'targetUnit'>
+): boolean {
+  return getTaskMeasurementType(task) !== 'boolean';
+}
+
+/**
+ * Legacy export kept for backwards compatibility with existing callers/tests.
+ */
+export function isCountableWeeklyTask(
+  task: Pick<SideQuestTaskLike, 'frequency' | 'measurementType' | 'targetValue' | 'targetUnit'>
+): boolean {
   return (
     task.frequency === 'weekly' &&
     typeof task.targetValue === 'number' &&
     Number.isFinite(task.targetValue) &&
-    task.targetValue > 1 &&
-    task.targetValue <= 14
+    task.targetValue > 1
   );
 }
 
-export function getTaskPeriodTarget(task: Pick<SideQuestTaskLike, 'frequency' | 'targetValue'>): number {
-  return isCountableWeeklyTask(task) ? (task.targetValue as number) : 1;
+export function getTaskPeriodTarget(
+  task: Pick<SideQuestTaskLike, 'frequency' | 'measurementType' | 'targetValue' | 'targetUnit'>
+): number {
+  const mType = getTaskMeasurementType(task);
+  if (
+    mType !== 'boolean' &&
+    typeof task.targetValue === 'number' &&
+    Number.isFinite(task.targetValue) &&
+    task.targetValue > 0
+  ) {
+    return mType === 'count'
+      ? Math.max(1, Math.round(task.targetValue))
+      : roundDynamicValue(task.targetValue);
+  }
+  return 1;
 }
 
 export function getRunCurrentWeekAndDay(
@@ -51,6 +109,8 @@ export function getRunCurrentWeekAndDay(
   currentDay: number;
   currentWeek: number;
   totalWeeks: number;
+  currentMonth: number;
+  totalMonths: number;
 } {
   const tzOffset = parseTimezoneOffset(rawTimezoneOffset);
   const startDateObj = typeof runStartedAt === 'string' ? new Date(runStartedAt) : runStartedAt;
@@ -64,6 +124,8 @@ export function getRunCurrentWeekAndDay(
   const currentDay = Math.min(safeDuration, dayOffset + 1);
   const currentWeek = Math.floor(dayOffset / 7) + 1;
   const totalWeeks = Math.max(1, Math.ceil(safeDuration / 7));
+  const currentMonth = Math.floor(dayOffset / 30) + 1;
+  const totalMonths = Math.max(1, Math.ceil(safeDuration / 30));
 
   return {
     runStartDateStr,
@@ -71,21 +133,26 @@ export function getRunCurrentWeekAndDay(
     currentDay,
     currentWeek,
     totalWeeks,
+    currentMonth,
+    totalMonths,
   };
 }
 
 export function getTaskPeriodKey(
   frequency: string,
   todayStr: string,
-  currentWeek: number
+  currentWeek: number,
+  currentMonth = 1
 ): string {
   if (frequency === 'once') return 'once';
+  if (frequency === 'monthly') return `month-${Math.max(1, currentMonth)}`;
   if (frequency === 'weekly') return `week-${Math.max(1, currentWeek)}`;
   return todayStr;
 }
 
 export interface EvaluatedTaskState {
   periodKey: string;
+  measurementType: SideQuestMeasurementType;
   currentValue: number;
   periodTarget: number;
   completed: boolean;
@@ -96,6 +163,8 @@ export interface EvaluatedRunState {
   currentDay: number;
   currentWeek: number;
   totalWeeks: number;
+  currentMonth: number;
+  totalMonths: number;
   progress: number;
   runCompleted: boolean;
   todayCompleted: boolean;
@@ -112,27 +181,25 @@ export function evaluateSideQuestRun(params: {
   const safeDuration = Math.max(1, durationDays || 1);
   const tasks = run.tasks ?? [];
 
-  const { currentDay, currentWeek, totalWeeks } = getRunCurrentWeekAndDay(
-    run.startedAt,
-    todayStr,
-    safeDuration,
-    timezoneOffset
-  );
+  const { currentDay, currentWeek, totalWeeks, currentMonth, totalMonths } =
+    getRunCurrentWeekAndDay(run.startedAt, todayStr, safeDuration, timezoneOffset);
 
   const taskStates = new Map<string, EvaluatedTaskState>();
 
   for (const task of tasks) {
-    const periodKey = getTaskPeriodKey(task.frequency, todayStr, currentWeek);
+    const measurementType = getTaskMeasurementType(task);
+    const periodKey = getTaskPeriodKey(task.frequency, todayStr, currentWeek, currentMonth);
     const periodTarget = getTaskPeriodTarget(task);
     const logs = task.logs ?? [];
     const matchingLog = logs.find((l) => l.periodKey === periodKey);
 
-    const currentValue = matchingLog ? Math.max(0, matchingLog.value) : 0;
+    const currentValue = matchingLog ? roundDynamicValue(Math.max(0, matchingLog.value)) : 0;
     const completed = currentValue >= periodTarget;
     const completedAt = completed ? matchingLog?.completedAt ?? null : null;
 
     taskStates.set(task.id, {
       periodKey,
+      measurementType,
       currentValue,
       periodTarget,
       completed,
@@ -142,6 +209,7 @@ export function evaluateSideQuestRun(params: {
 
   const dailyTasks = tasks.filter((t) => t.frequency === 'daily');
   const weeklyTasks = tasks.filter((t) => t.frequency === 'weekly');
+  const monthlyTasks = tasks.filter((t) => t.frequency === 'monthly');
   const onceTasks = tasks.filter((t) => t.frequency === 'once');
 
   const allOnceDone =
@@ -153,15 +221,16 @@ export function evaluateSideQuestRun(params: {
   let todayCompleted = false;
 
   if (dailyTasks.length > 0) {
-    // A day is completed when ALL daily tasks have a log >= 1 for that YYYY-MM-DD
     const firstLogs = dailyTasks[0].logs ?? [];
+    const firstTarget = getTaskPeriodTarget(dailyTasks[0]);
     let completedDays = 0;
     for (const log of firstLogs) {
-      if (log.value < 1) continue;
+      if (log.value < firstTarget) continue;
       const dateKey = log.periodKey;
-      const allDoneOnDate = dailyTasks.every((t) =>
-        (t.logs ?? []).some((l) => l.periodKey === dateKey && l.value >= 1)
-      );
+      const allDoneOnDate = dailyTasks.every((t) => {
+        const target = getTaskPeriodTarget(t);
+        return (t.logs ?? []).some((l) => l.periodKey === dateKey && l.value >= target);
+      });
       if (allDoneOnDate) {
         completedDays += 1;
       }
@@ -184,11 +253,30 @@ export function evaluateSideQuestRun(params: {
     progress = Math.min(safeDuration, completedWeeks * 7);
     todayCompleted = weeklyTasks.every((t) => taskStates.get(t.id)?.completed === true);
     computedCompleted = completedWeeks >= totalWeeks && allOnceDone;
+  } else if (monthlyTasks.length > 0) {
+    let completedMonths = 0;
+    for (let m = 1; m <= totalMonths; m += 1) {
+      const monthKey = `month-${m}`;
+      const allDoneInMonth = monthlyTasks.every((t) => {
+        const target = getTaskPeriodTarget(t);
+        return (t.logs ?? []).some((l) => l.periodKey === monthKey && l.value >= target);
+      });
+      if (allDoneInMonth) {
+        completedMonths += 1;
+      }
+    }
+    progress = Math.min(safeDuration, completedMonths * 30);
+    todayCompleted = monthlyTasks.every((t) => taskStates.get(t.id)?.completed === true);
+    computedCompleted = completedMonths >= totalMonths && allOnceDone;
   } else if (onceTasks.length > 0) {
-    const doneOnce = onceTasks.filter((t) => taskStates.get(t.id)?.completed === true).length;
+    const partialSum = onceTasks.reduce((acc, t) => {
+      const st = taskStates.get(t.id);
+      if (!st || st.periodTarget <= 0) return acc;
+      return acc + Math.min(1, st.currentValue / st.periodTarget);
+    }, 0);
     progress = allOnceDone
       ? safeDuration
-      : Math.floor((doneOnce / onceTasks.length) * safeDuration);
+      : Math.floor((partialSum / onceTasks.length) * safeDuration);
     todayCompleted = allOnceDone;
     computedCompleted = allOnceDone;
   }
@@ -199,6 +287,8 @@ export function evaluateSideQuestRun(params: {
     currentDay,
     currentWeek,
     totalWeeks,
+    currentMonth,
+    totalMonths,
     progress: runCompleted ? safeDuration : progress,
     runCompleted,
     todayCompleted,

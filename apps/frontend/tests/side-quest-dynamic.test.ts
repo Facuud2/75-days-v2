@@ -15,16 +15,18 @@ describe('Side Quests Dynamic Period Rules', () => {
         {
           id: 't-walk',
           frequency: 'daily',
+          measurementType: 'numeric',
           targetValue: 30,
           targetUnit: 'minutos',
-          logs: [{ periodKey: '2026-11-25', value: 1 }],
+          logs: [{ periodKey: '2026-11-25', value: 30 }],
         },
         {
           id: 't-plan',
           frequency: 'daily',
+          measurementType: 'numeric',
           targetValue: 10,
           targetUnit: 'minutos',
-          logs: [{ periodKey: '2026-11-25', value: 1 }],
+          logs: [{ periodKey: '2026-11-25', value: 10 }],
         },
         {
           id: 't-cook',

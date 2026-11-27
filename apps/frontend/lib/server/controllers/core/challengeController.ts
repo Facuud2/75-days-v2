@@ -357,12 +357,6 @@ export const updateCustomGoals = async (
       return res.status(404).json({ error: 'No active challenge found' });
     }
 
-    if (challenge.difficulty !== 'Custom') {
-      return res
-        .status(400)
-        .json({ error: 'Only Custom challenges can be edited in place.' });
-    }
-
     const normalizedTemplates = customGoalsTemplate.map((g, idx) =>
       normalizeGoalSpec(g, idx)
     );
@@ -389,10 +383,17 @@ export const updateCustomGoals = async (
     );
 
     const updatedChallenge = await prisma.$transaction(async (tx) => {
+      const challengeUpdateData: Record<string, unknown> = {};
+      if (challenge.difficulty !== 'Custom') {
+        challengeUpdateData.difficulty = 'Custom';
+      }
       if (typeof breakStreakOnPeriodFail === 'boolean') {
+        challengeUpdateData.breakStreakOnPeriodFail = breakStreakOnPeriodFail;
+      }
+      if (Object.keys(challengeUpdateData).length > 0) {
         await tx.challenge.update({
           where: { id: challenge.id },
-          data: { breakStreakOnPeriodFail },
+          data: challengeUpdateData,
         });
       }
 

@@ -178,6 +178,45 @@ model RoutineExercise {
   @@index([routineId])
 }
 
+model TrainingPlan {
+  id           String             @id @default(uuid())
+  userId       String
+  challengeId  String?
+  name         String
+  goalSummary  String?
+  scheduleType String             @default("weekly") // daily | weekly | sequential
+  environment  String             @default("mixed") // home | gym | outdoor | mixed
+  isActive     Boolean            @default(false)
+  slots        TrainingPlanSlot[]
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@index([userId])
+}
+
+model TrainingPlanSlot {
+  id                String   @id @default(uuid())
+  planId            String
+  dayOfWeek         Int? // null when daily/sequential; 0 (Mon) .. 6 (Sun) when weekly
+  timeOfDay         String   @default("any") // morning | afternoon | evening | any
+  order             Int      @default(0)
+  slotType          String   @default("routine") // routine | focus | cardio | rest
+  title             String
+  focusMuscles      String[] @default([])
+  environment       String? // home | gym | outdoor
+  sport             String   @default("strength")
+  targetDurationMin Int?
+  targetSteps       Int?
+  routineId         String?
+  notes             String?
+  exercisesJson     Json?
+
+  plan TrainingPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId])
+  @@index([planId, dayOfWeek])
+}
+
 model CustomExercise {
   id            String   @id @default(uuid())
   userId        String

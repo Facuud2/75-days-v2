@@ -11,11 +11,15 @@ import {
   transcribeUserAudio,
 } from '../../services/geminiService';
 import { fetchCachedSystemIngredients } from '../health/customFoodController';
-import { getHealthPrisma } from '../../db';
+import { getCorePrisma, getHealthPrisma } from '../../db';
 import {
   aiMealProposalItemSchema,
   recommendMealsForGoal,
 } from '../../services/mealRecommendationService';
+import {
+  processWorkoutPlanTurn,
+  type ActiveChallengeWorkoutContext,
+} from '../../services/workoutPlanAiService';
 
 const historyItemSchema = z.object({
   role: z.enum(['user', 'assistant']),
@@ -287,6 +291,138 @@ export const recommendMeals = async (
     return res.status(502).json({
       error:
         'No pudimos generar recomendaciones con la IA en este momento. Intentá de nuevo.',
+    });
+  }
+};
+
+const workoutPlanDraftInputSchema = z.object({
+  name: z.string().max(120),
+  goalSummary: z.string().max(400).optional().default(''),
+  scheduleType: z.enum(['daily', 'weekly', 'sequential']),
+  environment: z.enum(['home', 'gym', 'outdoor', 'mixed']),
+  slots: z.array(z.any()).max(60),
+});
+
+const workoutPlanRequestSchema = z
+  .object({
+    textInput: z.string().max(2500).optional(),
+    audioBase64: z.string().max(4_500_000).optional(),
+    mimeType: z.string().max(80).optional(),
+    history: z.array(historyItemSchema).max(30).optional(),
+    currentDraft: workoutPlanDraftInputSchema.nullable().optional(),
+    understoodFacts: z.array(z.string().max(260)).max(20).optional(),
+    forceProposal: z.boolean().optional(),
+  })
+  .strict()
+  .refine(
+    (data) =>
+      Boolean(
+        data.textInput?.trim() ||
+          data.audioBase64?.trim() ||
+          (data.forceProposal && data.history && data.history.length > 0)
+      ),
+    { message: 'Debes escribir o grabar qué rutina querés armar.' }
+  );
+
+export const planWorkoutWithAi = async (
+  req: ControllerRequest,
+  res: ControllerResponse
+) => {
+  try {
+    const payload = workoutPlanRequestSchema.parse(req.body ?? {});
+    const userId = req.user?.id;
+
+    let challengeContext: ActiveChallengeWorkoutContext | null = null;
+    let savedRoutines: Array<{
+      id: string;
+      name: string;
+      sport: string;
+      exerciseCount: number;
+    }> = [];
+
+    if (userId) {
+      const [activeChallenge, userRoutines] = await Promise.all([
+        getCorePrisma()
+          .challenge.findFirst({
+            where: { userId, isActive: true },
+            include: {
+              customGoalsTemplate: {
+                where: { isActive: true },
+                orderBy: { order: 'asc' },
+              },
+            },
+          })
+          .catch(() => null),
+        getHealthPrisma()
+          .workoutRoutine.findMany({
+            where: { userId },
+            orderBy: { updatedAt: 'desc' },
+            take: 12,
+            include: { _count: { select: { exercises: true } } },
+          })
+          .catch(() => []),
+      ]);
+
+      if (activeChallenge) {
+        const diffLower = activeChallenge.difficulty.toLowerCase();
+        const requiredWorkoutMin =
+          diffLower === 'hard' ? 90 : diffLower === 'soft' ? 30 : 45;
+        const workoutGoals = activeChallenge.customGoalsTemplate
+          .filter((g) => {
+            const text = `${g.title} ${g.description ?? ''} ${g.icon ?? ''}`.toLowerCase();
+            return (
+              g.icon === 'dumbbell' ||
+              g.icon === 'sun' ||
+              /entren|ejerc|camin|corr|pasos|cardio|gym|fuerza|workout/.test(text)
+            );
+          })
+          .map((g) => ({
+            title: g.title,
+            description: g.description ?? undefined,
+            targetValue: g.targetValue,
+            targetUnit: g.targetUnit ?? undefined,
+          }));
+
+        challengeContext = {
+          challengeTitle: `75 Days ${activeChallenge.difficulty}`,
+          difficulty: activeChallenge.difficulty,
+          requiredWorkoutMin,
+          workoutGoals,
+        };
+      }
+
+      savedRoutines = userRoutines.map((r) => ({
+        id: r.id,
+        name: r.name,
+        sport: r.sport,
+        exerciseCount: r._count.exercises,
+      }));
+    }
+
+    const result = await processWorkoutPlanTurn({
+      textInput: payload.textInput,
+      audioBase64: payload.audioBase64,
+      mimeType: payload.mimeType,
+      history: payload.history,
+      currentDraft: payload.currentDraft as any,
+      understoodFacts: payload.understoodFacts,
+      forceProposal: payload.forceProposal,
+      challengeContext,
+      savedRoutines,
+    });
+
+    return res.json(result);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        error: 'Datos inválidos para generar el plan de entrenamiento.',
+        details: error.issues,
+      });
+    }
+    console.error('[aiController.planWorkoutWithAi]', error);
+    return res.status(502).json({
+      error:
+        'No pudimos armar tu plan de entrenamiento con la IA en este momento. Intentá de nuevo.',
     });
   }
 };

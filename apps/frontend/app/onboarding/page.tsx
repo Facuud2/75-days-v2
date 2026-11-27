@@ -23,6 +23,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import toast from 'react-hot-toast';
 import { PLANS } from '@/components/PlansModal';
 import RulerPicker from '@/components/onboarding/RulerPicker';
 import VerticalWheelPicker from '@/components/onboarding/VerticalWheelPicker';
@@ -381,11 +382,13 @@ export default function Onboarding() {
       // startChallenge debe completar antes que completeOnboarding: si corren en
       // paralelo y completeOnboarding termina primero, AuthGuard redirige a
       // /dashboard antes de que el reto exista en la DB y en el store.
-      await startChallenge(
-        finalDifficulty,
-        finalDifficulty === 'Custom' ? formattedCustomGoals : undefined,
-        finalDifficulty === 'Custom' ? breakStreakOnPeriodFail : undefined
-      );
+      if (!useChallengeStore.getState().isActive) {
+        await startChallenge(
+          finalDifficulty,
+          finalDifficulty === 'Custom' ? formattedCustomGoals : undefined,
+          finalDifficulty === 'Custom' ? breakStreakOnPeriodFail : undefined
+        );
+      }
 
       // Persistir todas las misiones secundarias elegidas o diseñadas con IA recién al confirmar
       const seenQuestTitles = new Set<string>();
@@ -442,7 +445,8 @@ export default function Onboarding() {
       useUIStore.getState().openTutorial();
       setIsAiPlanSheetOpen(false);
       router.push('/dashboard');
-    } catch {
+    } catch (err: any) {
+      toast.error(err?.message || 'No pudimos finalizar la configuración. Intentá de nuevo.');
       setIsChallengeLoading(false);
     }
   };
@@ -654,26 +658,35 @@ export default function Onboarding() {
           </span>
         </div>
 
-        <div className="text-center space-y-1 px-2">
-          <p
-            className="text-[11px] font-semibold uppercase tracking-wider"
-            style={{ color: 'var(--accent-text)' }}
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={currentStepId}
+            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -4 }}
+            transition={{ duration: 0.14, ease: 'easeOut' }}
+            className="text-center space-y-1 px-2"
           >
-            {meta.eyebrow}
-          </p>
-          <h1
-            className="text-2xl sm:text-3xl font-bold tracking-tight leading-tight"
-            style={{ color: 'var(--text-primary)' }}
-          >
-            {meta.title}
-          </h1>
-          <p
-            className="text-xs sm:text-sm leading-snug"
-            style={{ color: 'var(--text-muted)' }}
-          >
-            {meta.subtitle}
-          </p>
-        </div>
+            <p
+              className="text-[11px] font-semibold uppercase tracking-wider"
+              style={{ color: 'var(--accent-text)' }}
+            >
+              {meta.eyebrow}
+            </p>
+            <h1
+              className="text-2xl sm:text-3xl font-bold tracking-tight leading-tight"
+              style={{ color: 'var(--text-primary)' }}
+            >
+              {meta.title}
+            </h1>
+            <p
+              className="text-xs sm:text-sm leading-snug"
+              style={{ color: 'var(--text-muted)' }}
+            >
+              {meta.subtitle}
+            </p>
+          </motion.div>
+        </AnimatePresence>
       </header>
 
       {/* Main Full-Screen Focused Stage */}
@@ -1145,12 +1158,15 @@ export default function Onboarding() {
                       >
                         {weightGoalInfo.headline}
                         {weightGoalInfo.direction !== 'maintain' && (
-                          <span
-                            className="ml-1.5 text-xs font-medium"
-                            style={{ color: 'var(--text-muted)' }}
-                          >
-                            ({weightGoalInfo.percentChange.toFixed(1)}%)
-                          </span>
+                          <>
+                            {' '}
+                            <span
+                              className="ml-1 text-xs font-medium"
+                              style={{ color: 'var(--text-muted)' }}
+                            >
+                              ({weightGoalInfo.percentChange.toFixed(1)}%)
+                            </span>
+                          </>
                         )}
                       </p>
                     </div>
@@ -1351,16 +1367,7 @@ export default function Onboarding() {
                     return (
                       <div
                         key={quest.id}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => setPreviewQuest(quest)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            setPreviewQuest(quest);
-                          }
-                        }}
-                        className="w-full p-3.5 text-left rounded-2xl border transition-transform active:scale-[0.985] cursor-pointer flex items-center justify-between gap-2"
+                        className="w-full p-3.5 text-left rounded-2xl border transition-colors flex items-center justify-between gap-2"
                         style={{
                           touchAction: 'manipulation',
                           backgroundColor: isSelected
@@ -1371,7 +1378,11 @@ export default function Onboarding() {
                             : 'var(--border-subtle)',
                         }}
                       >
-                        <div className="min-w-0 flex-1">
+                        <button
+                          type="button"
+                          onClick={() => setPreviewQuest(quest)}
+                          className="min-w-0 flex-1 text-left cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] rounded-lg"
+                        >
                           <div className="flex items-center gap-2">
                             <h3
                               className="font-semibold text-sm truncate"
@@ -1386,7 +1397,13 @@ export default function Onboarding() {
                                 color: 'var(--text-muted)',
                               }}
                             >
-                              {quest.difficulty}
+                              {quest.difficulty === 'Easy'
+                                ? 'Fácil'
+                                : quest.difficulty === 'Hard'
+                                  ? 'Difícil'
+                                  : quest.difficulty === 'Medium'
+                                    ? 'Media'
+                                    : quest.difficulty}
                             </span>
                           </div>
                           <p
@@ -1408,7 +1425,7 @@ export default function Onboarding() {
                               Ver detalle
                             </span>
                           </p>
-                        </div>
+                        </button>
 
                         <button
                           type="button"
@@ -1418,10 +1435,7 @@ export default function Onboarding() {
                               : `Seleccionar ${quest.title}`
                           }
                           aria-pressed={isSelected}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleQuestSelection(quest.id);
-                          }}
+                          onClick={() => toggleQuestSelection(quest.id)}
                           className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 transition-transform active:scale-90 cursor-pointer"
                           style={{ touchAction: 'manipulation' }}
                         >

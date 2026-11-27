@@ -345,19 +345,19 @@ function LogMealModalContent({ onClose, onSaved, date, initialTab, initialMealTy
 
                 {/* Header */}
                 {!isCameraFullscreen && (
-                <div className="flex items-center justify-between px-4 py-3 sm:px-5 border-b border-[var(--border-subtle)] shrink-0">
-                    <div className="flex items-center gap-2.5">
+                <div className="flex items-center justify-between px-4 py-2.5 sm:px-5 sm:py-3 border-b border-[var(--border-subtle)] shrink-0">
+                    <div className="flex items-center gap-2">
                         {step !== 'MAIN' && (
                             <button
                                 type="button"
                                 aria-label="Volver"
                                 onClick={() => setStep('MAIN')}
-                                className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full text-[var(--text-muted)] hover:bg-[var(--surface-raised)] hover:text-[var(--text-primary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+                                className="flex h-8 w-8 sm:h-9 sm:w-9 cursor-pointer items-center justify-center rounded-full text-[var(--text-muted)] hover:bg-[var(--surface-raised)] hover:text-[var(--text-primary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
                             >
-                                <ArrowLeft className="w-5 h-5" aria-hidden="true" />
+                                <ArrowLeft className="w-4.5 h-4.5" aria-hidden="true" />
                             </button>
                         )}
-                        <h2 id="meal-modal-title" className="text-[17px] font-semibold tracking-[-0.01em] text-[var(--text-primary)] flex items-center gap-2">
+                        <h2 id="meal-modal-title" className="text-[15px] sm:text-[17px] font-semibold tracking-[-0.01em] text-[var(--text-primary)] flex items-center gap-2">
                             {activeTab === 'SEARCH' && step === 'MAIN' ? (
                                 <Search className="w-4 h-4 text-[var(--accent-text)]" aria-hidden="true" />
                             ) : activeTab === 'CUSTOM' && step === 'MAIN' ? (
@@ -384,15 +384,15 @@ function LogMealModalContent({ onClose, onSaved, date, initialTab, initialMealTy
                         type="button"
                         aria-label="Cerrar registro de comida"
                         onClick={onClose}
-                        className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-raised)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+                        className="flex h-8 w-8 sm:h-9 sm:w-9 cursor-pointer items-center justify-center rounded-full text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-raised)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
                     >
-                        <X className="w-5 h-5" aria-hidden="true" />
+                        <X className="w-4.5 h-4.5" aria-hidden="true" />
                     </button>
                 </div>
                 )}
 
                 {/* Body Content */}
-                <div className={isCameraFullscreen ? undefined : 'flex-1 overflow-y-auto overscroll-contain px-4 py-3.5 sm:px-5 sm:py-4 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent'}>
+                <div className={isCameraFullscreen ? undefined : 'flex-1 overflow-y-auto overscroll-contain px-3.5 py-2.5 sm:px-5 sm:py-4 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent'}>
 
                     {step === 'MAIN' && (
                         <div className={isCameraFullscreen ? undefined : (activeTab === 'AI' ? 'space-y-3' : 'space-y-4')}>

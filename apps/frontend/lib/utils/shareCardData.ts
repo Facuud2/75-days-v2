@@ -13,6 +13,14 @@ export interface DailyShareGoalItem {
   title: string;
   completed: boolean;
   progressText: string | null;
+  progressRatio: number | null;
+}
+
+export interface DailyRecentDay {
+  dayNumber: number;
+  weekdayLabel: string;
+  status: ChallengeGridStatus;
+  isTargetDay: boolean;
 }
 
 export interface DailySharePayload {
@@ -20,6 +28,7 @@ export interface DailySharePayload {
   formattedDate: string;
   dayNumber: number;
   totalDays: number;
+  challengeProgressPercent: number;
   difficultyLabel: string;
   streak: number;
   completedCount: number;
@@ -29,6 +38,9 @@ export interface DailySharePayload {
   isComplete: boolean;
   statusLabel: string;
   items: DailyShareGoalItem[];
+  recentDays: DailyRecentDay[];
+  recentDaysLabel: string;
+  recentCompletedCount: number;
   handle: string | null;
 }
 
@@ -66,6 +78,7 @@ export interface ProfileSharePayload {
   difficultyLabel: string;
   unlockedAchievements: number;
   totalAchievements: number;
+  dayGrid: ChallengeGridStatus[];
 }
 
 function formatGoalProgressText(goal: Goal): string | null {
@@ -89,6 +102,82 @@ function safeFormatDate(dateStr: string): string {
   }
 }
 
+function formatGoalProgressRatio(goal: Goal): number | null {
+  if (goal.measurementType !== 'count' && goal.measurementType !== 'numeric') {
+    return null;
+  }
+  const target = typeof goal.targetValue === 'number' && goal.targetValue > 0 ? goal.targetValue : null;
+  if (target === null) return null;
+  const current = typeof goal.currentValue === 'number' && goal.currentValue >= 0 ? goal.currentValue : 0;
+  return Math.max(0, Math.min(1, current / target));
+}
+
+function safeFormatWeekday(date: Date): string {
+  try {
+    const raw = format(date, 'eee', { locale: es }).replace(/\.$/, '');
+    return raw.charAt(0).toUpperCase() + raw.slice(1, 3);
+  } catch {
+    return 'Día';
+  }
+}
+
+function buildRecentDaysWindow(params: {
+  date: string;
+  dayNumber: number;
+  totalDays: number;
+  isComplete: boolean;
+  logs?: Record<string, DailyLog>;
+}): {
+  recentDays: DailyRecentDay[];
+  recentDaysLabel: string;
+  recentCompletedCount: number;
+} {
+  const { date, dayNumber, totalDays, isComplete, logs = {} } = params;
+  const clampedDay = Math.max(1, Math.min(totalDays, dayNumber));
+  const windowStart = clampedDay <= 7 ? 1 : clampedDay - 6;
+  const windowEnd = Math.min(totalDays, windowStart + 6);
+  const parsedTargetDate = parseLocalDate(date);
+  const hasValidDate = !Number.isNaN(parsedTargetDate.getTime());
+
+  const recentDays: DailyRecentDay[] = [];
+  for (let d = windowStart; d <= windowEnd; d++) {
+    const dayDate = hasValidDate ? addDays(parsedTargetDate, d - clampedDay) : null;
+    const dateKey = dayDate ? format(dayDate, 'yyyy-MM-dd') : null;
+    const weekdayLabel = dayDate ? safeFormatWeekday(dayDate) : `D${d}`;
+    const isTargetDay = d === clampedDay;
+
+    let status: ChallengeGridStatus;
+    if (isTargetDay) {
+      status = isComplete ? 'success' : 'current';
+    } else if (d > clampedDay) {
+      status = 'future';
+    } else {
+      const log = dateKey ? logs[dateKey] : undefined;
+      if (log?.status === 'success') {
+        status = 'success';
+      } else if (log?.status === 'fail') {
+        status = 'fail';
+      } else if (log?.status === 'rest') {
+        status = 'rest';
+      } else {
+        status = 'pending';
+      }
+    }
+
+    recentDays.push({
+      dayNumber: d,
+      weekdayLabel,
+      status,
+      isTargetDay,
+    });
+  }
+
+  const recentCompletedCount = recentDays.filter((d) => d.status === 'success').length;
+  const recentDaysLabel = clampedDay <= 7 ? 'SEMANA 1' : 'ÚLTIMOS 7 DÍAS';
+
+  return { recentDays, recentDaysLabel, recentCompletedCount };
+}
+
 export function buildDailySharePayload(params: {
   date: string;
   dayNumber: number;
@@ -96,6 +185,7 @@ export function buildDailySharePayload(params: {
   difficulty: string | null | undefined;
   goals: Goal[];
   streak: number;
+  logs?: Record<string, DailyLog>;
   userName?: string | null;
 }): DailySharePayload {
   const totalDays = params.totalDays ?? 75;
@@ -105,6 +195,8 @@ export function buildDailySharePayload(params: {
   const remainingCount = Math.max(0, totalCount - completedCount);
   const progressPercent = totalCount === 0 ? 0 : Math.round((completedCount / totalCount) * 100);
   const isComplete = totalCount > 0 && completedCount === totalCount;
+  const safeDayNumber = Math.max(1, params.dayNumber);
+  const challengeProgressPercent = Math.min(100, Math.max(0, Math.round((safeDayNumber / totalDays) * 100)));
 
   let statusLabel = 'EN PROGRESO';
   if (totalCount === 0) {
@@ -115,13 +207,22 @@ export function buildDailySharePayload(params: {
     statusLabel = 'POR EMPEZAR';
   }
 
+  const { recentDays, recentDaysLabel, recentCompletedCount } = buildRecentDaysWindow({
+    date: params.date,
+    dayNumber: safeDayNumber,
+    totalDays,
+    isComplete,
+    logs: params.logs,
+  });
+
   const rawHandle = getNameHandle(params.userName);
 
   return {
     date: params.date,
     formattedDate: safeFormatDate(params.date),
-    dayNumber: Math.max(1, params.dayNumber),
+    dayNumber: safeDayNumber,
     totalDays,
+    challengeProgressPercent,
     difficultyLabel: difficultyLabel(params.difficulty),
     streak: Math.max(0, params.streak || 0),
     completedCount,
@@ -135,7 +236,11 @@ export function buildDailySharePayload(params: {
       title: goal.title,
       completed: Boolean(goal.completed),
       progressText: formatGoalProgressText(goal),
+      progressRatio: formatGoalProgressRatio(goal),
     })),
+    recentDays,
+    recentDaysLabel,
+    recentCompletedCount,
     handle: rawHandle ? `@${rawHandle}` : null,
   };
 }
@@ -248,6 +353,7 @@ export function buildProfileSharePayload(params: {
   difficulty?: string | null;
   unlockedAchievements?: number;
   totalAchievements?: number;
+  dayGrid?: ChallengeGridStatus[];
 }): ProfileSharePayload {
   const cleanName = params.name?.trim() || 'Usuario';
   const rawHandle = getNameHandle(cleanName);
@@ -272,5 +378,6 @@ export function buildProfileSharePayload(params: {
     difficultyLabel: difficultyLabel(params.difficulty),
     unlockedAchievements: Math.max(0, params.unlockedAchievements ?? 0),
     totalAchievements: Math.max(0, params.totalAchievements ?? 0),
+    dayGrid: Array.isArray(params.dayGrid) ? params.dayGrid.slice(0, totalDays) : [],
   };
 }

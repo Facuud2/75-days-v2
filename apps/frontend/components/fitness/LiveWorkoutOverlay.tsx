@@ -7,21 +7,28 @@ import {
   ArrowLeft,
   Award,
   Bike,
+  Check,
   CheckCircle2,
+  ChevronLeft,
   ChevronRight,
   Clock,
   Dumbbell,
+  Feather,
   Flame,
   Footprints,
+  Gauge,
   Home,
+  LayoutList,
   Minus,
   Pencil,
   Plus,
   Sparkles,
+  Square,
   Trees,
   Trophy,
   Waves,
   X,
+  Zap,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useActiveWorkoutStore } from '@/store/useActiveWorkoutStore';
@@ -73,6 +80,14 @@ const OUTDOOR_QUICK_ACTIVITIES = [
   { sport: 'swimming', label: 'Natación', subtitle: 'Piscina o aguas abiertas', icon: Waves },
   { sport: 'yoga', label: 'Yoga / Movilidad', subtitle: 'Estiramiento y movilidad al aire libre', icon: Sparkles },
   { sport: 'other', label: 'Actividad libre', subtitle: 'Fútbol, senderismo, patín...', icon: Flame },
+] as const;
+
+const FEELING_OPTIONS = [
+  { key: 'low', label: 'Suave', intensity: 'low' as const, icon: Feather },
+  { key: 'easy', label: 'Cómodo', intensity: 'medium' as const, icon: Sparkles },
+  { key: 'solid', label: 'Sólido', intensity: 'medium' as const, icon: Gauge },
+  { key: 'hard', label: 'Duro', intensity: 'high' as const, icon: Flame },
+  { key: 'max', label: 'Al límite', intensity: 'high' as const, icon: Zap },
 ] as const;
 
 export default function LiveWorkoutOverlay() {
@@ -132,6 +147,9 @@ export default function LiveWorkoutOverlay() {
   const [catalogMap, setCatalogMap] = useState<Map<string, CatalogExercise>>(() => new Map());
   const [imageBaseUrl, setImageBaseUrl] = useState<string | undefined>(undefined);
   const [inspectedExercise, setInspectedExercise] = useState<CatalogExercise | null>(null);
+  const [viewMode, setViewMode] = useState<'focus' | 'list'>('focus');
+  const [activeExerciseIndex, setActiveExerciseIndex] = useState(0);
+  const [selectedFeeling, setSelectedFeeling] = useState<string>('solid');
 
   const hydratedIdsRef = useRef<Set<string>>(new Set());
   const restNotifiedRef = useRef<number | null>(null);
@@ -669,6 +687,11 @@ export default function LiveWorkoutOverlay() {
     }
   }
 
+  const clampedIndex =
+    exercises.length > 0 ? Math.min(activeExerciseIndex, exercises.length - 1) : 0;
+  const currentFocusExercise = exercises[clampedIndex] || null;
+  const isStrengthWithExercises = !(sessionMode === 'cardio' && exercises.length === 0) && exercises.length > 0;
+
   return (
     <div
       className="fixed inset-0 z-[115] flex h-[100dvh] flex-col bg-zinc-950 text-white"
@@ -695,9 +718,75 @@ export default function LiveWorkoutOverlay() {
         onToggleWakeLock={setKeepScreenAwake}
       />
 
+      {/* Exercise Stepper Strip + Focus/List Toggle */}
+      {isStrengthWithExercises && (
+        <div className="shrink-0 border-b border-white/[0.06] bg-zinc-950/80 px-4 py-2.5">
+          <div className="mx-auto flex max-w-2xl items-center gap-2">
+            <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+              {exercises.map((ex, idx) => {
+                const done = ex.sets.length > 0 && ex.sets.every((s) => s.completed);
+                const isCurrent = viewMode === 'focus' && idx === clampedIndex;
+                return (
+                  <button
+                    key={ex.uid}
+                    type="button"
+                    onClick={() => {
+                      setActiveExerciseIndex(idx);
+                      if (viewMode === 'list') setViewMode('focus');
+                    }}
+                    className={`inline-flex min-h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-colors ${
+                      isCurrent
+                        ? 'bg-rose-600 text-white shadow-sm shadow-rose-600/25'
+                        : done
+                          ? 'bg-emerald-500/15 text-emerald-400'
+                          : 'bg-white/[0.05] text-zinc-400 hover:bg-white/10 hover:text-zinc-200'
+                    }`}
+                  >
+                    {done ? (
+                      <Check className="h-3 w-3 shrink-0" strokeWidth={3} />
+                    ) : (
+                      <span className="tabular-nums opacity-75">{idx + 1}</span>
+                    )}
+                    <span className="max-w-[110px] truncate">{ex.exerciseName}</span>
+                  </button>
+                );
+              })}
+
+              <button
+                type="button"
+                onClick={() => setIsPickerOpen(true)}
+                aria-label="Añadir ejercicio"
+                className="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full border border-dashed border-white/20 text-zinc-400 transition-colors hover:border-rose-500/60 hover:text-rose-400"
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setViewMode((m) => (m === 'focus' ? 'list' : 'focus'))}
+              aria-label={viewMode === 'focus' ? 'Ver lista completa' : 'Cambiar a modo enfoque'}
+              className="inline-flex min-h-8 shrink-0 cursor-pointer items-center gap-1 rounded-full border border-white/10 bg-zinc-900 px-2.5 text-[11px] font-semibold text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white"
+            >
+              {viewMode === 'focus' ? (
+                <>
+                  <LayoutList className="h-3.5 w-3.5" />
+                  <span>Lista</span>
+                </>
+              ) : (
+                <>
+                  <Square className="h-3 w-3" />
+                  <span>Enfoque</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Main scrollable workout log */}
       <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4">
-        <div className="mx-auto max-w-2xl space-y-4 pb-28">
+        <div className="mx-auto max-w-2xl space-y-4 pb-6">
           {sessionMode === 'cardio' && exercises.length === 0 ? (
             <CardioLiveView
               sport={sport}
@@ -714,66 +803,70 @@ export default function LiveWorkoutOverlay() {
             />
           ) : exercises.length === 0 ? (
             <div className="rounded-3xl border border-dashed border-zinc-800 bg-zinc-900/40 px-6 py-12 text-center">
-              <Dumbbell className="mx-auto h-10 w-10 text-rose-600 dark:text-rose-400" />
+              <Dumbbell className="mx-auto h-10 w-10 text-rose-500" />
               <h3 className="mt-3 text-base font-bold text-white">
                 Añade tu primer ejercicio
               </h3>
               <p className="mt-1 text-xs text-zinc-400">
-                Elige del catálogo de 876 ejercicios. Guardaremos tus pesos para sugerírtelos la próxima vez.
+                Elige del catálogo y guardaremos tus marcas para la próxima sesión.
               </p>
               <button
                 type="button"
                 onClick={() => setIsPickerOpen(true)}
-                className="mt-5 inline-flex min-h-12 cursor-pointer items-center gap-2 rounded-2xl bg-rose-600 px-6 text-sm font-bold text-[#ffffff] shadow-lg shadow-rose-600/25 active:scale-95 hover:bg-rose-700"
+                className="mt-5 inline-flex min-h-12 cursor-pointer items-center gap-2 rounded-2xl bg-rose-600 px-6 text-sm font-bold text-white shadow-lg shadow-rose-600/25 active:scale-95 hover:bg-rose-500"
               >
                 <Plus className="h-4 w-4" />
                 Elegir ejercicios
               </button>
             </div>
+          ) : viewMode === 'focus' && currentFocusExercise ? (
+            <ActiveExerciseCard
+              key={currentFocusExercise.uid}
+              exercise={currentFocusExercise}
+              catalogEntry={catalogMap.get(currentFocusExercise.exerciseId)}
+              imageBaseUrl={imageBaseUrl}
+              isFocused={true}
+              focusMode={true}
+              onInspectExercise={(entry) => setInspectedExercise(entry)}
+              onUpdateRest={updateExerciseRest}
+              onRemoveExercise={removeExercise}
+              onAddSet={addSet}
+              onRemoveSet={removeSet}
+              onUpdateSet={updateSet}
+              onToggleSetComplete={toggleSetComplete}
+              onUpdateNotes={updateExerciseNotes}
+            />
           ) : (
-            exercises.map((exercise) => (
-              <ActiveExerciseCard
-                key={exercise.uid}
-                exercise={exercise}
-                catalogEntry={catalogMap.get(exercise.exerciseId)}
-                imageBaseUrl={imageBaseUrl}
-                isFocused={exercise.uid === focusedExerciseUid}
-                onInspectExercise={(entry) => setInspectedExercise(entry)}
-                onUpdateRest={updateExerciseRest}
-                onRemoveExercise={removeExercise}
-                onAddSet={addSet}
-                onRemoveSet={removeSet}
-                onUpdateSet={updateSet}
-                onToggleSetComplete={toggleSetComplete}
-                onUpdateNotes={updateExerciseNotes}
-              />
-            ))
-          )}
-
-          {/* Add Exercise + Session Notes + Discard */}
-          <div className="space-y-3 pt-1">
-            {exercises.length > 0 && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => setIsPickerOpen(true)}
-                  className="flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-2xl border border-rose-600/35 bg-rose-600/10 text-sm font-bold text-rose-600 dark:text-rose-400 transition-colors hover:bg-rose-600/20 active:scale-[0.98]"
-                >
-                  <Plus className="h-4 w-4" />
-                  Añadir ejercicio
-                </button>
-
-                <textarea
-                  rows={2}
-                  maxLength={500}
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Notas opcionales de la sesión..."
-                  className="w-full resize-none rounded-2xl border border-zinc-800/80 bg-zinc-900/50 px-4 py-3 text-xs text-white placeholder:text-zinc-500 focus:border-rose-500 focus:outline-none"
+            <>
+              {exercises.map((exercise) => (
+                <ActiveExerciseCard
+                  key={exercise.uid}
+                  exercise={exercise}
+                  catalogEntry={catalogMap.get(exercise.exerciseId)}
+                  imageBaseUrl={imageBaseUrl}
+                  isFocused={exercise.uid === focusedExerciseUid}
+                  focusMode={false}
+                  onInspectExercise={(entry) => setInspectedExercise(entry)}
+                  onUpdateRest={updateExerciseRest}
+                  onRemoveExercise={removeExercise}
+                  onAddSet={addSet}
+                  onRemoveSet={removeSet}
+                  onUpdateSet={updateSet}
+                  onToggleSetComplete={toggleSetComplete}
+                  onUpdateNotes={updateExerciseNotes}
                 />
-              </>
-            )}
-          </div>
+              ))}
+
+              <button
+                type="button"
+                onClick={() => setIsPickerOpen(true)}
+                className="flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-2xl border border-rose-500/30 bg-rose-500/10 text-sm font-bold text-rose-400 transition-colors hover:bg-rose-500/20 active:scale-[0.98]"
+              >
+                <Plus className="h-4 w-4" />
+                Añadir ejercicio
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -786,6 +879,49 @@ export default function LiveWorkoutOverlay() {
           onAdjust={adjustRestTimer}
           onSkip={clearRestTimer}
         />
+      )}
+
+      {/* Thumb-Zone Focus Mode Navigation Bar */}
+      {isStrengthWithExercises && viewMode === 'focus' && !(restEndsAt && restRemainingSec > 0) && (
+        <div className="shrink-0 border-t border-white/[0.08] bg-zinc-950/95 px-4 pb-[calc(0.85rem+env(safe-area-inset-bottom,0px))] pt-3 backdrop-blur-md">
+          <div className="mx-auto flex max-w-2xl items-center justify-between gap-3">
+            <button
+              type="button"
+              disabled={clampedIndex === 0}
+              onClick={() => setActiveExerciseIndex((i) => Math.max(0, i - 1))}
+              className="inline-flex min-h-12 cursor-pointer items-center gap-1 rounded-2xl border border-white/10 bg-zinc-900 px-4 text-xs font-bold text-zinc-200 transition-transform active:scale-95 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-35"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Anterior
+            </button>
+
+            <span className="text-xs font-semibold text-zinc-400 tabular-nums">
+              {clampedIndex + 1} / {exercises.length}
+            </span>
+
+            {clampedIndex < exercises.length - 1 ? (
+              <button
+                type="button"
+                onClick={() =>
+                  setActiveExerciseIndex((i) => Math.min(exercises.length - 1, i + 1))
+                }
+                className="inline-flex min-h-12 cursor-pointer items-center gap-1 rounded-2xl bg-rose-600 px-5 text-xs font-bold text-white shadow-lg shadow-rose-600/20 transition-transform active:scale-95 hover:bg-rose-500"
+              >
+                Siguiente
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleOpenFinishConfirm}
+                className="inline-flex min-h-12 cursor-pointer items-center gap-1.5 rounded-2xl bg-emerald-600 px-5 text-xs font-bold text-white shadow-lg shadow-emerald-600/20 transition-transform active:scale-95 hover:bg-emerald-500"
+              >
+                <Check className="h-4 w-4" />
+                Finalizar
+              </button>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Safe Finish / Discard Sheet */}
@@ -845,48 +981,90 @@ export default function LiveWorkoutOverlay() {
             ) : (
               <>
                 <h3 id="finish-confirm-title" className="text-lg font-bold text-white">
-                  ¿Terminar esta sesión?
+                  ¿Cómo estuvo la sesión?
                 </h3>
                 <p className="mt-1 text-xs text-zinc-400">
                   {sessionMode === 'cardio' && exercises.length === 0
                     ? `${title || 'Actividad'} · ${formatDurationClock(elapsedSec)} transcurridos.`
-                    : `Completaste ${liveMetrics.completedSets} de ${liveMetrics.totalSets} series (${liveMetrics.volumeKg} kg).`}
+                    : `${liveMetrics.completedSets} de ${liveMetrics.totalSets} series · ${liveMetrics.volumeKg.toLocaleString('es-ES')} kg`}
                 </p>
 
-                {canSaveSession ? (
-                  <div className="mt-4 flex items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-900/70 p-3">
-                    <span className="text-xs font-semibold text-zinc-300">Duración a guardar (min)</span>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setOverrideDurationMin((v) => Math.max(1, v - 5))}
-                        aria-label="Restar 5 minutos"
-                        className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl bg-zinc-800 text-white"
-                      >
-                        <Minus className="h-4 w-4" />
-                      </button>
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        min={1}
-                        max={1440}
-                        value={overrideDurationMin}
-                        onChange={(e) => setOverrideDurationMin(Number(e.target.value))}
-                        aria-label="Minutos totales"
-                        className="w-14 bg-transparent text-center text-base font-bold text-white tabular-nums focus:outline-none"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setOverrideDurationMin((v) => Math.min(1440, v + 5))}
-                        aria-label="Sumar 5 minutos"
-                        className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl bg-zinc-800 text-white"
-                      >
-                        <Plus className="h-4 w-4" />
-                      </button>
+                {/* Effort / Feeling Check-in (Peak-End) */}
+                {canSaveSession && (
+                  <div className="mt-4 space-y-3">
+                    <div className="grid grid-cols-5 gap-1.5" role="radiogroup" aria-label="Sensación del entrenamiento">
+                      {FEELING_OPTIONS.map((opt) => {
+                        const Icon = opt.icon;
+                        const active = selectedFeeling === opt.key;
+                        return (
+                          <button
+                            key={opt.key}
+                            type="button"
+                            role="radio"
+                            aria-checked={active}
+                            onClick={() => {
+                              setSelectedFeeling(opt.key);
+                              setIntensity(opt.intensity);
+                            }}
+                            className={`flex min-h-[60px] cursor-pointer flex-col items-center justify-center gap-1 rounded-2xl border px-1 py-2 text-[10px] font-semibold transition-all active:scale-95 ${
+                              active
+                                ? 'border-rose-500/60 bg-rose-500/15 text-rose-300'
+                                : 'border-white/[0.07] bg-zinc-900/60 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200'
+                            }`}
+                          >
+                            <Icon className="h-4 w-4" />
+                            <span className="truncate">{opt.label}</span>
+                          </button>
+                        );
+                      })}
                     </div>
+
+                    <div className="flex items-center justify-between rounded-2xl border border-white/[0.07] bg-zinc-900/70 p-3">
+                      <span className="text-xs font-semibold text-zinc-300">Duración (min)</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setOverrideDurationMin((v) => Math.max(1, v - 5))}
+                          aria-label="Restar 5 minutos"
+                          className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl bg-zinc-800 text-white active:scale-95"
+                        >
+                          <Minus className="h-4 w-4" />
+                        </button>
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min={1}
+                          max={1440}
+                          value={overrideDurationMin}
+                          onChange={(e) => setOverrideDurationMin(Number(e.target.value))}
+                          aria-label="Minutos totales"
+                          className="w-14 bg-transparent text-center text-base font-bold text-white tabular-nums focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setOverrideDurationMin((v) => Math.min(1440, v + 5))}
+                          aria-label="Sumar 5 minutos"
+                          className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl bg-zinc-800 text-white active:scale-95"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <textarea
+                      rows={2}
+                      maxLength={500}
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      placeholder="Notas opcionales de la sesión..."
+                      aria-label="Notas opcionales de la sesión"
+                      className="w-full resize-none rounded-2xl border border-white/[0.07] bg-zinc-900/60 px-3.5 py-2.5 text-xs text-white placeholder:text-zinc-500 focus:border-rose-500 focus:outline-none"
+                    />
                   </div>
-                ) : (
-                  <p className="mt-3 rounded-2xl border border-zinc-800 bg-zinc-900/60 px-3.5 py-2.5 text-xs text-zinc-400">
+                )}
+
+                {!canSaveSession && (
+                  <p className="mt-3 rounded-2xl border border-white/[0.07] bg-zinc-900/60 px-3.5 py-2.5 text-xs text-zinc-400">
                     Marca al menos una serie para poder guardar la sesión, o descártala si la iniciaste por error.
                   </p>
                 )}

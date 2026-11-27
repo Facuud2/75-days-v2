@@ -134,7 +134,7 @@ export default function PlansModal() {
 
   const [difficulty, setDifficulty] = useState<Difficulty>(() => currentDifficulty || 'Hard');
   const [customTasks, setCustomTasks] = useState<CustomTask[]>(() =>
-    currentDifficulty === 'Custom' && customGoalsTemplate.length > 0
+    customGoalsTemplate.length > 0
       ? customGoalsTemplate.map((goal, index) => ({
           id: goal.id || `existing-${index}-${goal.title}`,
           title: goal.title,
@@ -412,7 +412,7 @@ export default function PlansModal() {
     if (rootActionLockRef.current || isSavingCustom) return;
     if (isActive) {
       if (isCurrentPlan) return;
-      if (difficulty === 'Custom' && isActiveCustom) {
+      if (difficulty === 'Custom') {
         setShowModifyChoiceView(true);
         return;
       }
@@ -444,6 +444,8 @@ export default function PlansModal() {
             description: t.description?.trim() || '',
             icon: t.icon || 'target',
             frequency: t.frequency,
+            measurementType:
+              t.measurementType ?? (t.targetValue && t.targetValue > 1 ? 'numeric' : 'boolean'),
             targetValue: t.targetValue ?? null,
             targetUnit: t.targetUnit?.trim() || '',
           })),
@@ -749,7 +751,11 @@ export default function PlansModal() {
                             color: 'var(--on-accent)',
                           }}
                         >
-                          {isSavingCustom ? 'Guardando...' : 'Continuar manteniendo mi racha actual'}
+                          {isSavingCustom
+                            ? 'Guardando...'
+                            : currentDifficulty !== 'Custom'
+                              ? 'Pasar a Custom manteniendo mi racha actual'
+                              : 'Continuar manteniendo mi racha actual'}
                         </button>
 
                         <button
@@ -1046,12 +1052,13 @@ export default function PlansModal() {
                             </ul>
                           </div>
 
-                          {plan.difficulty === 'Custom' && isSelected && (
+                          {(plan.difficulty === 'Custom' || (isActive && currentDifficulty === plan.difficulty)) && isSelected && (
                             <div className="pt-2 border-t flex flex-col gap-1.5" style={{ borderColor: 'var(--divider)' }}>
                               <button
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
+                                  setDifficulty('Custom');
                                   openAiDesigner();
                                 }}
                                 className="w-full min-h-[36px] px-3 rounded-xl border text-xs font-semibold inline-flex items-center justify-center gap-1.5 cursor-pointer"
@@ -1062,12 +1069,15 @@ export default function PlansModal() {
                                 }}
                               >
                                 <Sparkles className="size-3.5" />
-                                <span>{isActiveCustom ? 'Modificar con IA' : 'Armar con IA'}</span>
+                                <span>
+                                  {isActive ? 'Personalizar con IA' : 'Armar con IA'}
+                                </span>
                               </button>
                               <button
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
+                                  setDifficulty('Custom');
                                   openManualEditor();
                                 }}
                                 className="w-full min-h-[36px] px-3 rounded-xl border text-xs font-semibold inline-flex items-center justify-center gap-1.5 cursor-pointer"
@@ -1078,7 +1088,11 @@ export default function PlansModal() {
                                 }}
                               >
                                 <Pencil className="size-3.5" />
-                                <span>Editar manual</span>
+                                <span>
+                                  {plan.difficulty !== 'Custom'
+                                    ? 'Editar manual (a Custom)'
+                                    : 'Editar manual'}
+                                </span>
                               </button>
                             </div>
                           )}
@@ -1141,7 +1155,7 @@ export default function PlansModal() {
                     >
                       {isCurrentPlan
                         ? 'Plan actual'
-                        : difficulty === 'Custom' && isActiveCustom
+                        : difficulty === 'Custom' && isActive
                         ? 'Aplicar cambios'
                         : isActive
                         ? 'Reiniciar Desafío'

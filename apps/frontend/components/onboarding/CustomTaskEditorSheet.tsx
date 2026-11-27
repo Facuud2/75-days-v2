@@ -12,6 +12,7 @@ import {
   GripVertical,
   HeartPulse,
   Plus,
+  Sparkles,
   Sun,
   Utensils,
   X,
@@ -25,6 +26,7 @@ import {
   shouldDismissSheet,
 } from '@/lib/motion/sheetPhysics';
 import type { GoalCadence, GoalMeasurementType } from '@/store/useChallengeStore';
+import { inferGoalMeasurement, UNIT_PRESETS } from '@/lib/utils/goalInference';
 
 export type CustomTask = {
   id: string;
@@ -498,7 +500,48 @@ export default function CustomTaskEditorSheet({
                         </div>
                       </div>
 
+                      {(() => {
+                        const suggestion = inferGoalMeasurement(task.title, task.description);
+                        const shouldShowSuggestion =
+                          suggestion &&
+                          (measurementType === 'boolean' ||
+                            suggestion.measurementType !== measurementType ||
+                            suggestion.targetValue !== targetValue ||
+                            (suggestion.targetUnit ?? '') !== targetUnit.trim() ||
+                            suggestion.cadence !== cadence);
+                        if (!shouldShowSuggestion) return null;
+                        return (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              patchTask(task.id, {
+                                cadence: suggestion.cadence,
+                                measurementType: suggestion.measurementType,
+                                targetValue: suggestion.targetValue,
+                                targetUnit: suggestion.targetUnit ?? '',
+                              })
+                            }
+                            className="w-full flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl border text-xs font-medium transition-colors cursor-pointer hover:opacity-90"
+                            style={{
+                              backgroundColor: 'var(--accent-soft, rgba(225,29,72,0.1))',
+                              borderColor: 'var(--accent-fill)',
+                              color: 'var(--accent-text)',
+                            }}
+                          >
+                            <span className="flex items-center gap-1.5 min-w-0 truncate">
+                              <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                              <span className="truncate">
+                                Detectado: {suggestion.targetValue}{' '}
+                                {suggestion.targetUnit || ''} · {CADENCE_LABELS[suggestion.cadence]}
+                              </span>
+                            </span>
+                            <span className="font-bold shrink-0">Aplicar</span>
+                          </button>
+                        );
+                      })()}
+
                       {measurementType !== 'boolean' && (
+                        <div className="space-y-2">
                         <div className="grid grid-cols-2 gap-2">
                           <label className="space-y-1">
                             <span
@@ -563,6 +606,40 @@ export default function CustomTaskEditorSheet({
                               }}
                             />
                           </label>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {UNIT_PRESETS.slice(0, 10).map((preset) => {
+                            const isSelected = targetUnit.trim().toLowerCase() === preset.unit.toLowerCase();
+                            return (
+                              <button
+                                key={preset.unit}
+                                type="button"
+                                onClick={() =>
+                                  patchTask(task.id, {
+                                    measurementType: preset.measurementType,
+                                    targetUnit: preset.unit,
+                                    targetValue:
+                                      targetValue > 1 ? targetValue : preset.defaultTarget,
+                                  })
+                                }
+                                className="px-2 py-0.5 rounded-lg text-[11px] font-semibold border transition-colors cursor-pointer whitespace-nowrap"
+                                style={{
+                                  backgroundColor: isSelected
+                                    ? 'var(--accent-fill)'
+                                    : 'var(--surface-card)',
+                                  borderColor: isSelected
+                                    ? 'var(--accent-fill)'
+                                    : 'var(--border-subtle)',
+                                  color: isSelected
+                                    ? 'var(--on-accent)'
+                                    : 'var(--text-muted)',
+                                }}
+                              >
+                                {preset.label}
+                              </button>
+                            );
+                          })}
+                        </div>
                         </div>
                       )}
                     </div>

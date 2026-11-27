@@ -61,6 +61,17 @@ export const logMeal = async (req: ControllerRequest, res: ControllerResponse) =
     data: { userId, ...parsed.data },
   });
 
+  void import('../../utils/dynamicGoalSync')
+    .then(({ syncHealthMetricsToGoals }) =>
+      syncHealthMetricsToGoals({
+        userId,
+        date: meal.date,
+        timezoneOffset: req.headers?.['x-timezone-offset'] ?? req.query?.timezoneOffset,
+        sources: ['nutrition'],
+      })
+    )
+    .catch((err) => console.warn('[nutritionController.logMeal] dynamic sync skipped:', err));
+
   return res.status(201).json(meal);
 };
 
@@ -115,6 +126,18 @@ export const deleteMeal = async (
   if (meal.userId !== userId) return res.status(403).json({ error: 'Forbidden' });
 
   await prisma.mealEntry.delete({ where: { id } });
+
+  void import('../../utils/dynamicGoalSync')
+    .then(({ syncHealthMetricsToGoals }) =>
+      syncHealthMetricsToGoals({
+        userId,
+        date: meal.date,
+        timezoneOffset: req.headers?.['x-timezone-offset'] ?? req.query?.timezoneOffset,
+        sources: ['nutrition'],
+      })
+    )
+    .catch((err) => console.warn('[nutritionController.deleteMeal] dynamic sync skipped:', err));
+
   return res.json({ message: 'Meal deleted successfully' });
 };
 
@@ -137,6 +160,17 @@ export const editMeal = async (req: ControllerRequest, res: ControllerResponse) 
     where: { id },
     data: parsed.data,
   });
+
+  void import('../../utils/dynamicGoalSync')
+    .then(({ syncHealthMetricsToGoals }) =>
+      syncHealthMetricsToGoals({
+        userId,
+        date: updated.date,
+        timezoneOffset: req.headers?.['x-timezone-offset'] ?? req.query?.timezoneOffset,
+        sources: ['nutrition'],
+      })
+    )
+    .catch((err) => console.warn('[nutritionController.editMeal] dynamic sync skipped:', err));
 
   return res.json(updated);
 };

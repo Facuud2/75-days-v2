@@ -105,9 +105,13 @@ export default function BottomSheet({ open, onClose, title, description, childre
             aria-modal="true"
             aria-labelledby={titleId}
             aria-describedby={description ? descriptionId : undefined}
-            initial={isSidePanel ? { x: '100%' } : { y: '100%' }}
-            animate={isSidePanel ? { x: 0, transition: enterTransition } : { y: 0, transition: enterTransition }}
-            exit={isSidePanel ? { x: '100%', transition: exitTransition } : { y: '100%', transition: exitTransition }}
+            initial={isSidePanel ? { x: '100%', y: 0 } : { x: 0, y: '100%' }}
+            animate={{ x: 0, y: 0, transition: enterTransition }}
+            exit={
+              isSidePanel
+                ? { x: '100%', y: 0, transition: exitTransition }
+                : { x: 0, y: '100%', transition: exitTransition }
+            }
             drag={isSidePanel ? false : 'y'}
             dragListener={false}
             dragControls={dragControls}

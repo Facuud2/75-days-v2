@@ -87,9 +87,10 @@ const DIFFICULTY_LABELS: Record<'Easy' | 'Medium' | 'Hard', string> = {
   Hard: 'Difícil',
 };
 
-const FREQUENCY_LABELS: Record<'daily' | 'weekly' | 'once', string> = {
+const FREQUENCY_LABELS: Record<'daily' | 'weekly' | 'monthly' | 'once', string> = {
   daily: 'Diaria',
   weekly: 'Semanal',
+  monthly: 'Mensual',
   once: 'Única vez',
 };
 

@@ -229,6 +229,7 @@ function LogWeightModalContent({
                   key={delta}
                   type="button"
                   onClick={() => stepWeight(delta)}
+                  aria-label={`${delta < 0 ? 'Restar' : 'Sumar'} ${Math.abs(delta).toFixed(1)} kg`}
                   className="flex min-h-10 cursor-pointer items-center justify-center gap-1 rounded-xl border border-zinc-800 bg-zinc-900/70 text-xs font-bold text-zinc-200 tabular-nums transition-colors hover:border-zinc-700 hover:bg-zinc-800 active:scale-95"
                 >
                   {delta < 0 ? (

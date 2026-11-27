@@ -383,6 +383,17 @@ export const updateMetrics = async (
           data: { bestWeight: weight },
         });
       }
+      try {
+        const { syncHealthMetricsToGoals } = await import('../../utils/dynamicGoalSync');
+        await syncHealthMetricsToGoals({
+          userId,
+          date: log.date,
+          timezoneOffset: req.headers?.['x-timezone-offset'] ?? req.query?.timezoneOffset,
+          sources: ['weight'],
+        });
+      } catch (err) {
+        console.warn('[logController.updateMetrics] weight dynamic sync skipped:', err);
+      }
     }
 
     return res.json(updatedLog);

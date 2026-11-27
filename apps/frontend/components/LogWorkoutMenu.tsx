@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { AnimatePresence, motion, useDragControls, useReducedMotion } from 'motion/react';
-import { Dumbbell, History, X } from 'lucide-react';
+import { ChevronRight, History, Play, X } from 'lucide-react';
 import {
   REDUCED_MOTION_TRANSITION,
   SHEET_ENTER_SPRING,
@@ -85,77 +85,80 @@ export default function LogWorkoutMenu({
               aria-hidden="true"
               onPointerDown={(event) => dragControls.start(event)}
             />
-            <div className="flex items-start justify-between gap-4 px-2">
+            <div className="flex items-start justify-between gap-4 px-1">
               <div>
                 <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-rose-400">
-                  Acción rápida
+                  Entrenamiento
                 </p>
                 <h2
                   id="log-workout-menu-title"
-                  className="mt-1 text-xl font-bold tracking-tight text-white"
+                  className="mt-0.5 text-xl font-bold tracking-tight text-white"
                 >
-                  Registrar entrenamiento
+                  ¿Qué vas a hacer?
                 </h2>
-                <p className="mt-1 text-sm text-white/55">
-                  Elige cómo quieres registrar tu actividad.
-                </p>
               </div>
               <button
                 type="button"
                 aria-label="Cerrar menú de entrenamiento"
                 onClick={onClose}
-                className="flex min-h-11 min-w-11 items-center justify-center rounded-full text-white/60 transition-colors active:bg-white/10 active:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
+                className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-full text-white/60 transition-colors active:bg-white/10 active:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
               >
                 <X size={20} strokeWidth={2} />
               </button>
             </div>
 
-            <div className="mt-6 grid gap-3">
-              {/* Chip: Register one already done — opens LogWorkoutModal at step 2 */}
-              <button
-                type="button"
-                onClick={() => {
-                  onClose();
-                  onQuickLog();
-                }}
-                className="quick-action-item flex min-h-16 items-center gap-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 text-left text-white transition-colors active:scale-[0.99] active:bg-rose-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
-              >
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-rose-500/20 text-[var(--accent-text)]">
-                  <History size={23} strokeWidth={2} />
-                </span>
-                <span>
-                  <span className="block font-semibold">Registrar uno ya hecho</span>
-                  <span className="mt-0.5 block text-sm text-white/50">
-                    En 2-3 toques: deporte, duración y guardar
-                  </span>
-                </span>
-              </button>
-
-              {/* New workout — opens LogWorkoutModal at step 1 */}
+            <div className="mt-5 grid gap-2.5">
+              {/* Primary: Start or resume a live session */}
               <button
                 type="button"
                 onClick={() => {
                   onClose();
                   onNewWorkout();
                 }}
-                className="quick-action-item flex min-h-16 items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.05] px-4 text-left text-white transition-colors active:scale-[0.99] active:bg-rose-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
+                className="quick-action-item flex min-h-[68px] cursor-pointer items-center justify-between gap-3 rounded-2xl border border-rose-500/35 bg-rose-500/12 px-4 text-left text-white transition-colors active:scale-[0.99] active:bg-rose-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
               >
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-rose-500/15 text-[var(--accent-text)]">
-                  <Dumbbell size={23} strokeWidth={2} />
-                </span>
-                <span>
-                  <span className="block font-semibold">Nuevo entrenamiento</span>
-                  <span className="mt-0.5 block text-sm text-white/50">
-                    Registra una actividad desde cero
+                <span className="flex items-center gap-3.5 min-w-0">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-rose-600 text-white shadow-md shadow-rose-600/25">
+                    <Play size={18} className="fill-current ml-0.5" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-bold">Entrenar ahora en vivo</span>
+                    <span className="mt-0.5 block text-xs text-white/60">
+                      Cronómetro, series y descansos
+                    </span>
                   </span>
                 </span>
+                <ChevronRight size={18} className="shrink-0 text-rose-400" />
+              </button>
+
+              {/* Secondary: Log a finished workout */}
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onQuickLog();
+                }}
+                className="quick-action-item flex min-h-[68px] cursor-pointer items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-4 text-left text-white transition-colors active:scale-[0.99] active:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
+              >
+                <span className="flex items-center gap-3.5 min-w-0">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 text-amber-400">
+                    <History size={20} strokeWidth={2} />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-bold">Registrar actividad pasada</span>
+                    <span className="mt-0.5 block text-xs text-white/60">
+                      Deporte, duración y guardar en 2 toques
+                    </span>
+                  </span>
+                </span>
+                <ChevronRight size={18} className="shrink-0 text-white/35" />
               </button>
             </div>
 
             <button
               type="button"
               onClick={onClose}
-              className="mt-3 min-h-12 w-full rounded-2xl px-4 text-center font-semibold text-white/60 transition-colors active:bg-white/10 active:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
+              className="mt-3 min-h-11 w-full cursor-pointer rounded-2xl px-4 text-center text-sm font-semibold text-white/55 transition-colors active:bg-white/10 active:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
             >
               Cancelar
             </button>

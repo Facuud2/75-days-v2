@@ -43,7 +43,44 @@ describe('shareCardData', () => {
     expect(payload.handle).toBe('@facudev');
     expect(payload.difficultyLabel).toBe('Duro');
     expect(payload.items[1].progressText).toBe('2.5/4 L');
+    expect(payload.items[1].progressRatio).toBe(0.625);
     expect(payload.items[0].progressText).toBeNull();
+    expect(payload.items[0].progressRatio).toBeNull();
+    expect(payload.challengeProgressPercent).toBe(16);
+    expect(payload.recentDaysLabel).toBe('ÚLTIMOS 7 DÍAS');
+    expect(payload.recentDays).toHaveLength(7);
+    expect(payload.recentDays[0].dayNumber).toBe(6);
+    expect(payload.recentDays[6].dayNumber).toBe(12);
+    expect(payload.recentDays[6].isTargetDay).toBe(true);
+    expect(payload.recentDays[6].status).toBe('current');
+  });
+
+  it('construye la ventana de Semana 1 con logs previos cuando dayNumber <= 7', () => {
+    const completedGoals = sampleGoals.map((g) => ({ ...g, completed: true }));
+    const logs: Record<string, DailyLog> = {
+      '2026-11-24': { date: '2026-11-24', goals: [], status: 'success' },
+      '2026-11-25': { date: '2026-11-25', goals: [], status: 'fail' },
+    };
+
+    const payload = buildDailySharePayload({
+      date: '2026-11-26',
+      dayNumber: 3,
+      difficulty: 'Custom',
+      goals: completedGoals,
+      streak: 1,
+      logs,
+      userName: 'facuud2',
+    });
+
+    expect(payload.challengeProgressPercent).toBe(4);
+    expect(payload.recentDaysLabel).toBe('SEMANA 1');
+    expect(payload.recentDays.map((d) => d.dayNumber)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(payload.recentDays[0].status).toBe('success');
+    expect(payload.recentDays[1].status).toBe('fail');
+    expect(payload.recentDays[2].status).toBe('success');
+    expect(payload.recentDays[2].isTargetDay).toBe(true);
+    expect(payload.recentDays[3].status).toBe('future');
+    expect(payload.recentCompletedCount).toBe(2);
   });
 
   it('calcula correctamente un día 100% completado', () => {
@@ -133,6 +170,7 @@ describe('shareCardData', () => {
       difficulty: 'Hard',
       unlockedAchievements: 6,
       totalAchievements: 12,
+      dayGrid: ['success', 'current', 'future'],
     });
 
     expect(payload.name).toBe('Facu Dev');
@@ -152,6 +190,7 @@ describe('shareCardData', () => {
     expect(payload.difficultyLabel).toBe('Duro');
     expect(payload.unlockedAchievements).toBe(6);
     expect(payload.totalAchievements).toBe(12);
+    expect(payload.dayGrid).toEqual(['success', 'current', 'future']);
 
     const emptyPayload = buildProfileSharePayload({
       name: '',
@@ -166,5 +205,6 @@ describe('shareCardData', () => {
     expect(emptyPayload.streak).toBe(0);
     expect(emptyPayload.currentDay).toBe(75);
     expect(emptyPayload.isChallengeActive).toBe(false);
+    expect(emptyPayload.dayGrid).toEqual([]);
   });
 });

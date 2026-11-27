@@ -20,6 +20,7 @@ import {
   X,
 } from 'lucide-react';
 import { useQuestStore, SideQuestTemplate, CreateQuestInput } from '@/store/useQuestStore';
+import { inferGoalMeasurement, UNIT_PRESETS } from '@/lib/utils/goalInference';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useChallengeStore } from '@/store/useChallengeStore';
 import type { AiSideQuestDraft, AiUserContext } from '@/lib/api/ai';
@@ -76,6 +77,7 @@ export default function SideQuestsModal({ onClose }: SideQuestsModalProps) {
         description: '',
         icon: 'target',
         frequency: 'daily',
+        measurementType: 'boolean',
         targetValue: null,
         targetUnit: '',
       },
@@ -233,6 +235,8 @@ export default function SideQuestsModal({ onClose }: SideQuestsModalProps) {
       description: t.description?.trim() || '',
       icon: t.icon || 'target',
       frequency: t.frequency,
+      measurementType:
+        t.measurementType ?? (t.targetValue && t.targetValue > 1 ? 'numeric' : 'boolean'),
       targetValue: t.targetValue ?? null,
       targetUnit: t.targetUnit?.trim() || '',
     })),
@@ -602,58 +606,227 @@ export default function SideQuestsModal({ onClose }: SideQuestsModalProps) {
                           }}
                         />
 
-                        <div className="grid grid-cols-2 gap-2.5">
-                          <select
-                            value={task.frequency}
-                            onChange={(e) =>
-                              updateTask(index, {
-                                frequency: e.target.value as 'daily' | 'weekly' | 'once',
-                              })
-                            }
-                            className="min-h-[42px] rounded-xl border px-3 py-2 text-base sm:text-sm outline-none"
-                            style={{
-                              backgroundColor: 'var(--surface-card)',
-                              borderColor: 'var(--border-subtle)',
-                              color: 'var(--text-primary)',
-                            }}
-                          >
-                            <option value="daily">Cada día</option>
-                            <option value="weekly">Cada semana</option>
-                            <option value="once">Una vez</option>
-                          </select>
+                        {(() => {
+                          const suggestion = inferGoalMeasurement(task.title, task.description);
+                          const isMeasurable =
+                            task.measurementType === 'count' ||
+                            task.measurementType === 'numeric' ||
+                            (typeof task.targetValue === 'number' && task.targetValue > 0);
+                          const showSuggestion =
+                            suggestion &&
+                            (!isMeasurable ||
+                              suggestion.targetValue !== task.targetValue ||
+                              (suggestion.targetUnit ?? '') !== (task.targetUnit ?? '').trim());
+                          const freqLabels: Record<string, string> = {
+                            daily: 'Diaria',
+                            weekly: 'Semanal',
+                            monthly: 'Mensual',
+                            once: 'Única',
+                          };
+                          return (
+                            <>
+                              {showSuggestion && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updateTask(index, {
+                                      frequency:
+                                        task.frequency === 'once'
+                                          ? 'once'
+                                          : suggestion.cadence,
+                                      measurementType: suggestion.measurementType,
+                                      targetValue: suggestion.targetValue,
+                                      targetUnit: suggestion.targetUnit ?? '',
+                                    })
+                                  }
+                                  className="w-full flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl border text-xs font-medium transition-colors cursor-pointer"
+                                  style={{
+                                    backgroundColor: 'var(--accent-soft, rgba(225,29,72,0.1))',
+                                    borderColor: 'var(--accent-fill)',
+                                    color: 'var(--accent-text)',
+                                  }}
+                                >
+                                  <span className="truncate">
+                                    ✨ Detectado: {suggestion.targetValue}{' '}
+                                    {suggestion.targetUnit || ''} ·{' '}
+                                    {freqLabels[suggestion.cadence]}
+                                  </span>
+                                  <span className="font-bold shrink-0">Aplicar</span>
+                                </button>
+                              )}
 
-                          <input
-                            type="number"
-                            inputMode="numeric"
-                            min={1}
-                            value={task.targetValue ?? ''}
-                            onChange={(e) =>
-                              updateTask(index, {
-                                targetValue: e.target.value ? Number(e.target.value) : null,
-                              })
-                            }
-                            placeholder="Meta numérica"
-                            className="min-h-[42px] rounded-xl border px-3 py-2 text-base sm:text-sm outline-none tabular-nums"
-                            style={{
-                              backgroundColor: 'var(--surface-card)',
-                              borderColor: 'var(--border-subtle)',
-                              color: 'var(--text-primary)',
-                            }}
-                          />
-                        </div>
+                              <div className="grid grid-cols-2 gap-2.5">
+                                <select
+                                  value={task.frequency}
+                                  onChange={(e) =>
+                                    updateTask(index, {
+                                      frequency: e.target.value as
+                                        | 'daily'
+                                        | 'weekly'
+                                        | 'monthly'
+                                        | 'once',
+                                    })
+                                  }
+                                  className="min-h-[42px] rounded-xl border px-3 py-2 text-base sm:text-sm outline-none"
+                                  style={{
+                                    backgroundColor: 'var(--surface-card)',
+                                    borderColor: 'var(--border-subtle)',
+                                    color: 'var(--text-primary)',
+                                  }}
+                                >
+                                  <option value="daily">Cada día</option>
+                                  <option value="weekly">Cada semana</option>
+                                  <option value="monthly">Cada mes</option>
+                                  <option value="once">Una vez</option>
+                                </select>
 
-                        <input
-                          maxLength={40}
-                          value={task.targetUnit ?? ''}
-                          onChange={(e) => updateTask(index, { targetUnit: e.target.value })}
-                          placeholder="Unidad (ej. pasos, páginas, minutos)"
-                          className="w-full min-h-[42px] rounded-xl border px-3 py-2 text-base sm:text-sm outline-none"
-                          style={{
-                            backgroundColor: 'var(--surface-card)',
-                            borderColor: 'var(--border-subtle)',
-                            color: 'var(--text-primary)',
-                          }}
-                        />
+                                <div
+                                  className="grid grid-cols-2 gap-1 p-1 rounded-xl border min-h-[42px]"
+                                  style={{
+                                    backgroundColor: 'var(--surface-card)',
+                                    borderColor: 'var(--border-subtle)',
+                                  }}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      updateTask(index, {
+                                        measurementType: 'boolean',
+                                        targetValue: null,
+                                        targetUnit: '',
+                                      })
+                                    }
+                                    className="rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                                    style={{
+                                      backgroundColor: !isMeasurable
+                                        ? 'var(--accent-fill)'
+                                        : 'transparent',
+                                      color: !isMeasurable
+                                        ? 'var(--on-accent)'
+                                        : 'var(--text-muted)',
+                                    }}
+                                  >
+                                    Check
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      updateTask(index, {
+                                        measurementType:
+                                          task.measurementType === 'count'
+                                            ? 'count'
+                                            : 'numeric',
+                                        targetValue:
+                                          task.targetValue && task.targetValue > 0
+                                            ? task.targetValue
+                                            : 5,
+                                        targetUnit: task.targetUnit || 'veces',
+                                      })
+                                    }
+                                    className="rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                                    style={{
+                                      backgroundColor: isMeasurable
+                                        ? 'var(--accent-fill)'
+                                        : 'transparent',
+                                      color: isMeasurable
+                                        ? 'var(--on-accent)'
+                                        : 'var(--text-muted)',
+                                    }}
+                                  >
+                                    Medible
+                                  </button>
+                                </div>
+                              </div>
+
+                              {isMeasurable && (
+                                <div className="space-y-2">
+                                  <div className="grid grid-cols-2 gap-2.5">
+                                    <input
+                                      type="number"
+                                      inputMode="decimal"
+                                      min={0.1}
+                                      step="any"
+                                      value={task.targetValue ?? ''}
+                                      onChange={(e) => {
+                                        const val = e.target.value
+                                          ? parseFloat(e.target.value)
+                                          : null;
+                                        updateTask(index, {
+                                          targetValue:
+                                            val !== null && Number.isFinite(val) && val > 0
+                                              ? val
+                                              : null,
+                                          measurementType:
+                                            task.measurementType === 'count'
+                                              ? 'count'
+                                              : 'numeric',
+                                        });
+                                      }}
+                                      placeholder="Objetivo (ej. 5, 8000)"
+                                      className="min-h-[42px] rounded-xl border px-3 py-2 text-base sm:text-sm outline-none tabular-nums"
+                                      style={{
+                                        backgroundColor: 'var(--surface-card)',
+                                        borderColor: 'var(--border-subtle)',
+                                        color: 'var(--text-primary)',
+                                      }}
+                                    />
+                                    <input
+                                      maxLength={40}
+                                      value={task.targetUnit ?? ''}
+                                      onChange={(e) =>
+                                        updateTask(index, { targetUnit: e.target.value })
+                                      }
+                                      placeholder="Unidad (km, pasos, veces...)"
+                                      className="min-h-[42px] rounded-xl border px-3 py-2 text-base sm:text-sm outline-none"
+                                      style={{
+                                        backgroundColor: 'var(--surface-card)',
+                                        borderColor: 'var(--border-subtle)',
+                                        color: 'var(--text-primary)',
+                                      }}
+                                    />
+                                  </div>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {UNIT_PRESETS.slice(0, 10).map((preset) => {
+                                      const active =
+                                        (task.targetUnit ?? '').trim().toLowerCase() ===
+                                        preset.unit.toLowerCase();
+                                      return (
+                                        <button
+                                          key={preset.unit}
+                                          type="button"
+                                          onClick={() =>
+                                            updateTask(index, {
+                                              measurementType: preset.measurementType,
+                                              targetUnit: preset.unit,
+                                              targetValue:
+                                                task.targetValue && task.targetValue > 0
+                                                  ? task.targetValue
+                                                  : preset.defaultTarget,
+                                            })
+                                          }
+                                          className="px-2 py-0.5 rounded-lg text-[11px] font-semibold border transition-colors cursor-pointer whitespace-nowrap"
+                                          style={{
+                                            backgroundColor: active
+                                              ? 'var(--accent-fill)'
+                                              : 'var(--surface-card)',
+                                            borderColor: active
+                                              ? 'var(--accent-fill)'
+                                              : 'var(--border-subtle)',
+                                            color: active
+                                              ? 'var(--on-accent)'
+                                              : 'var(--text-muted)',
+                                          }}
+                                        >
+                                          {preset.label}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
                     ))}
                   </div>

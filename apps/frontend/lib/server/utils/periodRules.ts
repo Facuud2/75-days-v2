@@ -1,4 +1,5 @@
 import { addDays, differenceInCalendarDays, format } from 'date-fns';
+import { inferGoalMeasurement } from '../../utils/goalInference';
 
 export type GoalCadence = 'daily' | 'weekly' | 'monthly';
 export type GoalMeasurementType = 'boolean' | 'count' | 'numeric';
@@ -45,20 +46,35 @@ export function normalizeGoalSpec(
   input: GoalTemplateSpec,
   fallbackOrder = 0
 ): NormalizedGoalSpec {
-  const cadence: GoalCadence =
-    input.cadence === 'weekly' || input.cadence === 'monthly'
-      ? input.cadence
-      : 'daily';
+  const hasExplicitMeasurement =
+    input.measurementType === 'boolean' ||
+    input.measurementType === 'count' ||
+    input.measurementType === 'numeric';
+  const hasExplicitCadence =
+    input.cadence === 'daily' ||
+    input.cadence === 'weekly' ||
+    input.cadence === 'monthly';
+
+  const inferred =
+    !hasExplicitMeasurement
+      ? inferGoalMeasurement(input.title, input.description)
+      : null;
+
+  const cadence: GoalCadence = hasExplicitCadence
+    ? (input.cadence as GoalCadence)
+    : inferred?.cadence ?? 'daily';
 
   const measurementType: GoalMeasurementType =
     input.measurementType === 'count' || input.measurementType === 'numeric'
       ? input.measurementType
-      : 'boolean';
+      : input.measurementType === 'boolean'
+        ? 'boolean'
+        : inferred?.measurementType ?? 'boolean';
 
   const rawTarget =
     typeof input.targetValue === 'number' && Number.isFinite(input.targetValue) && input.targetValue > 0
       ? input.targetValue
-      : 1;
+      : inferred?.targetValue ?? 1;
 
   const targetValue =
     measurementType === 'boolean'
@@ -75,7 +91,7 @@ export function normalizeGoalSpec(
   const targetUnit =
     measurementType === 'boolean'
       ? null
-      : trimmedUnit ?? (measurementType === 'count' ? 'veces' : null);
+      : trimmedUnit ?? inferred?.targetUnit ?? (measurementType === 'count' ? 'veces' : null);
 
   return {
     title: input.title.trim(),

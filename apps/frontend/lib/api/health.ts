@@ -529,6 +529,7 @@ export const healthService = {
     baseRequest<AiMealRecommendationResponse>('/ai/meal-recommendations', {
       method: 'POST',
       body: JSON.stringify(payload),
+      timeoutMs: 45_000,
     }),
 
   // Custom Exercises CRUD
@@ -551,4 +552,79 @@ export const healthService = {
     healthClient<{ message: string }>(`/exercises/custom/${id}`, {
       method: 'DELETE',
     }),
+
+  // Dynamic Training Plans (daily / weekly / sequential)
+  getTrainingPlans: () =>
+    healthClient<{ plans: TrainingPlanRecord[] }>('/workouts/plans'),
+  createTrainingPlan: (payload: TrainingPlanPayload) =>
+    healthClient<TrainingPlanRecord>('/workouts/plans', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  updateTrainingPlan: (id: string, payload: Partial<TrainingPlanPayload>) =>
+    healthClient<TrainingPlanRecord>(`/workouts/plans/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
+  deleteTrainingPlan: (id: string) =>
+    healthClient<{ deleted: boolean; id: string }>(`/workouts/plans/${id}`, {
+      method: 'DELETE',
+    }),
 };
+
+export type TrainingPlanScheduleType = 'daily' | 'weekly' | 'sequential';
+export type TrainingPlanEnvironment = 'home' | 'gym' | 'outdoor' | 'mixed';
+export type TrainingSlotTimeOfDay = 'morning' | 'afternoon' | 'evening' | 'any';
+export type TrainingSlotType = 'routine' | 'focus' | 'cardio' | 'rest';
+
+export interface TrainingPlanSlotExercise {
+  exerciseId: string;
+  exerciseName: string;
+  primaryMuscle?: string | null;
+  equipment?: string | null;
+  targetSets: number;
+  targetReps?: string | null;
+  defaultRestSec: number;
+}
+
+export interface TrainingPlanSlotRecord {
+  id?: string;
+  planId?: string;
+  dayOfWeek: number | null;
+  timeOfDay: TrainingSlotTimeOfDay;
+  order: number;
+  slotType: TrainingSlotType;
+  title: string;
+  focusMuscles: string[];
+  environment?: 'home' | 'gym' | 'outdoor' | null;
+  sport: 'strength' | 'walking' | 'running' | 'cycling' | 'swimming' | 'yoga' | 'other';
+  targetDurationMin?: number | null;
+  targetSteps?: number | null;
+  routineId?: string | null;
+  notes?: string | null;
+  exercises?: TrainingPlanSlotExercise[];
+}
+
+export interface TrainingPlanRecord {
+  id: string;
+  userId?: string;
+  challengeId?: string | null;
+  name: string;
+  goalSummary?: string | null;
+  scheduleType: TrainingPlanScheduleType;
+  environment: TrainingPlanEnvironment;
+  isActive: boolean;
+  slots: TrainingPlanSlotRecord[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface TrainingPlanPayload {
+  name: string;
+  goalSummary?: string | null;
+  challengeId?: string | null;
+  scheduleType: TrainingPlanScheduleType;
+  environment: TrainingPlanEnvironment;
+  isActive?: boolean;
+  slots: Omit<TrainingPlanSlotRecord, 'id' | 'planId'>[];
+}

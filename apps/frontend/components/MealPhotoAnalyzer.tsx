@@ -13,7 +13,6 @@ import {
   ArrowUp,
   Camera,
   Check,
-  CheckCircle2,
   ChevronRight,
   ImagePlus,
   Keyboard,
@@ -75,17 +74,11 @@ interface MealPhotoAnalyzerProps {
 
 type AddItemTab = 'MANUAL' | 'CATALOG';
 
-const MEAL_TYPE_LABELS: ReadonlyArray<{ id: MealTypeOption; label: string }> = [
-  { id: 'breakfast', label: 'Desayuno' },
-  { id: 'lunch', label: 'Almuerzo' },
-  { id: 'snack', label: 'Snack' },
-  { id: 'dinner', label: 'Cena' },
-];
-
 interface AutoGrowTextareaProps
   extends Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, 'onChange'> {
   value: string;
   onChange: (value: string) => void;
+  minHeightPx?: number;
   maxHeightPx?: number;
 }
 
@@ -97,6 +90,7 @@ interface AutoGrowTextareaProps
 function AutoGrowTextarea({
   value,
   onChange,
+  minHeightPx = 32,
   maxHeightPx = 160,
   className = '',
   rows = 1,
@@ -109,9 +103,9 @@ function AutoGrowTextarea({
     if (!el) return;
     el.style.height = 'auto';
     const next = Math.min(el.scrollHeight, maxHeightPx);
-    el.style.height = `${Math.max(36, next)}px`;
+    el.style.height = `${Math.max(minHeightPx, next)}px`;
     el.style.overflowY = el.scrollHeight > maxHeightPx ? 'auto' : 'hidden';
-  }, [maxHeightPx]);
+  }, [maxHeightPx, minHeightPx]);
 
   useLayoutEffect(() => {
     syncHeight();
@@ -123,7 +117,7 @@ function AutoGrowTextarea({
       rows={rows}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className={`resize-none text-base leading-[1.38] ${className}`}
+      className={`resize-none text-base leading-[1.35] ${className}`}
       {...rest}
     />
   );
@@ -946,654 +940,610 @@ export default function MealPhotoAnalyzer({
         </div>
       ) : null}
 
-      {/* STAGE 4: CLEAN iOS NATIVE REVIEW — ZERO BLOAT, DIRECT MANUAL EDITING */}
+      {/* STAGE 4: COMPACT MOBILE-FIRST REVIEW — ZERO BLOAT, DIRECT MANUAL EDITING */}
       <AnimatePresence initial={false} mode="wait">
         {stage === 'REVIEW' ? (
           <motion.div
             key="meal-review"
-            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 18, scale: 0.985 }}
+            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 14, scale: 0.99 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
+            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -6 }}
             transition={reduceMotion ? REDUCED_MOTION_TRANSITION : SHEET_ENTER_SPRING}
-            className="space-y-3.5 pb-2"
+            className="space-y-2.5 pb-1"
           >
-            {/* A short confirmation makes the analysis-to-review handoff feel intentional. */}
-            <motion.div
-              initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={
-                reduceMotion
-                  ? REDUCED_MOTION_TRANSITION
-                  : { ...SHEET_ENTER_SPRING, delay: 0.08 }
-              }
-              className="flex items-center gap-2.5 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-inset)] px-3.5 py-2.5"
-              role="status"
-              aria-live="polite"
-            >
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--accent-fill)] text-[var(--on-accent)]">
-                <CheckCircle2 className="h-4.5 w-4.5" strokeWidth={2.3} aria-hidden="true" />
-              </span>
-              <div className="min-w-0">
-                <p className="text-[14px] font-semibold leading-tight text-[var(--text-primary)]">
-                  Comida identificada
-                </p>
-                <p className="mt-0.5 text-[12px] leading-tight text-[var(--text-muted)]">
-                  Revisá los datos antes de registrarla
-                </p>
-              </div>
-            </motion.div>
+            {/* 1. Compact Header: Thumbnail + Auto-growing Title + Icon-only Retake */}
+            <div className="flex items-center gap-2.5">
+              {capturedImage ? (
+                <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-inset)]">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={thumbnailUrl ?? capturedImage.previewUrl}
+                    alt={dishName || 'Plato'}
+                    className="block h-full w-full object-cover object-center"
+                  />
+                </div>
+              ) : null}
 
-            {/* 1. Compact Header: Thumbnail + Auto-growing Title + Retake */}
-          <div className="flex items-start gap-3">
-            {capturedImage ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={capturedImage.previewUrl}
-                alt={dishName || 'Plato'}
-                className="h-14 w-14 shrink-0 rounded-[14px] border border-[var(--border-subtle)] object-cover"
-              />
-            ) : null}
-
-            <div className="min-w-0 flex-1">
-              <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
                 <label htmlFor={`${baseId}-dish-name`} className="sr-only">
                   Nombre del plato
                 </label>
                 <AutoGrowTextarea
                   id={`${baseId}-dish-name`}
                   rows={1}
-                  maxHeightPx={96}
+                  minHeightPx={30}
+                  maxHeightPx={76}
                   maxLength={120}
                   value={dishName}
                   onChange={setDishName}
                   placeholder="Nombre del plato"
-                  className="min-w-0 flex-1 rounded-lg bg-transparent px-0.5 py-0.5 text-[17px] font-semibold tracking-[-0.01em] text-[var(--text-primary)] focus:bg-[var(--surface-inset)] focus:px-2 focus:outline-none"
+                  className="w-full rounded-lg bg-transparent px-1 py-0.5 text-[16px] font-semibold tracking-[-0.01em] text-[var(--text-primary)] focus:bg-[var(--surface-inset)] focus:px-2 focus:outline-none"
                 />
-                <button
-                  type="button"
-                  onClick={handleResetToCamera}
-                  className="mt-0.5 inline-flex h-8 shrink-0 cursor-pointer items-center gap-1 rounded-full border border-[var(--border-subtle)] bg-[var(--surface-inset)] px-2.5 text-xs font-medium text-[var(--text-secondary)] active:scale-95"
-                >
-                  <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
-                  <span>Repetir</span>
-                </button>
               </div>
-              <div className="mt-1.5 flex items-center gap-1.5">
-                {MEAL_TYPE_LABELS.map((t) => {
-                  const selected = mealType === t.id;
+
+              <button
+                type="button"
+                onClick={handleResetToCamera}
+                aria-label="Repetir"
+                title="Repetir"
+                className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[var(--border-subtle)] bg-[var(--surface-inset)] text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] active:scale-95"
+              >
+                <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            </div>
+
+            {/* 2. Compact KPI + Macro Row */}
+            <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-inset)] px-3.5 py-2.5 tabular-nums">
+              <div className="flex items-center justify-between gap-2.5">
+                <div className="flex items-baseline gap-1 whitespace-nowrap">
+                  <span className="text-[22px] font-bold leading-none tracking-[-0.03em] text-[var(--text-primary)]">
+                    {totals.calories}
+                  </span>
+                  <span className="text-[12px] font-medium text-[var(--text-muted)]">
+                    kcal
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2.5 text-[12px]">
+                  <div className="text-right leading-tight">
+                    <span className="block text-[10px] font-medium text-[var(--chart-protein)]">
+                      Prot
+                    </span>
+                    <span className="font-semibold text-[var(--text-primary)]">
+                      {totals.proteinG}g
+                    </span>
+                  </div>
+                  <div className="h-5 w-px bg-[var(--divider)]" aria-hidden="true" />
+                  <div className="text-right leading-tight">
+                    <span className="block text-[10px] font-medium text-[var(--chart-carb)]">
+                      Carbs
+                    </span>
+                    <span className="font-semibold text-[var(--text-primary)]">
+                      {totals.carbG}g
+                    </span>
+                  </div>
+                  <div className="h-5 w-px bg-[var(--divider)]" aria-hidden="true" />
+                  <div className="text-right leading-tight">
+                    <span className="block text-[10px] font-medium text-[var(--chart-fat)]">
+                      Grasas
+                    </span>
+                    <span className="font-semibold text-[var(--text-primary)]">
+                      {totals.fatG}g
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {totals.fiberG > 0 || totals.sugarG > 0 ? (
+                <div className="mt-1.5 flex items-center justify-end gap-2.5 border-t border-[var(--divider)] pt-1 text-[11px] text-[var(--text-muted)]">
+                  {totals.fiberG > 0 ? <span>Fibra {totals.fiberG}g</span> : null}
+                  {totals.sugarG > 0 ? <span>Azúcares {totals.sugarG}g</span> : null}
+                </div>
+              ) : null}
+            </div>
+
+            {/* 3. Compact Grouped List of Ingredients */}
+            <div>
+              <div className="mb-1 flex items-center justify-between px-1">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.04em] text-[var(--text-muted)]">
+                  Ingredientes ({items.length})
+                </span>
+              </div>
+
+              <div className="divide-y divide-[var(--divider)] overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-card)]">
+                {items.map((item) => {
+                  const isExpanded = expandedItemId === item.id;
                   return (
-                    <button
-                      key={t.id}
-                      type="button"
-                      onClick={() => onMealTypeChange(t.id)}
-                      className={`min-h-7 cursor-pointer rounded-full px-2.5 text-xs font-medium transition-colors active:scale-95 ${
-                        selected
-                          ? 'bg-[var(--accent-fill)] text-[var(--on-accent)]'
-                          : 'bg-[var(--surface-raised)] text-[var(--text-secondary)]'
-                      }`}
-                    >
-                      {t.label}
-                    </button>
+                    <div key={item.id} className="px-3 py-1.5">
+                      <div className="flex items-center justify-between gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExpandedItemId(isExpanded ? null : item.id)
+                          }
+                          className="flex min-h-9 min-w-0 flex-1 cursor-pointer items-center justify-between gap-2 text-left"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-[13.5px] font-medium leading-tight text-[var(--text-primary)]">
+                              {item.name}
+                            </p>
+                            <p className="mt-0.5 truncate text-[11px] text-[var(--text-muted)] tabular-nums">
+                              {Math.round(item.estimatedGrams)}g · P {roundMacro(item.proteinG)} · C{' '}
+                              {roundMacro(item.carbG)} · G {roundMacro(item.fatG)}
+                              {(item.fiberG ?? 0) >= 0.5
+                                ? ` · F ${roundMacro(item.fiberG ?? 0)}`
+                                : ''}
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-1">
+                            <span className="whitespace-nowrap text-[13px] font-semibold text-[var(--text-primary)] tabular-nums">
+                              {formatCaloriesDisplay(item.calories)} kcal
+                            </span>
+                            <ChevronRight
+                              className={`h-3.5 w-3.5 text-[var(--text-muted)] transition-transform duration-150 ${
+                                isExpanded ? 'rotate-90' : ''
+                              }`}
+                              aria-hidden="true"
+                            />
+                          </div>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveItem(item.id)}
+                          aria-label={`Eliminar ${item.name}`}
+                          className="relative flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-full text-[var(--text-muted)] active:scale-95 hover:text-[var(--status-danger)]"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+
+                      {/* Clean Manual Editor inside the row */}
+                      {isExpanded ? (
+                        <div className="mt-2 space-y-2 border-t border-[var(--divider)] pt-2">
+                          <div>
+                            <label className="mb-1 block text-[11px] font-medium text-[var(--text-muted)]">
+                              Alimento
+                            </label>
+                            <AutoGrowTextarea
+                              rows={1}
+                              maxHeightPx={90}
+                              maxLength={120}
+                              value={item.name}
+                              onChange={(val) =>
+                                handleItemFieldChange(item.id, 'name', val)
+                              }
+                              className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-inset)] px-2.5 py-1.5 text-[var(--text-primary)] focus:border-[var(--focus-ring)] focus:outline-none"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="mb-1 block text-[11px] font-medium text-[var(--text-muted)]">
+                                Cantidad (g)
+                              </label>
+                              <input
+                                type="number"
+                                inputMode="numeric"
+                                min="0"
+                                max="5000"
+                                value={Math.round(item.estimatedGrams)}
+                                onChange={(e) =>
+                                  handleItemGramsChange(item.id, e.target.value)
+                                }
+                                className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-inset)] px-2.5 py-1.5 text-base text-[var(--text-primary)] tabular-nums focus:border-[var(--focus-ring)] focus:outline-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="mb-1 block text-[11px] font-medium text-[var(--text-muted)]">
+                                Calorías (kcal)
+                              </label>
+                              <input
+                                type="number"
+                                inputMode="numeric"
+                                min="0"
+                                max="10000"
+                                value={formatCaloriesDisplay(item.calories)}
+                                onChange={(e) =>
+                                  handleItemFieldChange(
+                                    item.id,
+                                    'calories',
+                                    e.target.value
+                                  )
+                                }
+                                className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-inset)] px-2.5 py-1.5 text-base text-[var(--text-primary)] tabular-nums focus:border-[var(--focus-ring)] focus:outline-none"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-2">
+                            <div>
+                              <label className="mb-1 block text-[11px] font-medium text-[var(--text-muted)]">
+                                Prot (g)
+                              </label>
+                              <input
+                                type="number"
+                                inputMode="decimal"
+                                min="0"
+                                step="0.1"
+                                value={roundMacro(item.proteinG)}
+                                onChange={(e) =>
+                                  handleItemFieldChange(
+                                    item.id,
+                                    'proteinG',
+                                    e.target.value
+                                  )
+                                }
+                                className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-inset)] px-2.5 py-1.5 text-base text-[var(--text-primary)] tabular-nums focus:border-[var(--focus-ring)] focus:outline-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="mb-1 block text-[11px] font-medium text-[var(--text-muted)]">
+                                Carbs (g)
+                              </label>
+                              <input
+                                type="number"
+                                inputMode="decimal"
+                                min="0"
+                                step="0.1"
+                                value={roundMacro(item.carbG)}
+                                onChange={(e) =>
+                                  handleItemFieldChange(item.id, 'carbG', e.target.value)
+                                }
+                                className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-inset)] px-2.5 py-1.5 text-base text-[var(--text-primary)] tabular-nums focus:border-[var(--focus-ring)] focus:outline-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="mb-1 block text-[11px] font-medium text-[var(--text-muted)]">
+                                Grasas (g)
+                              </label>
+                              <input
+                                type="number"
+                                inputMode="decimal"
+                                min="0"
+                                step="0.1"
+                                value={roundMacro(item.fatG)}
+                                onChange={(e) =>
+                                  handleItemFieldChange(item.id, 'fatG', e.target.value)
+                                }
+                                className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-inset)] px-2.5 py-1.5 text-base text-[var(--text-primary)] tabular-nums focus:border-[var(--focus-ring)] focus:outline-none"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="mb-1 block text-[11px] font-medium text-[var(--text-muted)]">
+                                Fibra (g)
+                              </label>
+                              <input
+                                type="number"
+                                inputMode="decimal"
+                                min="0"
+                                step="0.1"
+                                value={roundMacro(item.fiberG ?? 0)}
+                                onChange={(e) =>
+                                  handleItemFieldChange(item.id, 'fiberG', e.target.value)
+                                }
+                                className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-inset)] px-2.5 py-1.5 text-base text-[var(--text-primary)] tabular-nums focus:border-[var(--focus-ring)] focus:outline-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="mb-1 block text-[11px] font-medium text-[var(--text-muted)]">
+                                Azúcares (g)
+                              </label>
+                              <input
+                                type="number"
+                                inputMode="decimal"
+                                min="0"
+                                step="0.1"
+                                value={roundMacro(item.sugarG ?? 0)}
+                                onChange={(e) =>
+                                  handleItemFieldChange(item.id, 'sugarG', e.target.value)
+                                }
+                                className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-inset)] px-2.5 py-1.5 text-base text-[var(--text-primary)] tabular-nums focus:border-[var(--focus-ring)] focus:outline-none"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
                   );
                 })}
-              </div>
-            </div>
-          </div>
 
-          {/* 2. Single Crisp KPI + Macro Row (with subtle Fiber/Sugar disclosure only when > 0) */}
-          <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-inset)] px-4 py-3 tabular-nums">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-baseline gap-1 whitespace-nowrap">
-                <span className="text-[28px] font-bold leading-none tracking-[-0.03em] text-[var(--text-primary)]">
-                  {totals.calories}
-                </span>
-                <span className="text-[13px] font-medium text-[var(--text-muted)]">
-                  kcal
-                </span>
-              </div>
-
-              <div className="flex items-center gap-3 text-[13px]">
-                <div className="text-right">
-                  <span className="block text-[11px] font-medium text-[var(--chart-protein)]">
-                    Prot
-                  </span>
-                  <span className="font-semibold text-[var(--text-primary)]">
-                    {totals.proteinG}g
-                  </span>
-                </div>
-                <div className="h-6 w-px bg-[var(--divider)]" aria-hidden="true" />
-                <div className="text-right">
-                  <span className="block text-[11px] font-medium text-[var(--chart-carb)]">
-                    Carbs
-                  </span>
-                  <span className="font-semibold text-[var(--text-primary)]">
-                    {totals.carbG}g
-                  </span>
-                </div>
-                <div className="h-6 w-px bg-[var(--divider)]" aria-hidden="true" />
-                <div className="text-right">
-                  <span className="block text-[11px] font-medium text-[var(--chart-fat)]">
-                    Grasas
-                  </span>
-                  <span className="font-semibold text-[var(--text-primary)]">
-                    {totals.fatG}g
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {totals.fiberG > 0 || totals.sugarG > 0 ? (
-              <div className="mt-2 flex items-center justify-end gap-3 border-t border-[var(--divider)] pt-1.5 text-[11px] text-[var(--text-muted)]">
-                {totals.fiberG > 0 ? <span>Fibra {totals.fiberG}g</span> : null}
-                {totals.sugarG > 0 ? <span>Azúcares {totals.sugarG}g</span> : null}
-              </div>
-            ) : null}
-          </div>
-
-          {/* 3. iOS Inset Grouped List of Ingredients (Tap row to edit grams/macros by hand) */}
-          <div>
-            <div className="mb-1.5 flex items-center justify-between px-1">
-              <span className="text-[12px] font-semibold uppercase tracking-[0.04em] text-[var(--text-muted)]">
-                Ingredientes ({items.length})
-              </span>
-              <span className="text-[12px] text-[var(--text-muted)]">
-                Tocá uno para editar
-              </span>
-            </div>
-
-            <div className="divide-y divide-[var(--divider)] overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-card)]">
-              {items.map((item) => {
-                const isExpanded = expandedItemId === item.id;
-                return (
-                  <div key={item.id} className="px-3.5 py-2.5">
+                {/* Last Grouped Row: Add Ingredient inline */}
+                {!isAddingItem ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsAddingItem(true)}
+                    className="flex min-h-9 w-full cursor-pointer items-center gap-1.5 px-3 py-2 text-left text-[13px] font-medium text-[var(--accent-text)] active:bg-[var(--surface-inset)]"
+                  >
+                    <Plus className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    Agregar ingrediente
+                  </button>
+                ) : (
+                  <div className="space-y-2 bg-[var(--surface-inset)] p-3">
                     <div className="flex items-center justify-between gap-2">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setExpandedItemId(isExpanded ? null : item.id)
-                        }
-                        className="flex min-h-10 min-w-0 flex-1 cursor-pointer items-center justify-between gap-2 text-left"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[15px] font-medium leading-[1.35] text-[var(--text-primary)] [overflow-wrap:anywhere]">
-                            {item.name}
-                          </p>
-                          <p className="mt-0.5 text-[12px] text-[var(--text-muted)] tabular-nums">
-                            {Math.round(item.estimatedGrams)} g · P {roundMacro(item.proteinG)}g · C{' '}
-                            {roundMacro(item.carbG)}g · G {roundMacro(item.fatG)}g
-                            {(item.fiberG ?? 0) >= 0.5
-                              ? ` · Fibra ${roundMacro(item.fiberG ?? 0)}g`
-                              : ''}
-                          </p>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-1.5">
-                          <span className="whitespace-nowrap text-[15px] font-semibold text-[var(--text-primary)] tabular-nums">
-                            {formatCaloriesDisplay(item.calories)} kcal
-                          </span>
-                          <ChevronRight
-                            className={`h-4 w-4 text-[var(--text-muted)] transition-transform duration-150 ${
-                              isExpanded ? 'rotate-90' : ''
-                            }`}
-                            aria-hidden="true"
-                          />
-                        </div>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveItem(item.id)}
-                        aria-label={`Eliminar ${item.name}`}
-                        className="relative flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-[var(--text-muted)] active:scale-95 hover:text-[var(--status-danger)]"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-
-                    {/* Clean Manual Editor inside the row */}
-                    {isExpanded ? (
-                      <div className="mt-2.5 space-y-2.5 border-t border-[var(--divider)] pt-2.5">
-                        <div>
-                          <label className="mb-1 block text-[12px] font-medium text-[var(--text-muted)]">
-                            Alimento
-                          </label>
-                          <AutoGrowTextarea
-                            rows={1}
-                            maxHeightPx={90}
-                            maxLength={120}
-                            value={item.name}
-                            onChange={(val) =>
-                              handleItemFieldChange(item.id, 'name', val)
-                            }
-                            className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-inset)] px-3 py-2 text-[var(--text-primary)] focus:border-[var(--focus-ring)] focus:outline-none"
-                          />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="mb-1 block text-[12px] font-medium text-[var(--text-muted)]">
-                              Cantidad (g)
-                            </label>
-                            <input
-                              type="number"
-                              inputMode="numeric"
-                              min="0"
-                              max="5000"
-                              value={Math.round(item.estimatedGrams)}
-                              onChange={(e) =>
-                                handleItemGramsChange(item.id, e.target.value)
-                              }
-                              className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-inset)] px-3 py-2 text-base text-[var(--text-primary)] tabular-nums focus:border-[var(--focus-ring)] focus:outline-none"
-                            />
-                          </div>
-                          <div>
-                            <label className="mb-1 block text-[12px] font-medium text-[var(--text-muted)]">
-                              Calorías (kcal)
-                            </label>
-                            <input
-                              type="number"
-                              inputMode="numeric"
-                              min="0"
-                              max="10000"
-                              value={formatCaloriesDisplay(item.calories)}
-                              onChange={(e) =>
-                                handleItemFieldChange(
-                                  item.id,
-                                  'calories',
-                                  e.target.value
-                                )
-                              }
-                              className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-inset)] px-3 py-2 text-base text-[var(--text-primary)] tabular-nums focus:border-[var(--focus-ring)] focus:outline-none"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-3 gap-2">
-                          <div>
-                            <label className="mb-1 block text-[11px] font-medium text-[var(--text-muted)]">
-                              Prot (g)
-                            </label>
-                            <input
-                              type="number"
-                              inputMode="decimal"
-                              min="0"
-                              step="0.1"
-                              value={roundMacro(item.proteinG)}
-                              onChange={(e) =>
-                                handleItemFieldChange(
-                                  item.id,
-                                  'proteinG',
-                                  e.target.value
-                                )
-                              }
-                              className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-inset)] px-2.5 py-1.5 text-base text-[var(--text-primary)] tabular-nums focus:border-[var(--focus-ring)] focus:outline-none"
-                            />
-                          </div>
-                          <div>
-                            <label className="mb-1 block text-[11px] font-medium text-[var(--text-muted)]">
-                              Carbs (g)
-                            </label>
-                            <input
-                              type="number"
-                              inputMode="decimal"
-                              min="0"
-                              step="0.1"
-                              value={roundMacro(item.carbG)}
-                              onChange={(e) =>
-                                handleItemFieldChange(item.id, 'carbG', e.target.value)
-                              }
-                              className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-inset)] px-2.5 py-1.5 text-base text-[var(--text-primary)] tabular-nums focus:border-[var(--focus-ring)] focus:outline-none"
-                            />
-                          </div>
-                          <div>
-                            <label className="mb-1 block text-[11px] font-medium text-[var(--text-muted)]">
-                              Grasas (g)
-                            </label>
-                            <input
-                              type="number"
-                              inputMode="decimal"
-                              min="0"
-                              step="0.1"
-                              value={roundMacro(item.fatG)}
-                              onChange={(e) =>
-                                handleItemFieldChange(item.id, 'fatG', e.target.value)
-                              }
-                              className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-inset)] px-2.5 py-1.5 text-base text-[var(--text-primary)] tabular-nums focus:border-[var(--focus-ring)] focus:outline-none"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="mb-1 block text-[11px] font-medium text-[var(--text-muted)]">
-                              Fibra (g)
-                            </label>
-                            <input
-                              type="number"
-                              inputMode="decimal"
-                              min="0"
-                              step="0.1"
-                              value={roundMacro(item.fiberG ?? 0)}
-                              onChange={(e) =>
-                                handleItemFieldChange(item.id, 'fiberG', e.target.value)
-                              }
-                              className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-inset)] px-2.5 py-1.5 text-base text-[var(--text-primary)] tabular-nums focus:border-[var(--focus-ring)] focus:outline-none"
-                            />
-                          </div>
-                          <div>
-                            <label className="mb-1 block text-[11px] font-medium text-[var(--text-muted)]">
-                              Azúcares (g)
-                            </label>
-                            <input
-                              type="number"
-                              inputMode="decimal"
-                              min="0"
-                              step="0.1"
-                              value={roundMacro(item.sugarG ?? 0)}
-                              onChange={(e) =>
-                                handleItemFieldChange(item.id, 'sugarG', e.target.value)
-                              }
-                              className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-inset)] px-2.5 py-1.5 text-base text-[var(--text-primary)] tabular-nums focus:border-[var(--focus-ring)] focus:outline-none"
-                            />
-                          </div>
-                        </div>
+                      <div className="flex gap-1 rounded-lg bg-[var(--surface-raised)] p-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setAddItemTab('MANUAL')}
+                          className={`cursor-pointer rounded-md px-2.5 py-1 text-xs font-semibold ${
+                            addItemTab === 'MANUAL'
+                              ? 'bg-[var(--surface-card)] text-[var(--text-primary)] shadow-xs'
+                              : 'text-[var(--text-muted)]'
+                          }`}
+                        >
+                          A mano
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAddItemTab('CATALOG')}
+                          className={`cursor-pointer rounded-md px-2.5 py-1 text-xs font-semibold ${
+                            addItemTab === 'CATALOG'
+                              ? 'bg-[var(--surface-card)] text-[var(--text-primary)] shadow-xs'
+                              : 'text-[var(--text-muted)]'
+                          }`}
+                        >
+                          Catálogo
+                        </button>
                       </div>
-                    ) : null}
-                  </div>
-                );
-              })}
-
-              {/* Last Grouped Row: Add Ingredient inline */}
-              {!isAddingItem ? (
-                <button
-                  type="button"
-                  onClick={() => setIsAddingItem(true)}
-                  className="flex min-h-11 w-full cursor-pointer items-center gap-2 px-3.5 py-2.5 text-left text-[15px] font-medium text-[var(--accent-text)] active:bg-[var(--surface-inset)]"
-                >
-                  <Plus className="h-4 w-4 shrink-0" aria-hidden="true" />
-                  Agregar ingrediente
-                </button>
-              ) : (
-                <div className="space-y-2.5 bg-[var(--surface-inset)] p-3.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex gap-1 rounded-lg bg-[var(--surface-raised)] p-0.5">
                       <button
                         type="button"
-                        onClick={() => setAddItemTab('MANUAL')}
-                        className={`cursor-pointer rounded-md px-2.5 py-1 text-xs font-semibold ${
-                          addItemTab === 'MANUAL'
-                            ? 'bg-[var(--surface-card)] text-[var(--text-primary)] shadow-xs'
-                            : 'text-[var(--text-muted)]'
-                        }`}
+                        onClick={() => setIsAddingItem(false)}
+                        aria-label="Cerrar agregar ingrediente"
+                        className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--text-muted)]"
                       >
-                        A mano
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setAddItemTab('CATALOG')}
-                        className={`cursor-pointer rounded-md px-2.5 py-1 text-xs font-semibold ${
-                          addItemTab === 'CATALOG'
-                            ? 'bg-[var(--surface-card)] text-[var(--text-primary)] shadow-xs'
-                            : 'text-[var(--text-muted)]'
-                        }`}
-                      >
-                        Catálogo
+                        <X className="h-4 w-4" />
                       </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setIsAddingItem(false)}
-                      aria-label="Cerrar agregar ingrediente"
-                      className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--text-muted)]"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
 
-                  {addItemTab === 'MANUAL' ? (
-                    <form onSubmit={handleAddManualItem} className="space-y-2">
-                      <AutoGrowTextarea
-                        rows={1}
-                        maxHeightPx={80}
-                        required
-                        maxLength={120}
-                        value={manualDraft.name}
-                        onChange={(val) =>
-                          setManualDraft((d) => ({ ...d, name: val }))
-                        }
-                        placeholder="Ej: Aceite de oliva, Queso..."
-                        className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-card)] px-3 py-2 text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--focus-ring)] focus:outline-none"
-                      />
-                      <div className="grid grid-cols-2 gap-2">
-                        <input
-                          type="number"
-                          inputMode="numeric"
-                          min="0"
-                          max="5000"
-                          value={manualDraft.grams}
-                          onChange={(e) =>
-                            setManualDraft((d) => ({ ...d, grams: e.target.value }))
-                          }
-                          placeholder="Gramos (100)"
-                          className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-card)] px-3 py-2 text-base text-[var(--text-primary)] tabular-nums focus:border-[var(--focus-ring)] focus:outline-none"
-                        />
-                        <input
-                          type="number"
-                          inputMode="numeric"
+                    {addItemTab === 'MANUAL' ? (
+                      <form onSubmit={handleAddManualItem} className="space-y-2">
+                        <AutoGrowTextarea
+                          rows={1}
+                          maxHeightPx={80}
                           required
-                          min="0"
-                          max="10000"
-                          value={manualDraft.calories}
-                          onChange={(e) =>
-                            setManualDraft((d) => ({ ...d, calories: e.target.value }))
+                          maxLength={120}
+                          value={manualDraft.name}
+                          onChange={(val) =>
+                            setManualDraft((d) => ({ ...d, name: val }))
                           }
-                          placeholder="Kcal *"
-                          className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-card)] px-3 py-2 text-base text-[var(--text-primary)] tabular-nums focus:border-[var(--focus-ring)] focus:outline-none"
+                          placeholder="Nombre del ingrediente"
+                          className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-card)] px-3 py-1.5 text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--focus-ring)] focus:outline-none"
                         />
-                      </div>
-                      <div className="grid grid-cols-3 gap-2">
-                        <input
-                          type="number"
-                          inputMode="decimal"
-                          min="0"
-                          step="0.1"
-                          value={manualDraft.proteinG}
-                          onChange={(e) =>
-                            setManualDraft((d) => ({ ...d, proteinG: e.target.value }))
-                          }
-                          placeholder="Prot (g)"
-                          className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-card)] px-2.5 py-1.5 text-base text-[var(--text-primary)] tabular-nums focus:outline-none"
-                        />
-                        <input
-                          type="number"
-                          inputMode="decimal"
-                          min="0"
-                          step="0.1"
-                          value={manualDraft.carbG}
-                          onChange={(e) =>
-                            setManualDraft((d) => ({ ...d, carbG: e.target.value }))
-                          }
-                          placeholder="Carbs (g)"
-                          className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-card)] px-2.5 py-1.5 text-base text-[var(--text-primary)] tabular-nums focus:outline-none"
-                        />
-                        <input
-                          type="number"
-                          inputMode="decimal"
-                          min="0"
-                          step="0.1"
-                          value={manualDraft.fatG}
-                          onChange={(e) =>
-                            setManualDraft((d) => ({ ...d, fatG: e.target.value }))
-                          }
-                          placeholder="Grasas (g)"
-                          className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-card)] px-2.5 py-1.5 text-base text-[var(--text-primary)] tabular-nums focus:outline-none"
-                        />
-                      </div>
-                      <button
-                        type="submit"
-                        className="flex min-h-10 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-[var(--accent-fill)] text-[14px] font-semibold text-[var(--on-accent)] active:scale-[0.98]"
-                      >
-                        <Check className="h-4 w-4" aria-hidden="true" />
-                        Sumar al plato
-                      </button>
-                    </form>
-                  ) : (
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <div className="relative min-w-0 flex-1">
+                        <div className="grid grid-cols-2 gap-2">
                           <input
-                            type="text"
-                            value={catalogQuery}
-                            onChange={(e) => setCatalogQuery(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                void handleSearchOnlineIngredient();
-                              }
-                            }}
-                            placeholder="Buscar alimento..."
-                            className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-card)] py-2 pl-3 pr-9 text-base text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none"
+                            type="number"
+                            inputMode="numeric"
+                            min="0"
+                            max="5000"
+                            value={manualDraft.grams}
+                            onChange={(e) =>
+                              setManualDraft((d) => ({ ...d, grams: e.target.value }))
+                            }
+                            placeholder="Gramos"
+                            className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-card)] px-3 py-1.5 text-base text-[var(--text-primary)] tabular-nums focus:border-[var(--focus-ring)] focus:outline-none"
                           />
-                          <button
-                            type="button"
-                            onClick={() => void handleSearchOnlineIngredient()}
-                            aria-label="Buscar alimento online"
-                            className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-[var(--text-muted)]"
-                          >
-                            {isSearchingOnline ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <Search className="h-4 w-4" />
-                            )}
-                          </button>
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            required
+                            min="0"
+                            max="10000"
+                            value={manualDraft.calories}
+                            onChange={(e) =>
+                              setManualDraft((d) => ({ ...d, calories: e.target.value }))
+                            }
+                            placeholder="Kcal *"
+                            className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-card)] px-3 py-1.5 text-base text-[var(--text-primary)] tabular-nums focus:border-[var(--focus-ring)] focus:outline-none"
+                          />
                         </div>
-                        <input
-                          type="number"
-                          inputMode="numeric"
-                          min="1"
-                          max="3000"
-                          value={catalogGrams}
-                          onChange={(e) => setCatalogGrams(e.target.value)}
-                          aria-label="Gramos"
-                          className="w-20 shrink-0 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-card)] px-2.5 py-2 text-right text-base text-[var(--text-primary)] tabular-nums"
-                        />
-                        <span className="text-xs text-[var(--text-muted)]">g</span>
-                      </div>
-
-                      <div className="max-h-36 divide-y divide-[var(--divider)] overflow-y-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-card)]">
-                        {isImportingOnline ? (
-                          <div className="flex justify-center py-4">
-                            <Loader2 className="h-4 w-4 animate-spin text-[var(--accent-text)]" />
+                        <div className="grid grid-cols-3 gap-2">
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            min="0"
+                            step="0.1"
+                            value={manualDraft.proteinG}
+                            onChange={(e) =>
+                              setManualDraft((d) => ({ ...d, proteinG: e.target.value }))
+                            }
+                            placeholder="Prot (g)"
+                            className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-card)] px-2.5 py-1.5 text-base text-[var(--text-primary)] tabular-nums focus:outline-none"
+                          />
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            min="0"
+                            step="0.1"
+                            value={manualDraft.carbG}
+                            onChange={(e) =>
+                              setManualDraft((d) => ({ ...d, carbG: e.target.value }))
+                            }
+                            placeholder="Carbs (g)"
+                            className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-card)] px-2.5 py-1.5 text-base text-[var(--text-primary)] tabular-nums focus:outline-none"
+                          />
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            min="0"
+                            step="0.1"
+                            value={manualDraft.fatG}
+                            onChange={(e) =>
+                              setManualDraft((d) => ({ ...d, fatG: e.target.value }))
+                            }
+                            placeholder="Grasas (g)"
+                            className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-card)] px-2.5 py-1.5 text-base text-[var(--text-primary)] tabular-nums focus:outline-none"
+                          />
+                        </div>
+                        <button
+                          type="submit"
+                          className="flex min-h-9 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-[var(--accent-fill)] text-[13px] font-semibold text-[var(--on-accent)] active:scale-[0.98]"
+                        >
+                          <Check className="h-4 w-4" aria-hidden="true" />
+                          Sumar al plato
+                        </button>
+                      </form>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <div className="relative min-w-0 flex-1">
+                            <input
+                              type="text"
+                              value={catalogQuery}
+                              onChange={(e) => setCatalogQuery(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  void handleSearchOnlineIngredient();
+                                }
+                              }}
+                              placeholder="Buscar alimento..."
+                              className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-card)] py-1.5 pl-3 pr-9 text-base text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => void handleSearchOnlineIngredient()}
+                              aria-label="Buscar alimento online"
+                              className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-[var(--text-muted)]"
+                            >
+                              {isSearchingOnline ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Search className="h-4 w-4" />
+                              )}
+                            </button>
                           </div>
-                        ) : (
-                          <>
-                            {filteredLocalIngredients.map((ing) => (
-                              <button
-                                key={ing.id}
-                                type="button"
-                                onClick={() => handleAddCatalogIngredient(ing)}
-                                className="flex w-full cursor-pointer items-center justify-between gap-2 px-3 py-2 text-left active:bg-[var(--surface-inset)]"
-                              >
-                                <span className="min-w-0 truncate text-[14px] text-[var(--text-primary)]">
-                                  {ing.name}
-                                </span>
-                                <span className="shrink-0 text-xs text-[var(--text-muted)] tabular-nums">
-                                  {ing.caloriesPer100g} kcal/100g
-                                </span>
-                              </button>
-                            ))}
-                            {onlineResults.map((food) => (
-                              <button
-                                key={food.id}
-                                type="button"
-                                onClick={() => void handleImportOnlineIngredient(food)}
-                                className="flex w-full cursor-pointer flex-col px-3 py-2 text-left active:bg-[var(--surface-inset)]"
-                              >
-                                <span className="w-full truncate text-[14px] text-[var(--text-primary)]">
-                                  {food.name}
-                                </span>
-                                <span className="w-full truncate text-xs text-[var(--text-muted)]">
-                                  {food.description}
-                                </span>
-                              </button>
-                            ))}
-                          </>
-                        )}
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            min="1"
+                            max="3000"
+                            value={catalogGrams}
+                            onChange={(e) => setCatalogGrams(e.target.value)}
+                            aria-label="Gramos"
+                            className="w-20 shrink-0 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-card)] px-2.5 py-1.5 text-right text-base text-[var(--text-primary)] tabular-nums"
+                          />
+                          <span className="text-xs text-[var(--text-muted)]">g</span>
+                        </div>
+
+                        <div className="max-h-36 divide-y divide-[var(--divider)] overflow-y-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-card)]">
+                          {isImportingOnline ? (
+                            <div className="flex justify-center py-4">
+                              <Loader2 className="h-4 w-4 animate-spin text-[var(--accent-text)]" />
+                            </div>
+                          ) : (
+                            <>
+                              {filteredLocalIngredients.map((ing) => (
+                                <button
+                                  key={ing.id}
+                                  type="button"
+                                  onClick={() => handleAddCatalogIngredient(ing)}
+                                  className="flex w-full cursor-pointer items-center justify-between gap-2 px-3 py-2 text-left active:bg-[var(--surface-inset)]"
+                                >
+                                  <span className="min-w-0 truncate text-[13.5px] text-[var(--text-primary)]">
+                                    {ing.name}
+                                  </span>
+                                  <span className="shrink-0 text-xs text-[var(--text-muted)] tabular-nums">
+                                    {ing.caloriesPer100g} kcal/100g
+                                  </span>
+                                </button>
+                              ))}
+                              {onlineResults.map((food) => (
+                                <button
+                                  key={food.id}
+                                  type="button"
+                                  onClick={() => void handleImportOnlineIngredient(food)}
+                                  className="flex w-full cursor-pointer flex-col px-3 py-2 text-left active:bg-[var(--surface-inset)]"
+                                >
+                                  <span className="w-full truncate text-[13.5px] text-[var(--text-primary)]">
+                                    {food.name}
+                                  </span>
+                                  <span className="w-full truncate text-xs text-[var(--text-muted)]">
+                                    {food.description}
+                                  </span>
+                                </button>
+                              ))}
+                            </>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-              )}
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
 
-          {/* 4. Compact Auto-Growing iMessage-style AI Correction Composer */}
-          <form
-            onSubmit={handleApplyAiCorrection}
-            className="flex items-end gap-1.5 rounded-[20px] border border-[var(--border-subtle)] bg-[var(--surface-inset)] px-3 py-1.5 focus-within:border-[var(--focus-ring)]"
-          >
-            <label htmlFor={`${baseId}-ai-correction`} className="sr-only">
-              Corregir o ajustar con IA
-            </label>
-            <AutoGrowTextarea
-              id={`${baseId}-ai-correction`}
-              rows={1}
-              maxHeightPx={132}
-              maxLength={500}
-              disabled={isApplyingCorrection}
-              value={correctionText}
-              onChange={setCorrectionText}
-              placeholder="Corregir con IA (ej: era media banana)..."
-              className="min-w-0 flex-1 bg-transparent py-1.5 text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none"
-            />
-            <button
-              type="button"
-              onClick={() => void handleToggleVoice('correction')}
-              disabled={isApplyingCorrection || isTranscribingVoice}
-              aria-label={
-                isRecordingVoice
-                  ? 'Detener dictado de corrección'
-                  : 'Dictar corrección por voz'
-              }
-              className={`mb-0.5 flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full transition-transform duration-100 active:scale-95 ${
-                isRecordingVoice
-                  ? 'bg-[var(--accent-fill)] text-[var(--on-accent)] animate-pulse'
-                  : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
-              }`}
+            {/* 4. Compact AI Correction Composer */}
+            <form
+              onSubmit={handleApplyAiCorrection}
+              className="flex items-center gap-1.5 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-inset)] px-3 py-1 focus-within:border-[var(--focus-ring)]"
             >
-              {isTranscribingVoice ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : isRecordingVoice ? (
-                <Square className="h-3.5 w-3.5 fill-current" />
-              ) : (
-                <Mic className="h-4 w-4" />
-              )}
-            </button>
-            <button
-              type="submit"
-              disabled={!correctionText.trim() || isApplyingCorrection}
-              aria-label="Aplicar corrección con IA"
-              className="mb-0.5 flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full bg-[var(--accent-fill)] text-[var(--on-accent)] transition-transform duration-100 active:scale-95 disabled:opacity-35"
-            >
-              {isApplyingCorrection ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <ArrowUp className="h-4 w-4" strokeWidth={2.4} />
-              )}
-            </button>
-          </form>
+              <label htmlFor={`${baseId}-ai-correction`} className="sr-only">
+                Corregir con IA
+              </label>
+              <AutoGrowTextarea
+                id={`${baseId}-ai-correction`}
+                rows={1}
+                minHeightPx={32}
+                maxHeightPx={110}
+                maxLength={500}
+                disabled={isApplyingCorrection}
+                value={correctionText}
+                onChange={setCorrectionText}
+                placeholder="Corregir con IA"
+                className="min-w-0 flex-1 bg-transparent py-1 text-[var(--text-primary)] placeholder:text-[14px] placeholder:text-[var(--text-muted)] focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => void handleToggleVoice('correction')}
+                disabled={isApplyingCorrection || isTranscribingVoice}
+                aria-label={
+                  isRecordingVoice
+                    ? 'Detener dictado de corrección'
+                    : 'Dictar corrección por voz'
+                }
+                className={`flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full transition-transform duration-100 active:scale-95 ${
+                  isRecordingVoice
+                    ? 'bg-[var(--accent-fill)] text-[var(--on-accent)] animate-pulse'
+                    : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                {isTranscribingVoice ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : isRecordingVoice ? (
+                  <Square className="h-3.5 w-3.5 fill-current" />
+                ) : (
+                  <Mic className="h-4 w-4" />
+                )}
+              </button>
+              <button
+                type="submit"
+                disabled={!correctionText.trim() || isApplyingCorrection}
+                aria-label="Aplicar corrección con IA"
+                className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-[var(--accent-fill)] text-[var(--on-accent)] transition-transform duration-100 active:scale-95 disabled:opacity-35"
+              >
+                {isApplyingCorrection ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ArrowUp className="h-4 w-4" strokeWidth={2.4} />
+                )}
+              </button>
+            </form>
 
-          {/* 5. Single Primary Save CTA (clean flow, never covering ingredient rows) */}
-          <div className="pt-1 pb-[env(safe-area-inset-bottom,0px)]">
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={items.length === 0 || isApplyingCorrection}
-              className="flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-2xl bg-[var(--accent-fill)] px-4 text-[15px] font-semibold text-[var(--on-accent)] transition-transform duration-100 active:scale-[0.98] disabled:opacity-45"
-            >
-              <Check className="h-4 w-4 shrink-0" strokeWidth={2.4} aria-hidden="true" />
-              <span className="tabular-nums">Registrar {totals.calories} kcal</span>
-            </button>
-          </div>
+            {/* 5. Primary Save CTA */}
+            <div className="pt-0.5 pb-[env(safe-area-inset-bottom,0px)]">
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={items.length === 0 || isApplyingCorrection}
+                className="flex min-h-11 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-[var(--accent-fill)] px-4 text-[14px] font-semibold text-[var(--on-accent)] transition-transform duration-100 active:scale-[0.98] disabled:opacity-45"
+              >
+                <Check className="h-4 w-4 shrink-0" strokeWidth={2.4} aria-hidden="true" />
+                <span className="tabular-nums">Registrar {totals.calories} kcal</span>
+              </button>
+            </div>
           </motion.div>
         ) : null}
       </AnimatePresence>

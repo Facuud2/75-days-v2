@@ -334,6 +334,8 @@ export const useHealthStore = create<HealthStoreState>()(
           proteinG: Number(payload.proteinG) || 0,
           carbG: Number(payload.carbG) || 0,
           fatG: Number(payload.fatG) || 0,
+          fiberG: Number(payload.fiberG) || 0,
+          sugarG: Number(payload.sugarG) || 0,
           ...(payload.photoUrl !== undefined && { photoUrl: payload.photoUrl }),
         };
 
@@ -388,6 +390,8 @@ export const useHealthStore = create<HealthStoreState>()(
                   proteinG: Number(payload.proteinG) || 0,
                   carbG: Number(payload.carbG) || 0,
                   fatG: Number(payload.fatG) || 0,
+                  fiberG: Number(payload.fiberG) || 0,
+                  sugarG: Number(payload.sugarG) || 0,
                   ...(payload.photoUrl !== undefined && { photoUrl: payload.photoUrl }),
                 }
               : m

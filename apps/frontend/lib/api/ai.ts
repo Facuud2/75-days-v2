@@ -44,7 +44,8 @@ export interface AiSideQuestTaskDraft {
   title: string;
   description: string;
   icon: AiSideQuestIcon;
-  frequency: 'daily' | 'weekly' | 'once';
+  frequency: 'daily' | 'weekly' | 'monthly' | 'once';
+  measurementType?: 'boolean' | 'count' | 'numeric';
   targetValue: number | null;
   targetUnit: string;
   changeType?: 'kept' | 'modified' | 'added';
@@ -235,4 +236,67 @@ export const aiService = {
       timeoutMs: 45_000,
     });
   },
+  planWorkout: (payload: AiWorkoutPlanRequest, signal?: AbortSignal) => {
+    return apiClient<AiWorkoutPlanResponse>('/ai/workout-plan', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      signal,
+      timeoutMs: 55_000,
+    });
+  },
 };
+
+export interface AiWorkoutPlanSlotExercise {
+  exerciseId: string;
+  exerciseName: string;
+  primaryMuscle: string | null;
+  equipment: string | null;
+  targetSets: number;
+  targetReps: string;
+  defaultRestSec: number;
+}
+
+export interface AiWorkoutPlanSlotDraft {
+  dayOfWeek: number | null;
+  timeOfDay: 'morning' | 'afternoon' | 'evening' | 'any';
+  order: number;
+  slotType: 'routine' | 'focus' | 'cardio' | 'rest';
+  title: string;
+  focusMuscles: string[];
+  environment: 'home' | 'gym' | 'outdoor' | null;
+  sport: 'strength' | 'walking' | 'running' | 'cycling' | 'swimming' | 'yoga' | 'other';
+  targetDurationMin: number | null;
+  targetSteps: number | null;
+  notes: string;
+  exercises: AiWorkoutPlanSlotExercise[];
+}
+
+export interface AiWorkoutPlanDraft {
+  name: string;
+  goalSummary: string;
+  scheduleType: 'daily' | 'weekly' | 'sequential';
+  environment: 'home' | 'gym' | 'outdoor' | 'mixed';
+  slots: AiWorkoutPlanSlotDraft[];
+}
+
+export interface AiWorkoutPlanRequest {
+  textInput?: string;
+  audioBase64?: string;
+  mimeType?: string;
+  history?: AiConversationTurn[];
+  currentDraft?: AiWorkoutPlanDraft | null;
+  understoodFacts?: string[];
+  forceProposal?: boolean;
+}
+
+export interface AiWorkoutPlanResponse {
+  status: 'needs_clarification' | 'ready';
+  userTranscript: string;
+  assistantMessage: string;
+  openQuestions: string[];
+  clarificationQuestions: AiClarificationQuestion[];
+  understoodFacts: string[];
+  suggestedQuickReplies: string[];
+  quickReplySelectionMode: QuickReplySelectionMode;
+  plan: AiWorkoutPlanDraft | null;
+}

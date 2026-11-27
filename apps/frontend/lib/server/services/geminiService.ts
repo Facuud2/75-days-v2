@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { getServerConfig } from '../config';
 import { DEFAULT_GOALS } from '../constants/defaultGoals';
 import { computeMealTotals } from '@/lib/utils/mealMath';
+import { inferGoalMeasurement, roundDynamicValue } from '@/lib/utils/goalInference';
 
 export const ALLOWED_ICONS = [
   'utensils',
@@ -102,13 +103,14 @@ export const aiSideQuestTaskSchema = z.object({
   title: boundedString(200),
   description: optionalBoundedString(1000),
   icon: z.enum(ALLOWED_SIDE_QUEST_ICONS).optional().default('target'),
-  frequency: z.enum(['daily', 'weekly', 'once']).optional().default('daily'),
+  frequency: z.enum(['daily', 'weekly', 'monthly', 'once']).optional().default('daily'),
+  measurementType: z.enum(['boolean', 'count', 'numeric']).optional().default('boolean'),
   targetValue: z
     .number()
     .nullable()
     .optional()
     .transform((val) =>
-      typeof val === 'number' && Number.isFinite(val) && val > 0 ? Math.round(val) : null
+      typeof val === 'number' && Number.isFinite(val) && val > 0 ? roundDynamicValue(val) : null
     ),
   targetUnit: optionalBoundedString(40),
   changeType: z.enum(['kept', 'modified', 'added']).optional(),
@@ -518,23 +520,32 @@ const SIDE_QUEST_JSON_SCHEMA = {
               },
               frequency: {
                 type: 'string',
-                enum: ['daily', 'weekly', 'once'],
-                description: 'Frecuencia: daily (cada día), weekly (cada semana) o once (una vez).',
+                enum: ['daily', 'weekly', 'monthly', 'once'],
+                description:
+                  'Frecuencia: daily (cada día), weekly (cada semana), monthly (cada mes, si la misión dura 30+ días) o once (meta única acumulable durante la misión).',
+              },
+              measurementType: {
+                type: 'string',
+                enum: ['boolean', 'count', 'numeric'],
+                description:
+                  'Cómo se mide: boolean (check simple sí/no), count (cantidad de veces/sesiones en el período, ej. 4 veces/sem) o numeric (meta cuantitativa acumulable con unidad, ej. 8000 pasos/día, 5 km/día, 3 kg, 12 horas).',
               },
               targetValue: {
-                type: 'integer',
-                description: 'Opcional: meta numérica positiva (ej. 8000, 20, 12). Omitir si no aplica.',
+                type: 'number',
+                description:
+                  'Meta numérica positiva (acepta decimales, ej. 8000, 5, 3.5, 12, 4). Usar 1 u omitir solo si measurementType es boolean.',
               },
               targetUnit: {
                 type: 'string',
-                description: 'Unidad del objetivo si hay targetValue (ej. pasos, páginas, minutos, horas). Vacío si no aplica.',
+                description:
+                  'Unidad corta del objetivo cuando measurementType es count o numeric (ej. "pasos", "km", "págs", "min", "horas", "L", "kg", "veces", "sesiones"). Vacío si es boolean.',
               },
               changeType: {
                 type: 'string',
                 enum: ['kept', 'modified', 'added'],
               },
             },
-            required: ['title', 'description', 'icon', 'frequency'],
+            required: ['title', 'description', 'icon', 'frequency', 'measurementType'],
             additionalProperties: false,
           },
         },
@@ -610,17 +621,20 @@ PRINCIPIOS CLAVE DE CONVERSACIÓN Y DISEÑO:
 3. **Complementariedad con Misiones Secundarias**:
    - Si en el contexto figuran misiones secundarias ya elegidas/activas (ej. "Detox de Azúcar", "Caminante Constante 8K", "Ayuno 12/12"), las tareas del plan principal deben ser **complementarias** a ellas: NO dupliques exactamente la misma tarea ni contradigas sus reglas.
    - Cuando devuelvas \`status: "ready"\`, podés incluir \`sideQuestSuggestion\` con UNA idea breve de misión secundaria complementaria (de 14 a 30 días) que potencie el plan principal sin repetir sus metas ni las misiones ya activas.
-4. **Atomicidad total**:
-   - Cada tarea representa UN único hábito verificable por día. Nunca mezcles dos hábitos en una misma tarjeta (ej. "Caminar 4.2 km" y "Gimnasio 1 hora" son DOS tareas separadas).
-   - Si hay frecuencias semanales (ej. "gimnasio 4 veces por semana" o "2 permitidos semanales"), definí una meta diaria clara explicando en la descripción cómo validarla cada día (incluyendo días de descanso planificado).
+4. **Atomicidad y Metas Dinámicas (Contables / Numéricas / Periódicas)**:
+   - Cada tarea representa UN único hábito verificable. Nunca mezcles dos hábitos en una misma tarjeta (ej. "Caminar 4.2 km" y "Gimnasio 1 hora" son DOS tareas separadas).
+   - **Siempre usá \`cadence\` y \`measurementType\` reales** en lugar de forzar todo a check diario:
+     - Si el hábito tiene una magnitud acumulable (ej. "Caminar 5 km por día", "10.000 pasos", "Beber 3L de agua", "Leer 15 páginas", "150g de proteína", "2000 kcal", "Bajar 3 kg"), usá \`measurementType: "numeric"\`, \`targetValue\` exacto (acepta decimales) y \`targetUnit\` corto (\`"km"\`, \`"pasos"\`, \`"L"\`, \`"págs"\`, \`"g prot"\`, \`"kcal"\`, \`"kg"\`, \`"min"\`).
+     - Si el hábito es una cantidad de veces o sesiones por semana o mes (ej. "Gimnasio 4 veces por semana", "Cocinar 3 veces por semana", "4 fotos de progreso semanales", "2 carreras al mes"), usá \`cadence: "weekly"\` o \`"monthly"\`, \`measurementType: "count"\`, \`targetValue\` entero y \`targetUnit\` (\`"veces"\`, \`"sesiones"\`, \`"fotos"\`, \`"comidas"\`).
+     - Reservá \`measurementType: "boolean"\` (con \`targetValue: 1\`) únicamente para hábitos binarios sí/no (ej. "Sin alcohol", "Comer saludable", "Dormir antes de las 23h").
 5. **Edición multifuncional sobre un borrador existente (MUY IMPORTANTE)**:
    - Cuando se te pasa un \`Plan actual en revisión\`, cada tarea aparece numerada (#1, #2, ...) con su \`id\`, y las tareas que el usuario marcó con checkbox figuran como \`[SELECCIONADA PARA MODIFICAR]\`.
    - En un mismo mensaje, el usuario puede pedir cualquier combinación de:
-     a) **Editar** tareas seleccionadas o mencionadas por nombre/número.
+     a) **Editar** tareas seleccionadas o mencionadas por nombre/número (incluyendo volverlas contables/numéricas o cambiarles su frecuencia).
      b) **Eliminar** tareas (seleccionadas o mencionadas).
      c) **Agregar** nuevas tareas atómicas.
      d) **Reordenar** la lista ("ponela primero", "mandala al final", "antes de lectura", "intercambiá 2 y 4").
-   - **Preservación estricta**: Toda tarea NO seleccionada y NO mencionada para editar/eliminar/mover debe conservarse EXACTAMENTE igual (\`id\`, \`title\`, \`description\`, \`icon\`, \`changeType: "kept"\`).
+   - **Preservación estricta**: Toda tarea NO seleccionada y NO mencionada para editar/eliminar/mover debe conservarse EXACTAMENTE igual (\`id\`, \`title\`, \`description\`, \`icon\`, \`cadence\`, \`measurementType\`, \`targetValue\`, \`targetUnit\`, \`changeType: "kept"\`).
    - Las tareas modificadas llevan \`changeType: "modified"\` (conservando su \`id\`), y las nuevas \`changeType: "added"\`.
    - Si el usuario seleccionó tareas pero no explicó qué cambio quiere hacerles, preguntale de forma puntual devolviendo \`status: "needs_clarification"\` y preservando \`tasks\` actuales intactas.
 6. **Íconos permitidos**: ÚNICAMENTE estos 8 valores exactos:
@@ -657,7 +671,7 @@ PRINCIPIOS CLAVE:
    - \`difficulty\`: "Easy", "Medium" o "Hard".
    - \`durationDays\`: Entero positivo (ej. 14, 21, 30).
    - \`icon\`: Uno de: "target", "droplet", "dumbbell", "book", "sun", "moon", "apple", "footprints", "clock".
-   - \`tasks\`: Lista ordenada de 1 a 8 tareas concretas. Cada tarea tiene \`title\`, \`description\`, \`icon\` (de la misma lista), \`frequency\` ("daily" | "weekly" | "once"), y opcionalmente \`targetValue\` (entero positivo) + \`targetUnit\` (ej. "pasos", "páginas", "minutos", "horas").
+   - \`tasks\`: Lista ordenada de 1 a 8 tareas concretas. Cada tarea tiene \`title\`, \`description\`, \`icon\` (de la misma lista), \`frequency\` ("daily" | "weekly" | "monthly" | "once"), \`measurementType\` ("boolean" | "count" | "numeric"), y cuando sea \`count\` o \`numeric\`, su \`targetValue\` positivo (acepta decimales, ej. 5, 3.5, 8000, 4) + \`targetUnit\` (ej. "pasos", "km", "págs", "min", "horas", "L", "kg", "veces", "sesiones"). Siempre usá \`count\` o \`numeric\` cuando la tarea implique una cantidad o repeticiones por período.
 4. **Edición multifuncional sobre un borrador existente**:
    - Si existe \`Misión actual en revisión\`, cada tarea aparece numerada (#1, #2, ...) con su \`id\` y las seleccionadas figuran como \`[SELECCIONADA PARA MODIFICAR]\`.
    - En un mismo mensaje el usuario puede pedir editar tareas, eliminar tareas, agregar nuevas tareas, reordenarlas y/o cambiar el título, descripción, duración o dificultad de la misión.
@@ -789,6 +803,20 @@ export async function processCustomPlanTurn(
 
   const validated = normalizeClarificationPayload(aiPlanResponseSchema.parse(parsedJson));
 
+  // Auto-enriquecimiento de seguridad si Gemini devolvió boolean para una tarea con magnitud explícita
+  validated.tasks = validated.tasks.map((task) => {
+    if (task.measurementType !== 'boolean') return task;
+    const inferred = inferGoalMeasurement(task.title, task.description);
+    if (!inferred) return task;
+    return {
+      ...task,
+      cadence: task.cadence === 'daily' ? inferred.cadence : task.cadence,
+      measurementType: inferred.measurementType,
+      targetValue: inferred.targetValue,
+      targetUnit: inferred.targetUnit ?? task.targetUnit,
+    };
+  });
+
   // Salvaguarda: si el usuario pidió generar propuesta ahora, garantizar al menos tareas si ya existían o exigir ready
   if (forceProposal && validated.status === 'needs_clarification' && validated.tasks.length === 0) {
     throw new Error('La IA no generó tareas a pesar de solicitar la propuesta inmediata.');
@@ -905,7 +933,31 @@ export async function processSideQuestTurn(
       input.textInput?.trim() || (forceProposal ? 'Generar misión con lo hablado' : 'Mensaje de voz');
   }
 
-  return normalizeClarificationPayload(aiSideQuestResponseSchema.parse(parsedJson));
+  const validated = normalizeClarificationPayload(aiSideQuestResponseSchema.parse(parsedJson));
+  if (validated.quest?.tasks) {
+    validated.quest.tasks = validated.quest.tasks.map((task) => {
+      if (task.measurementType !== 'boolean' && task.targetValue) return task;
+      const inferred = inferGoalMeasurement(task.title, task.description);
+      if (task.targetValue && task.targetValue > 1) {
+        return {
+          ...task,
+          measurementType:
+            task.measurementType !== 'boolean'
+              ? task.measurementType
+              : inferred?.measurementType ?? 'numeric',
+        };
+      }
+      if (!inferred) return task;
+      return {
+        ...task,
+        frequency: task.frequency === 'daily' ? inferred.cadence : task.frequency,
+        measurementType: inferred.measurementType,
+        targetValue: inferred.targetValue,
+        targetUnit: task.targetUnit || inferred.targetUnit || '',
+      };
+    });
+  }
+  return validated;
 }
 
 const TRANSCRIBE_JSON_SCHEMA = {

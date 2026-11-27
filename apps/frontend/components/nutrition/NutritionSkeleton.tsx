@@ -20,36 +20,42 @@ export default function NutritionSkeleton() {
         <div className="pv2-skeleton h-10 w-40 rounded-full" />
       </div>
 
-      {/* Card 1: Calorías consumidas + Macros */}
-      <div className="rounded-[20px] border border-[var(--border-subtle)] bg-[var(--surface-card)] p-4 space-y-3.5">
-        <div className="flex items-start justify-between gap-2">
-          <div className="space-y-1.5">
-            <div className="pv2-skeleton h-3 w-28 rounded" />
-            <div className="pv2-skeleton h-8 w-44 rounded-lg" />
+      {/* Card 1: Calorías consumidas + Macros (estilo BitePal) */}
+      <div className="rounded-[28px] border border-[var(--border-subtle)] bg-[var(--surface-card)] p-5 sm:p-6 space-y-5">
+        <div className="flex items-center justify-between gap-4">
+          <div className="space-y-2">
+            <div className="pv2-skeleton h-4 w-36 rounded" />
+            <div className="pv2-skeleton h-11 w-32 rounded-lg" />
           </div>
-          <div className="pv2-skeleton h-6 w-20 rounded-full" />
+          <div className="pv2-skeleton h-[74px] w-[74px] shrink-0 rounded-full" />
         </div>
 
-        <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--surface-inset)]">
-          <div className="pv2-skeleton h-full w-2/5 rounded-full" />
-        </div>
-
-        <div className="grid grid-cols-3 gap-2.5 pt-1">
+        <div className="grid grid-cols-3 gap-4 sm:gap-5">
           {Array.from({ length: 3 }).map((_, idx) => (
-            <div key={idx} className="space-y-1.5">
-              <div className="pv2-skeleton h-3 w-16 rounded" />
-              <div className="pv2-skeleton h-1.5 w-full rounded-full" />
+            <div key={idx} className="space-y-2">
+              <div className="pv2-skeleton h-3.5 w-16 rounded" />
+              <div className="pv2-skeleton h-2 w-full rounded-full" />
               <div className="pv2-skeleton h-3 w-12 rounded" />
             </div>
           ))}
         </div>
 
-        {/* Actions */}
-        <div className="space-y-2 pt-2">
-          <div className="pv2-skeleton h-11 w-full rounded-xl" />
-          <div className="grid grid-cols-2 gap-2">
-            <div className="pv2-skeleton h-10 w-full rounded-xl" />
-            <div className="pv2-skeleton h-10 w-full rounded-xl" />
+        {/* Overlapping meal thumbnails placeholder */}
+        <div className="flex items-center -space-x-3.5 pt-0.5">
+          {Array.from({ length: 4 }).map((_, idx) => (
+            <div
+              key={idx}
+              className="pv2-skeleton h-[68px] w-[68px] shrink-0 rounded-full border-[3px] border-[var(--surface-card)]"
+            />
+          ))}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between border-t border-[var(--divider)] pt-3">
+          <div className="pv2-skeleton h-6 w-28 rounded-full" />
+          <div className="flex gap-1.5">
+            <div className="pv2-skeleton h-8 w-24 rounded-full" />
+            <div className="pv2-skeleton h-8 w-28 rounded-full" />
           </div>
         </div>
       </div>
