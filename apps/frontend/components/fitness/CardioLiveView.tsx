@@ -5,7 +5,6 @@ import {
   Bike,
   Flame,
   Footprints,
-  Plus,
   Sparkles,
   Waves,
 } from 'lucide-react';
@@ -22,7 +21,6 @@ interface CardioLiveViewProps {
   onChangeIntensity: (intensity: 'low' | 'medium' | 'high') => void;
   onChangeDistanceKm: (distanceKm: string) => void;
   onChangeNotes: (notes: string) => void;
-  onOpenExercisePicker: () => void;
 }
 
 const SPORT_ICON: Record<string, typeof Activity> = {
@@ -51,7 +49,6 @@ export default function CardioLiveView({
   onChangeIntensity,
   onChangeDistanceKm,
   onChangeNotes,
-  onOpenExercisePicker,
 }: CardioLiveViewProps) {
   const SportIcon = SPORT_ICON[sport] || Activity;
   const goalSec = 45 * 60;
@@ -187,15 +184,6 @@ export default function CardioLiveView({
           />
         </div>
       </div>
-
-      <button
-        type="button"
-        onClick={onOpenExercisePicker}
-        className="flex min-h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-2xl border border-zinc-800 bg-zinc-900/60 text-xs font-semibold text-zinc-300 transition-colors hover:border-zinc-700 hover:text-white"
-      >
-        <Plus className="h-4 w-4 text-rose-500" />
-        ¿También harás ejercicios de fuerza? Añadir del catálogo
-      </button>
     </section>
   );
 }

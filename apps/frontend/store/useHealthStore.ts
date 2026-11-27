@@ -92,7 +92,7 @@ interface HealthStoreState {
   applyMealRoutineToDate: (id: string, date: string) => Promise<number>;
   hydrateProfileFromSync: (profile: UserProfileResponse | null) => void;
 
-  logMealOptimistic: (payload: LogMealPayload) => Promise<void>;
+  logMealOptimistic: (payload: LogMealPayload) => Promise<string | undefined>;
   updateMealOptimistic: (id: string, payload: LogMealPayload) => Promise<void>;
   deleteMealOptimistic: (id: string, date: string) => Promise<void>;
 
@@ -363,7 +363,9 @@ export const useHealthStore = create<HealthStoreState>()(
                 },
               };
             });
+            return String(created.id);
           }
+          return tempId;
         } catch (error) {
           set((state) => {
             const nextMap = { ...state.dailyStatsByDate };

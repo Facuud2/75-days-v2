@@ -13,6 +13,7 @@ interface InlineMetricEditorProps {
   targetValue: number;
   targetUnit?: string | null;
   measurementType?: string;
+  stepOverride?: number | null;
   disabled?: boolean;
   isCompleted?: boolean;
   isFailed?: boolean;
@@ -26,6 +27,7 @@ export default function InlineMetricEditor({
   targetValue,
   targetUnit,
   measurementType,
+  stepOverride,
   disabled = false,
   isCompleted = false,
   isFailed = false,
@@ -40,7 +42,10 @@ export default function InlineMetricEditor({
   const safeTarget = targetValue > 0 ? targetValue : 1;
   const safeCurrent = Number.isFinite(currentValue) ? Math.max(0, currentValue) : 0;
   const pct = Math.min(100, Math.round((safeCurrent / safeTarget) * 100));
-  const step = getSmartStep(measurementType, safeTarget, targetUnit);
+  const step =
+    typeof stepOverride === 'number' && Number.isFinite(stepOverride) && stepOverride > 0
+      ? stepOverride
+      : getSmartStep(measurementType, safeTarget, targetUnit);
 
   useEffect(() => {
     if (isEditing && inputRef.current) {

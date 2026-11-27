@@ -432,19 +432,8 @@ export default function FitnessPage() {
             </button>
           </section>
 
-          {/* 4-Column Quick Actions Row */}
-          <section aria-label="Acciones rápidas" className="grid grid-cols-4 gap-2">
-            <button
-              type="button"
-              onClick={handleStartFree}
-              className="flex min-h-[74px] cursor-pointer flex-col items-center justify-center gap-1.5 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-card)] p-2 transition-colors hover:border-[var(--accent-fill)]/50 active:scale-95"
-            >
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--accent-fill)]/15 text-[var(--accent-text)]">
-                <Play className="h-4 w-4 fill-current" />
-              </span>
-              <span className="text-[11px] font-semibold text-[var(--text-primary)]">En vivo</span>
-            </button>
-
+          {/* 3-Column Quick Actions Row */}
+          <section aria-label="Acciones rápidas" className="grid grid-cols-3 gap-2.5">
             <button
               type="button"
               onClick={() => openLogWorkoutModal(true)}

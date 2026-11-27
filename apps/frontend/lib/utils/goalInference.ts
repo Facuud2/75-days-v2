@@ -417,3 +417,64 @@ export function formatMetricReadout(
   const suffix = unit?.trim() ? ` ${unit.trim()}` : '';
   return `${formatMetricValue(currentValue)} / ${formatMetricValue(targetValue)}${suffix}`;
 }
+
+/**
+ * Generates a stable key for persisting per-goal UI preferences (such as custom +/- step factors).
+ */
+export function getGoalStepKey(goal: {
+  templateId?: string | null;
+  title?: string | null;
+  cadence?: string | null;
+}): string {
+  const cadence = (goal.cadence || 'daily').toLowerCase();
+  const normalizedTitle = (goal.title || '').trim().toLowerCase();
+  if (normalizedTitle) {
+    return `${cadence}:${normalizedTitle}`;
+  }
+  return goal.templateId ? `tpl:${goal.templateId}` : `${cadence}:default`;
+}
+
+/**
+ * Returns ergonomic quick-select increment presets around the smart/current step.
+ * Examples:
+ *  - 0.5 -> [0.25, 0.5, 1, 2]
+ *  - 1000 -> [250, 500, 1000, 2000]
+ *  - count -> [1, 2, 5, 10]
+ */
+export function getStepPresets(
+  measurementType: string | undefined,
+  targetValue: number,
+  targetUnit?: string | null,
+  currentStep?: number | null
+): number[] {
+  const safeTarget = targetValue > 0 ? targetValue : 1;
+  const baseStep = getSmartStep(measurementType, safeTarget, targetUnit);
+
+  let candidates: number[];
+  if (measurementType === 'count') {
+    candidates = [1, 2, 5, 10];
+  } else if (baseStep < 1) {
+    candidates = [0.25, 0.5, 1, 2];
+  } else if (baseStep <= 2) {
+    candidates = [0.5, 1, 2, 5];
+  } else if (baseStep <= 10) {
+    candidates = [1, 5, 10, 25];
+  } else if (baseStep <= 50) {
+    candidates = [5, 10, 25, 50];
+  } else if (baseStep <= 250) {
+    candidates = [50, 100, 250, 500];
+  } else if (baseStep <= 500) {
+    candidates = [250, 500, 1000, 2000];
+  } else {
+    candidates = [500, 1000, 2000, 2500];
+  }
+
+  const merged = new Set<number>(candidates);
+  if (currentStep && Number.isFinite(currentStep) && currentStep > 0) {
+    merged.add(roundDynamicValue(currentStep));
+  }
+  return Array.from(merged)
+    .filter((v) => v > 0)
+    .sort((a, b) => a - b)
+    .slice(0, 5);
+}

@@ -148,13 +148,24 @@ test.describe('iOS-Native AI Meal Scanner (375x812 Light & Dark)', () => {
       });
 
       let loggedMealBody: any = null;
-      await page.route('**/api/nutrition/meals', async (route) => {
-        if (route.request().method() === 'POST') {
+      let updatedMealBody: any = null;
+      await page.route('**/api/nutrition/meals**', async (route) => {
+        const method = route.request().method();
+        if (method === 'POST') {
           loggedMealBody = JSON.parse(route.request().postData() || '{}');
           await route.fulfill({
             status: 201,
             contentType: 'application/json',
             body: JSON.stringify({ id: 'meal-1', ...loggedMealBody }),
+          });
+          return;
+        }
+        if (method === 'PUT' || method === 'PATCH') {
+          updatedMealBody = JSON.parse(route.request().postData() || '{}');
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({ id: 'meal-1', ...updatedMealBody }),
           });
           return;
         }
@@ -167,13 +178,15 @@ test.describe('iOS-Native AI Meal Scanner (375x812 Light & Dark)', () => {
 
       const dialog = page.getByRole('dialog');
       await expect(dialog).toBeVisible();
-      await page.waitForTimeout(260); // wait for sheet enter spring settle
+      await expect(dialog.getByText('Escanea una comida o una etiqueta nutricional')).toBeVisible();
+      await expect(dialog.getByRole('button', { name: 'Mis comidas' })).toBeVisible();
+      await page.waitForTimeout(260); // wait for enter animation settle
       await page.screenshot({
         path: testInfo.outputPath(`ios-meal-1-camera-${appearance}.png`),
       });
 
-      // Switch to Keyboard mode (top tabs hide cleanly to declutter)
-      await dialog.getByRole('button', { name: 'Teclado' }).click();
+      // Switch to Keyboard mode
+      await dialog.getByRole('button', { name: 'Describir comida con teclado' }).click();
       await expect(dialog.getByRole('button', { name: 'Buscador' })).toBeHidden();
 
       const descArea = dialog.getByLabel('Descripción de la comida');
@@ -193,29 +206,33 @@ test.describe('iOS-Native AI Meal Scanner (375x812 Light & Dark)', () => {
 
       await dialog.getByRole('button', { name: 'Calcular calorías con IA' }).click();
 
-      // Clean Review screen: NO multipliers, top tabs hidden, both ingredients immediately visible, plus subtle Fiber & Sugars disclosure!
+      // Full-screen analysis summary: shows detected data + "Guardar" button
+      await expect(dialog.getByText('Análisis listo')).toBeVisible();
       await expect(dialog.getByText('180', { exact: true })).toBeVisible();
       await expect(dialog.getByText('Banana pelada')).toBeVisible();
       await expect(dialog.getByText('Manzana roja con cáscara')).toBeVisible();
       await expect(dialog.getByText('Fibra 6.6g')).toBeVisible();
       await expect(dialog.getByText('Azúcares 29.6g')).toBeVisible();
-      await expect(dialog.getByText('0.5×')).toHaveCount(0);
 
+      await page.waitForTimeout(260); // wait for sheet enter spring settle before Axe contrast check
       await page.screenshot({
-        path: testInfo.outputPath(`ios-meal-2-review-${appearance}.png`),
+        path: testInfo.outputPath(`ios-meal-2-summary-${appearance}.png`),
       });
 
-      // Verify WCAG AA color contrast in both Light and Dark mode!
-      const axeResults = await new AxeBuilder({ page })
+      // Verify WCAG AA color contrast on Summary screen in both Light and Dark mode!
+      const axeSaved = await new AxeBuilder({ page })
         .include('[role="dialog"]')
         .analyze();
-      const seriousViolations = axeResults.violations.filter(
+      const seriousSavedViolations = axeSaved.violations.filter(
         (v) => v.impact === 'critical' || v.impact === 'serious'
       );
-      expect(seriousViolations).toEqual([]);
+      expect(seriousSavedViolations).toEqual([]);
+
+      // Switch to Edit mode ("Editar datos") to verify AI correction & manual editing
+      await dialog.getByRole('button', { name: 'Editar datos' }).click();
 
       // Verify AI Correction composer auto-grows on line breaks!
-      const correctionArea = dialog.getByLabel('Corregir o ajustar con IA');
+      const correctionArea = dialog.getByLabel('Corregir con IA');
       const hBefore = await correctionArea.evaluate((el) => el.clientHeight);
       await correctionArea.fill(
         'En realidad comí solo media banana\nY la manzana estaba sin miel ni azúcar agregada'
@@ -230,7 +247,7 @@ test.describe('iOS-Native AI Meal Scanner (375x812 Light & Dark)', () => {
       await dialog.getByRole('button', { name: 'Aplicar corrección con IA' }).click();
       await expect(dialog.getByText('Media banana pelada')).toBeVisible();
 
-      // Tap ingredient row directly to edit manually by hand (normal manual flow!)
+      // Tap ingredient row directly to edit manually by hand
       await dialog.getByText('Media banana pelada').click();
       const kcalInput = dialog.locator('input[inputmode="numeric"]').nth(1);
       await kcalInput.fill('70');
@@ -247,10 +264,150 @@ test.describe('iOS-Native AI Meal Scanner (375x812 Light & Dark)', () => {
       }));
       expect(overflow.docScrollWidth).toBeLessThanOrEqual(overflow.viewportWidth);
 
+      // Save meal -> shows "Comida guardada en tu registro" confirmation and auto-closes modal
       await dialog.getByRole('button', { name: 'Registrar 148 kcal' }).click();
-      await expect(dialog).toBeHidden();
+      await expect(dialog.getByText('Comida guardada en tu registro')).toBeVisible();
+      await expect(dialog.getByText('148', { exact: true })).toBeVisible();
       await expect.poll(() => loggedMealBody).not.toBeNull();
       expect(loggedMealBody.calories).toBe(148);
+      await expect(dialog).toBeHidden({ timeout: 3000 });
     });
   }
+
+  test('step-by-step photo flow: full-screen camera -> full-screen golden scanner -> auto-save summary -> close with X', async ({
+    page,
+  }, testInfo) => {
+    await seedMobileSession(page, { appearance: 'dark' });
+    await suppressNextDevTools(page);
+    await mockSessionApis(page, { difficulty: 'Medium' });
+
+    await page.route('**/api/nutrition/custom-foods', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ customFoods: [] }),
+      });
+    });
+    await page.route('**/api/nutrition/custom-foods/ingredients', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ingredients: [] }),
+      });
+    });
+
+    let resolveAnalyze!: () => void;
+    const analyzeGate = new Promise<void>((res) => {
+      resolveAnalyze = res;
+    });
+
+    await page.route('**/api/ai/analyze-meal', async (route) => {
+      await analyzeGate;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          isFood: true,
+          rejectionReason: '',
+          dishName: 'Estofado de carne con brócoli',
+          confidence: 'high',
+          assumptions: '',
+          suggestedMealType: 'lunch',
+          items: [
+            {
+              id: 'item-1',
+              name: 'Estofado de carne con salsa',
+              estimatedGrams: 220,
+              calories: 380,
+              proteinG: 32,
+              carbG: 14,
+              fatG: 21,
+              fiberG: 2,
+              sugarG: 5,
+            },
+            {
+              id: 'item-2',
+              name: 'Brócoli al vapor',
+              estimatedGrams: 120,
+              calories: 42,
+              proteinG: 3.4,
+              carbG: 7.9,
+              fatG: 0.4,
+              fiberG: 3.1,
+              sugarG: 1.7,
+            },
+          ],
+          totals: {
+            calories: 422,
+            proteinG: 35.4,
+            carbG: 21.9,
+            fatG: 21.4,
+            fiberG: 5.1,
+            sugarG: 6.7,
+          },
+        }),
+      });
+    });
+
+    let postedMeal: any = null;
+    await page.route('**/api/nutrition/meals**', async (route) => {
+      if (route.request().method() === 'POST') {
+        postedMeal = JSON.parse(route.request().postData() || '{}');
+        await route.fulfill({
+          status: 201,
+          contentType: 'application/json',
+          body: JSON.stringify({ id: 'meal-photo-1', ...postedMeal }),
+        });
+        return;
+      }
+      await route.continue();
+    });
+
+    await page.goto('/dashboard');
+    await page.getByRole('button', { name: 'Abrir acciones rápidas' }).click();
+    await page.getByRole('button', { name: 'Registrar comida' }).click();
+
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+
+    // Pick a real PNG image via gallery input
+    await dialog
+      .locator('input[aria-label="Seleccionar foto de comida de la galería"]')
+      .setInputFiles('app/apple-icon.png');
+
+    // Verify full-screen ANALYZING overlay (must cover entire 375x812 viewport, NOT a small modal!)
+    const analyzingStatus = dialog.getByRole('status');
+    await expect(analyzingStatus).toBeVisible();
+    const box = await analyzingStatus.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.width).toBeGreaterThanOrEqual(370);
+    expect(box!.height).toBeGreaterThanOrEqual(800);
+    await expect(dialog.getByRole('button', { name: 'Cancelar análisis' })).toBeVisible();
+
+    await page.screenshot({
+      path: testInfo.outputPath('ios-meal-photo-analyzing.png'),
+    });
+
+    // Release AI analysis response -> displays full-screen summary with Guardar CTA
+    resolveAnalyze();
+    await expect(dialog.getByText('Análisis listo')).toBeVisible();
+    await expect(dialog.getByText('Estofado de carne con brócoli')).toBeVisible();
+    await expect(dialog.getByText('422', { exact: true })).toBeVisible();
+    await expect(dialog.getByText('Estofado de carne con salsa')).toBeVisible();
+    await expect(dialog.getByText('Brócoli al vapor')).toBeVisible();
+
+    // User taps Guardar -> persists, shows "Comida guardada en tu registro" animation, and auto-closes
+    await dialog.getByRole('button', { name: 'Guardar' }).click();
+    await expect(dialog.getByText('Comida guardada en tu registro')).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Guardado' })).toBeDisabled();
+    await expect.poll(() => postedMeal).not.toBeNull();
+    expect(postedMeal.calories).toBe(422);
+
+    await page.screenshot({
+      path: testInfo.outputPath('ios-meal-photo-saved.png'),
+    });
+
+    // Modal closes automatically after confirmation animation
+    await expect(dialog).toBeHidden({ timeout: 3000 });
+  });
 });

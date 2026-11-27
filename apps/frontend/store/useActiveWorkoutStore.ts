@@ -36,6 +36,7 @@ export interface StartExerciseInput {
   primaryMuscle?: string | null;
   equipment?: string | null;
   targetSets?: number;
+  targetReps?: number | string | null;
   defaultRestSec?: number;
 }
 
@@ -132,14 +133,18 @@ function makeId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-function createInitialSets(count = 3): ActiveSetState[] {
+function createInitialSets(count = 3, targetReps?: number | string | null): ActiveSetState[] {
   const safeCount = Math.min(Math.max(1, count), 12);
+  const parsedReps =
+    targetReps != null && String(targetReps).trim() !== ''
+      ? String(targetReps).trim()
+      : '12';
   return Array.from({ length: safeCount }, (_, index) => ({
     id: makeId('set'),
     setNumber: index + 1,
     setType: 'normal',
     weightKg: '',
-    reps: '',
+    reps: parsedReps,
     completed: false,
   }));
 }
@@ -153,7 +158,7 @@ function toActiveExercise(input: StartExerciseInput): ActiveExerciseState {
     equipment: input.equipment ?? null,
     restSec: input.defaultRestSec ?? 90,
     notes: '',
-    sets: createInitialSets(input.targetSets ?? 3),
+    sets: createInitialSets(input.targetSets ?? 3, input.targetReps),
   };
 }
 
@@ -239,6 +244,7 @@ export const useActiveWorkoutStore = create<ActiveWorkoutStoreState>()(
             primaryMuscle: ex.primaryMuscle,
             equipment: ex.equipment,
             targetSets: ex.targetSets || 3,
+            targetReps: ex.targetReps,
             defaultRestSec: ex.defaultRestSec || 90,
           })
         );
@@ -358,16 +364,11 @@ export const useActiveWorkoutStore = create<ActiveWorkoutStoreState>()(
               ...ex,
               sets: ex.sets.map((s) => {
                 if (s.id !== setId) return s;
-                // Auto-fill from previous session when checking off an empty row
-                const weightKg =
-                  nextCompleted && !s.weightKg && s.previousWeightKg != null
-                    ? String(s.previousWeightKg)
-                    : s.weightKg;
                 const reps =
                   nextCompleted && !s.reps && s.previousReps != null
                     ? String(s.previousReps)
                     : s.reps;
-                return { ...s, weightKg, reps, completed: nextCompleted };
+                return { ...s, weightKg: '', reps, completed: nextCompleted };
               }),
             };
           }),
@@ -462,11 +463,11 @@ export const useActiveWorkoutStore = create<ActiveWorkoutStoreState>()(
         const exercisesPayload: WorkoutExerciseItem[] = state.exercises
           .map((ex, order) => {
             const validSets: WorkoutSetItem[] = ex.sets
-              .filter((s) => s.completed || s.weightKg !== '' || s.reps !== '')
+              .filter((s) => s.completed || s.reps !== '')
               .map((s, idx) => ({
                 setNumber: idx + 1,
                 setType: s.setType,
-                weightKg: s.weightKg !== '' ? Number(s.weightKg) : null,
+                weightKg: null,
                 reps: s.reps !== '' ? Math.round(Number(s.reps)) : null,
                 completed: s.completed,
               }));

@@ -11,13 +11,16 @@ import {
 } from 'react';
 import {
   ArrowUp,
+  Bookmark,
   Camera,
   Check,
+  CheckCircle2,
   ChevronRight,
   ImagePlus,
   Keyboard,
   Loader2,
   Mic,
+  Pencil,
   Plus,
   RotateCcw,
   Search,
@@ -36,7 +39,6 @@ import {
   captureVideoFrameForAI,
   CompressedAiImage,
   compressImageForAI,
-  resolveImagePreview,
 } from '@/lib/utils/image';
 import {
   attachBaseDensity,
@@ -52,13 +54,28 @@ import { useHealthStore } from '@/store/useHealthStore';
 import { REDUCED_MOTION_TRANSITION, SHEET_ENTER_SPRING } from '@/lib/motion/sheetPhysics';
 
 export type MealTypeOption = 'breakfast' | 'lunch' | 'dinner' | 'snack';
-export type AnalyzerStage = 'CAMERA' | 'TEXT_INPUT' | 'ANALYZING' | 'REVIEW';
+export type AnalyzerStage = 'CAMERA' | 'TEXT_INPUT' | 'ANALYZING' | 'SAVED' | 'REVIEW';
+
+const ANALYZING_MESSAGES = [
+  'Analizando imagen...',
+  'Identificando alimentos...',
+  'Revisando base de datos...',
+  'Calculando calorías y macros...',
+] as const;
+
+const MEAL_TYPE_LABELS: Record<MealTypeOption, string> = {
+  breakfast: 'Desayuno',
+  lunch: 'Almuerzo',
+  snack: 'Snack',
+  dinner: 'Cena',
+};
 
 interface MealPhotoAnalyzerProps {
   mealType: MealTypeOption;
   onMealTypeChange: (mealType: MealTypeOption) => void;
   onStageChange?: (stage: AnalyzerStage) => void;
   onClose?: () => void;
+  onOpenCustomMeals?: () => void;
   onConfirmMeal: (meal: {
     name: string;
     calories: number;
@@ -69,7 +86,8 @@ interface MealPhotoAnalyzerProps {
     sugarG: number;
     mealType: MealTypeOption;
     photoUrl?: string;
-  }) => void;
+    existingMealId?: string;
+  }) => Promise<string | void> | void;
 }
 
 type AddItemTab = 'MANUAL' | 'CATALOG';
@@ -128,6 +146,7 @@ export default function MealPhotoAnalyzer({
   onMealTypeChange,
   onStageChange,
   onClose,
+  onOpenCustomMeals,
   onConfirmMeal,
 }: MealPhotoAnalyzerProps) {
   const [stage, setStageInternal] = useState<AnalyzerStage>('CAMERA');
@@ -138,9 +157,14 @@ export default function MealPhotoAnalyzer({
   const [flashOn, setFlashOn] = useState(false);
   const [flashSupported, setFlashSupported] = useState(false);
   const [capturedImage, setCapturedImage] = useState<CompressedAiImage | null>(null);
-  const [thumbEntry, setThumbEntry] = useState<{ sourceUrl: string; thumbUrl: string } | null>(null);
   const [textDescription, setTextDescription] = useState('');
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [analyzingStepIdx, setAnalyzingStepIdx] = useState(0);
+
+  // Auto-save confirmation state
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [savedMealId, setSavedMealId] = useState<string | null>(null);
 
   // Review state
   const [dishName, setDishName] = useState('');
@@ -287,24 +311,7 @@ export default function MealPhotoAnalyzer({
     };
   }, [stage, stopCameraStream, stopCameraTracks]);
 
-  useEffect(() => {
-    const sourceUrl = capturedImage?.previewUrl;
-    if (!sourceUrl) return;
-    let cancelled = false;
-    void resolveImagePreview(sourceUrl, 160, 160).then((thumb) => {
-      if (!cancelled) {
-        setThumbEntry({ sourceUrl, thumbUrl: thumb ?? sourceUrl });
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [capturedImage]);
-
-  const thumbnailUrl =
-    capturedImage?.previewUrl && thumbEntry?.sourceUrl === capturedImage.previewUrl
-      ? thumbEntry.thumbUrl
-      : null;
+  const thumbnailUrl = capturedImage?.thumbnailUrl ?? capturedImage?.previewUrl ?? null;
 
   useEffect(() => {
     return () => {
@@ -313,7 +320,56 @@ export default function MealPhotoAnalyzer({
     };
   }, [stopCameraStream]);
 
+  useEffect(() => {
+    if (stage !== 'ANALYZING') {
+      setAnalyzingStepIdx(0);
+      return;
+    }
+    const interval = window.setInterval(() => {
+      setAnalyzingStepIdx((prev) => (prev + 1) % ANALYZING_MESSAGES.length);
+    }, 1600);
+    return () => window.clearInterval(interval);
+  }, [stage]);
+
+  useEffect(() => {
+    if (stage !== 'SAVED' || saveStatus !== 'saved' || !onClose) return;
+    const delayMs = reduceMotion ? 450 : 1100;
+    const timer = window.setTimeout(() => {
+      onClose();
+    }, delayMs);
+    return () => window.clearTimeout(timer);
+  }, [stage, saveStatus, onClose, reduceMotion]);
+
   const totals = useMemo(() => computeMealTotals(items, 1), [items]);
+
+  const persistMeal = useCallback(
+    async (payload: {
+      name: string;
+      calories: number;
+      proteinG: number;
+      carbG: number;
+      fatG: number;
+      fiberG: number;
+      sugarG: number;
+      mealType: MealTypeOption;
+      photoUrl?: string;
+      existingMealId?: string;
+    }) => {
+      setSaveStatus('saving');
+      setSaveError(null);
+      try {
+        const resultId = await onConfirmMeal(payload);
+        if (typeof resultId === 'string' && resultId) {
+          setSavedMealId(resultId);
+        }
+        setSaveStatus('saved');
+      } catch (err: any) {
+        setSaveStatus('error');
+        setSaveError(err?.message || 'No se pudo guardar la comida. Intentá de nuevo.');
+      }
+    },
+    [onConfirmMeal]
+  );
 
   const runAnalysis = useCallback(
     async (params: {
@@ -326,6 +382,9 @@ export default function MealPhotoAnalyzer({
       abortRef.current = controller;
 
       setAnalysisError(null);
+      setSaveStatus('idle');
+      setSaveError(null);
+      setSavedMealId(null);
       setStage('ANALYZING');
 
       try {
@@ -348,14 +407,24 @@ export default function MealPhotoAnalyzer({
           return;
         }
 
-        setDishName(response.dishName);
-        setItems(response.items.map(attachBaseDensity));
+        const detectedItems = response.items.map(attachBaseDensity);
+        const resolvedName =
+          response.dishName.replace(/\s+/g, ' ').trim() ||
+          detectedItems
+            .map((i) => i.name)
+            .slice(0, 2)
+            .join(' con ') ||
+          'Comida';
+
+        setDishName(resolvedName);
+        setItems(detectedItems);
         setExpandedItemId(null);
         setIsAddingItem(false);
         if (response.suggestedMealType) {
           onMealTypeChange(response.suggestedMealType);
         }
-        setStage('REVIEW');
+
+        setStage('SAVED');
       } catch (err: any) {
         if (err?.name === 'AbortError') return;
         const message =
@@ -368,9 +437,12 @@ export default function MealPhotoAnalyzer({
   );
 
   const handleFilePicked = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file) return;
+    const input = event.target;
+    const file = input.files?.[0];
+    if (!file) {
+      input.value = '';
+      return;
+    }
 
     try {
       setAnalysisError(null);
@@ -382,6 +454,8 @@ export default function MealPhotoAnalyzer({
       });
     } catch (err: any) {
       toast.error(err?.message || 'No se pudo procesar la foto.');
+    } finally {
+      input.value = '';
     }
   };
 
@@ -608,10 +682,13 @@ export default function MealPhotoAnalyzer({
     abortRef.current?.abort();
     setAnalysisError(null);
     setCapturedImage(null);
+    setSaveStatus('idle');
+    setSaveError(null);
+    setSavedMealId(null);
     setStage('CAMERA');
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (items.length === 0) {
       toast.error('Agregá al menos un alimento.');
       return;
@@ -624,7 +701,8 @@ export default function MealPhotoAnalyzer({
         .join(' con ') ||
       'Comida';
 
-    onConfirmMeal({
+    setStage('SAVED');
+    await persistMeal({
       name: finalName,
       calories: totals.calories,
       proteinG: totals.proteinG,
@@ -636,6 +714,7 @@ export default function MealPhotoAnalyzer({
       ...(thumbnailUrl || capturedImage?.previewUrl
         ? { photoUrl: thumbnailUrl ?? capturedImage?.previewUrl }
         : {}),
+      ...(savedMealId ? { existingMealId: savedMealId } : {}),
     });
   };
 
@@ -695,147 +774,174 @@ export default function MealPhotoAnalyzer({
 
       {/* STAGE 1: FULL-SCREEN BITEPAL CAMERA VIEWFINDER */}
       {stage === 'CAMERA' ? (
-        <div className="fixed inset-0 z-[100] flex flex-col justify-between overflow-hidden bg-black text-white select-none">
-          {/* Full-screen live camera feed */}
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-200 ${
-              cameraStatus === 'ready' ? 'opacity-100' : 'opacity-0'
-            }`}
-          />
+        <div className="fixed inset-0 z-[100] flex flex-col overflow-hidden bg-[#18181b] text-white select-none">
+          {/* Live Camera Viewport with rounded bottom corners */}
+          <div className="relative flex flex-1 flex-col justify-between overflow-hidden rounded-b-[26px] bg-black">
+            {/* Full-screen live camera feed */}
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-200 ${
+                cameraStatus === 'ready' ? 'opacity-100' : 'opacity-0'
+              }`}
+            />
 
-          {/* Top & bottom gradient scrims for crisp contrast */}
-          <div
-            className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black/75 via-black/30 to-transparent"
-            aria-hidden="true"
-          />
-          <div
-            className="pointer-events-none absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-black/85 via-black/45 to-transparent"
-            aria-hidden="true"
-          />
+            {/* Top & bottom gradient scrims for crisp contrast */}
+            <div
+              className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black/70 via-black/25 to-transparent"
+              aria-hidden="true"
+            />
+            <div
+              className="pointer-events-none absolute inset-x-0 bottom-0 h-36 bg-gradient-to-t from-black/75 via-black/30 to-transparent"
+              aria-hidden="true"
+            />
 
-          {/* Top Bar: Close + Flash */}
-          <div className="relative z-10 flex items-center justify-between px-4 pt-[max(1rem,env(safe-area-inset-top))]">
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Cerrar cámara"
-              className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-white/15 bg-black/45 text-white backdrop-blur-md transition-transform duration-100 active:scale-95"
-            >
-              <X className="h-5 w-5" aria-hidden="true" />
-            </button>
-
-            <button
-              type="button"
-              onClick={() => void handleToggleFlash()}
-              aria-label={flashOn ? 'Desactivar flash' : 'Activar flash'}
-              aria-pressed={flashOn}
-              className={`flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border backdrop-blur-md transition-all duration-100 active:scale-95 ${
-                flashOn
-                  ? 'border-amber-300 bg-amber-400 text-black shadow-lg'
-                  : 'border-white/15 bg-black/45 text-white'
-              } ${!flashSupported && cameraStatus === 'ready' ? 'opacity-65' : ''}`}
-            >
-              {flashOn ? (
-                <Zap className="h-5 w-5 fill-current" aria-hidden="true" />
-              ) : (
-                <ZapOff className="h-5 w-5" aria-hidden="true" />
-              )}
-            </button>
-          </div>
-
-          {/* Center Focus Frame (BitePal corner brackets) */}
-          <div className="pointer-events-none relative z-10 flex flex-1 flex-col items-center justify-center px-6">
-            <div className="relative h-64 w-64 sm:h-72 sm:w-72">
-              <span className="absolute left-0 top-0 h-9 w-9 rounded-tl-3xl border-l-[3.5px] border-t-[3.5px] border-white/95 drop-shadow-[0_2px_8px_rgba(0,0,0,0.45)]" />
-              <span className="absolute right-0 top-0 h-9 w-9 rounded-tr-3xl border-r-[3.5px] border-t-[3.5px] border-white/95 drop-shadow-[0_2px_8px_rgba(0,0,0,0.45)]" />
-              <span className="absolute bottom-0 left-0 h-9 w-9 rounded-bl-3xl border-b-[3.5px] border-l-[3.5px] border-white/95 drop-shadow-[0_2px_8px_rgba(0,0,0,0.45)]" />
-              <span className="absolute bottom-0 right-0 h-9 w-9 rounded-br-3xl border-b-[3.5px] border-r-[3.5px] border-white/95 drop-shadow-[0_2px_8px_rgba(0,0,0,0.45)]" />
-
-              {cameraStatus !== 'ready' ? (
-                <div className="absolute inset-0 flex flex-col items-center justify-center px-5 text-center">
-                  <div className="mb-2.5 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 text-white backdrop-blur-md">
-                    <Camera className="h-6 w-6" strokeWidth={2} aria-hidden="true" />
-                  </div>
-                  <p className="text-[15px] font-semibold text-white">
-                    {cameraStatus === 'starting'
-                      ? 'Iniciando cámara...'
-                      : 'Sacá o subí una foto'}
-                  </p>
-                  <p className="mt-1 text-[12px] leading-snug text-white/75">
-                    Enfocá tu plato en el centro o usá Galería / Teclado.
-                  </p>
-                </div>
-              ) : null}
-            </div>
-
-            {cameraStatus === 'ready' ? (
-              <p className="mt-5 rounded-full bg-black/45 px-3.5 py-1 text-xs font-medium text-white/90 backdrop-blur-md">
-                Enfocá tu comida en el centro
-              </p>
-            ) : null}
-          </div>
-
-          {/* Bottom Controls: Galería | Shutter | Teclado */}
-          <div className="relative z-10 space-y-3 px-6 pb-[max(1.75rem,env(safe-area-inset-bottom))] pt-3">
-            {analysisError ? (
-              <div
-                role="alert"
-                className="mx-auto flex max-w-sm items-start justify-between gap-2.5 rounded-2xl border border-red-400/30 bg-black/75 px-3.5 py-2.5 text-[13px] text-red-300 backdrop-blur-md"
-              >
-                <span className="min-w-0 leading-snug [overflow-wrap:anywhere]">
-                  {analysisError}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setAnalysisError(null)}
-                  aria-label="Cerrar aviso"
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-white/70 active:scale-95"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            ) : null}
-
-            <div className="mx-auto grid max-w-sm grid-cols-3 items-center gap-4">
+            {/* Top Bar: Close + Flash */}
+            <div className="relative z-10 flex items-center justify-between px-4 pt-[max(1rem,env(safe-area-inset-top))]">
               <button
                 type="button"
-                onClick={() => galleryInputRef.current?.click()}
-                className="flex cursor-pointer flex-col items-center justify-center gap-1.5 text-white/95 transition-transform duration-100 active:scale-95"
+                onClick={onClose}
+                aria-label="Cerrar cámara"
+                className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-md transition-transform duration-100 active:scale-95"
               >
-                <span className="flex h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-white/15 backdrop-blur-md">
-                  <ImagePlus className="h-5 w-5" aria-hidden="true" />
-                </span>
-                <span className="text-[11px] font-medium tracking-wide">Galería</span>
+                <X className="h-5 w-5" strokeWidth={2.2} aria-hidden="true" />
               </button>
+
+              <button
+                type="button"
+                onClick={() => void handleToggleFlash()}
+                aria-label={flashOn ? 'Desactivar flash' : 'Activar flash'}
+                aria-pressed={flashOn}
+                className={`flex h-11 w-11 cursor-pointer items-center justify-center rounded-full backdrop-blur-md transition-all duration-100 active:scale-95 ${
+                  flashOn
+                    ? 'bg-amber-400 text-black shadow-lg'
+                    : 'bg-black/40 text-white'
+                } ${!flashSupported && cameraStatus === 'ready' ? 'opacity-65' : ''}`}
+              >
+                {flashOn ? (
+                  <Zap className="h-5 w-5 fill-current" aria-hidden="true" />
+                ) : (
+                  <ZapOff className="h-5 w-5" aria-hidden="true" />
+                )}
+              </button>
+            </div>
+
+            {/* Instruction Pill + Center Focus Frame (BitePal corner brackets) */}
+            <div className="pointer-events-none relative z-10 flex flex-1 flex-col items-center justify-center px-6">
+              <div className="mb-6 max-w-[310px] rounded-2xl bg-black/45 px-4 py-2.5 text-center backdrop-blur-md">
+                <p className="text-[13.5px] font-medium leading-snug text-white">
+                  Escanea una comida o una etiqueta nutricional
+                </p>
+              </div>
+
+              <div className="relative h-64 w-64 sm:h-72 sm:w-72">
+                <span className="absolute left-0 top-0 h-11 w-11 rounded-tl-[26px] border-l-[4.5px] border-t-[4.5px] border-[#ffffff] drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)]" />
+                <span className="absolute right-0 top-0 h-11 w-11 rounded-tr-[26px] border-r-[4.5px] border-t-[4.5px] border-[#ffffff] drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)]" />
+                <span className="absolute bottom-0 left-0 h-11 w-11 rounded-bl-[26px] border-b-[4.5px] border-l-[4.5px] border-[#ffffff] drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)]" />
+                <span className="absolute bottom-0 right-0 h-11 w-11 rounded-br-[26px] border-b-[4.5px] border-r-[4.5px] border-[#ffffff] drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)]" />
+
+                {cameraStatus !== 'ready' ? (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center px-5 text-center">
+                    <div className="mb-2.5 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 text-white backdrop-blur-md">
+                      <Camera className="h-6 w-6" strokeWidth={2} aria-hidden="true" />
+                    </div>
+                    <p className="text-[15px] font-semibold text-white">
+                      {cameraStatus === 'starting'
+                        ? 'Iniciando cámara...'
+                        : 'Sacá o subí una foto'}
+                    </p>
+                    <p className="mt-1 text-[12px] leading-snug text-white/75">
+                      Tocá el botón central o usá Galería / Teclado.
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            {/* Floating Error + "Mis comidas" Pill */}
+            <div className="relative z-10 flex flex-col items-center gap-3 px-4 pb-5">
+              {analysisError ? (
+                <div
+                  role="alert"
+                  className="mx-auto flex w-full max-w-sm items-start justify-between gap-2.5 rounded-2xl border border-red-400/30 bg-black/75 px-3.5 py-2.5 text-[13px] text-red-300 backdrop-blur-md"
+                >
+                  <span className="min-w-0 leading-snug [overflow-wrap:anywhere]">
+                    {analysisError}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setAnalysisError(null)}
+                    aria-label="Cerrar aviso"
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-white/70 active:scale-95"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : null}
+
+              {onOpenCustomMeals ? (
+                <button
+                  type="button"
+                  onClick={onOpenCustomMeals}
+                  className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-full border border-white/15 bg-black/45 px-5 py-2.5 text-[14px] font-semibold text-white backdrop-blur-md transition-transform duration-100 active:scale-95"
+                >
+                  <Bookmark className="h-4 w-4 fill-current" aria-hidden="true" />
+                  Mis comidas
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Dedicated Dark Bottom Camera Dock: Galería | Shutter | Teclado */}
+          <div className="relative z-10 bg-[#18181b] px-8 pt-5 pb-[max(2rem,env(safe-area-inset-bottom))]">
+            <div className="mx-auto grid max-w-sm grid-cols-3 items-center gap-4">
+              <div className="flex justify-center">
+                <button
+                  type="button"
+                  onClick={() => galleryInputRef.current?.click()}
+                  aria-label="Seleccionar foto de la galería"
+                  className="flex h-12 w-12 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-white/20 bg-white/12 text-white transition-transform duration-100 active:scale-95"
+                >
+                  {thumbnailUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={thumbnailUrl}
+                      alt=""
+                      aria-hidden="true"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <ImagePlus className="h-5 w-5" aria-hidden="true" />
+                  )}
+                </button>
+              </div>
 
               <div className="flex justify-center">
                 <button
                   type="button"
                   onClick={handleShutterPress}
                   aria-label="Sacar foto y calcular calorías"
-                  className="flex h-[74px] w-[74px] cursor-pointer items-center justify-center rounded-full border-[4px] border-white bg-transparent p-1 shadow-xl transition-transform duration-100 active:scale-90"
+                  className="flex h-[76px] w-[76px] cursor-pointer items-center justify-center rounded-full border-[3.5px] border-[#ffffff] bg-transparent p-[4px] shadow-xl transition-transform duration-100 active:scale-90"
                 >
-                  <span className="flex h-full w-full items-center justify-center rounded-full bg-white text-black" />
+                  <span className="h-full w-full rounded-full bg-[#ffffff]" />
                 </button>
               </div>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setAnalysisError(null);
-                  setStage('TEXT_INPUT');
-                }}
-                className="flex cursor-pointer flex-col items-center justify-center gap-1.5 text-white/95 transition-transform duration-100 active:scale-95"
-              >
-                <span className="flex h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-white/15 backdrop-blur-md">
+              <div className="flex justify-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAnalysisError(null);
+                    setStage('TEXT_INPUT');
+                  }}
+                  aria-label="Describir comida con teclado"
+                  className="flex h-12 w-12 cursor-pointer items-center justify-center rounded-full bg-white/15 text-white transition-transform duration-100 active:scale-95"
+                >
                   <Keyboard className="h-5 w-5" aria-hidden="true" />
-                </span>
-                <span className="text-[11px] font-medium tracking-wide">Teclado</span>
-              </button>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -908,46 +1014,394 @@ export default function MealPhotoAnalyzer({
         </form>
       ) : null}
 
-      {/* STAGE 3: MINIMAL ANALYZING STATE */}
+      {/* STAGE 3: FULL-SCREEN GOLDEN HALFTONE SCANNER ANALYZING STATE */}
       {stage === 'ANALYZING' ? (
-        <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-inset)] p-4">
+        <div
+          className="fixed inset-0 z-[100] flex flex-col justify-end overflow-hidden bg-black text-white select-none"
+          role="status"
+          aria-live="polite"
+        >
+          {/* Full-screen captured photo or rich dark ambient backdrop */}
           {capturedImage ? (
-            <div className="mb-3.5 overflow-hidden rounded-xl">
+            <>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={capturedImage.previewUrl}
                 alt="Comida en análisis"
-                className="aspect-[16/10] max-h-[180px] w-full object-cover"
+                className="absolute inset-0 h-full w-full object-cover"
               />
-            </div>
-          ) : null}
+              <div
+                className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/55"
+                aria-hidden="true"
+              />
+            </>
+          ) : (
+            <div
+              className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,rgba(250,204,21,0.18),rgba(24,24,27,0.98)_70%)]"
+              aria-hidden="true"
+            />
+          )}
 
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-2.5">
-              <Loader2 className="h-5 w-5 shrink-0 animate-spin text-[var(--accent-text)]" />
-              <span className="truncate text-[15px] font-semibold text-[var(--text-primary)]">
-                Calculando nutrientes...
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={handleResetToCamera}
-              className="min-h-9 shrink-0 cursor-pointer rounded-full border border-[var(--border-subtle)] bg-[var(--surface-card)] px-3.5 text-xs font-semibold text-[var(--text-secondary)] active:scale-95"
-            >
-              Cancelar
-            </button>
+          {/* Animated Golden Scanner Bar + Halftone Dot-Matrix Trail */}
+          <div className="pointer-events-none absolute inset-x-0 top-0 bottom-24 overflow-hidden" aria-hidden="true">
+            {reduceMotion ? (
+              <div className="absolute inset-x-0 top-1/2 -translate-y-1/2">
+                <div
+                  className="h-32 w-full"
+                  style={{
+                    backgroundImage:
+                      'radial-gradient(circle, rgba(253, 224, 71, 0.58) 2.5px, transparent 3px), linear-gradient(to top, rgba(250, 204, 21, 0.45), rgba(250, 204, 21, 0.14) 55%, transparent)',
+                    backgroundSize: '14px 14px, 100% 100%',
+                    WebkitMaskImage:
+                      'linear-gradient(to top, black 0%, rgba(0,0,0,0.72) 48%, transparent 100%)',
+                    maskImage:
+                      'linear-gradient(to top, black 0%, rgba(0,0,0,0.72) 48%, transparent 100%)',
+                  }}
+                />
+                <div className="h-[4px] w-full bg-gradient-to-r from-amber-300 via-yellow-300 to-amber-300 shadow-[0_0_24px_6px_rgba(250,204,21,0.75)]" />
+              </div>
+            ) : (
+              <motion.div
+                className="absolute inset-x-0 top-0"
+                initial={{ y: '8vh' }}
+                animate={{ y: ['8vh', '62vh', '8vh'] }}
+                transition={{
+                  duration: 2.8,
+                  repeat: Infinity,
+                  ease: [0.45, 0.05, 0.55, 0.95],
+                }}
+              >
+                {/* Halftone dot-matrix glow trail */}
+                <div
+                  className="h-36 w-full"
+                  style={{
+                    backgroundImage:
+                      'radial-gradient(circle, rgba(253, 224, 71, 0.62) 2.5px, transparent 3px), linear-gradient(to top, rgba(250, 204, 21, 0.52), rgba(250, 204, 21, 0.16) 55%, transparent)',
+                    backgroundSize: '14px 14px, 100% 100%',
+                    WebkitMaskImage:
+                      'linear-gradient(to top, black 0%, rgba(0,0,0,0.75) 50%, transparent 100%)',
+                    maskImage:
+                      'linear-gradient(to top, black 0%, rgba(0,0,0,0.75) 50%, transparent 100%)',
+                  }}
+                />
+                {/* Bright golden laser edge */}
+                <div className="h-[4px] w-full bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-300 shadow-[0_0_26px_6px_rgba(250,204,21,0.8)]" />
+              </motion.div>
+            )}
           </div>
+
+          {/* Bottom Rounded Status Sheet */}
+          <motion.div
+            initial={reduceMotion ? { opacity: 0 } : { y: 36, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={reduceMotion ? REDUCED_MOTION_TRANSITION : SHEET_ENTER_SPRING}
+            className="relative z-20 rounded-t-[28px] border-t border-[var(--border-subtle)] bg-[var(--surface-card)] px-5 pt-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] text-[var(--text-primary)] shadow-[0_-12px_40px_rgba(0,0,0,0.38)]"
+          >
+            <div className="mx-auto flex max-w-lg items-center justify-between gap-3">
+              <div className="flex min-w-0 flex-1 items-center gap-3">
+                <span
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-violet-500/12 text-violet-500 dark:bg-violet-400/15 dark:text-violet-300"
+                  aria-hidden="true"
+                >
+                  <Sparkles
+                    className={`h-5 w-5 ${reduceMotion ? '' : 'animate-pulse'}`}
+                    strokeWidth={2.2}
+                  />
+                </span>
+                <div className="min-w-0 flex-1 overflow-hidden">
+                  <AnimatePresence mode="wait">
+                    <motion.p
+                      key={ANALYZING_MESSAGES[analyzingStepIdx]}
+                      initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
+                      transition={{ duration: 0.22 }}
+                      className="truncate text-[17px] font-bold tracking-[-0.015em] text-[var(--text-primary)]"
+                    >
+                      {ANALYZING_MESSAGES[analyzingStepIdx]}
+                    </motion.p>
+                  </AnimatePresence>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleResetToCamera}
+                aria-label="Cancelar análisis"
+                className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full bg-[var(--surface-inset)] text-[var(--text-primary)] transition-transform duration-100 active:scale-95"
+              >
+                <X className="h-5 w-5" strokeWidth={2.2} aria-hidden="true" />
+              </button>
+            </div>
+          </motion.div>
         </div>
       ) : null}
 
-      {/* STAGE 4: COMPACT MOBILE-FIRST REVIEW — ZERO BLOAT, DIRECT MANUAL EDITING */}
-      <AnimatePresence initial={false} mode="wait">
-        {stage === 'REVIEW' ? (
+      {/* STAGE 4: FULL-SCREEN EXPLICIT SAVED CONFIRMATION (USER CLOSES WITH X) */}
+      {stage === 'SAVED' ? (
+        <div className="fixed inset-0 z-[100] flex flex-col overflow-hidden bg-[var(--surface-page)] text-[var(--text-primary)]">
+          {/* Top Photo Hero (if photo was taken) */}
+          {capturedImage ? (
+            <div className="relative h-[32dvh] min-h-[190px] max-h-[290px] w-full shrink-0 overflow-hidden bg-black">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={capturedImage.previewUrl}
+                alt={dishName || 'Comida guardada'}
+                className="h-full w-full object-cover"
+              />
+              <div
+                className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/65 via-black/25 to-transparent"
+                aria-hidden="true"
+              />
+              <div
+                className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/50 to-transparent"
+                aria-hidden="true"
+              />
+
+              {/* Floating X Close Button */}
+              <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-end px-4 pt-[max(1rem,env(safe-area-inset-top))]">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  aria-label="Cerrar resumen de comida guardada"
+                  className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-md transition-transform duration-100 active:scale-95"
+                >
+                  <X className="h-5 w-5" strokeWidth={2.2} aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex shrink-0 items-center justify-between border-b border-[var(--border-subtle)] px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-3">
+              <span className="text-[15px] font-semibold text-[var(--text-primary)]">
+                Resumen del registro
+              </span>
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Cerrar resumen de comida guardada"
+                className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full bg-[var(--surface-inset)] text-[var(--text-primary)] transition-transform duration-100 active:scale-95"
+              >
+                <X className="h-5 w-5" strokeWidth={2.2} aria-hidden="true" />
+              </button>
+            </div>
+          )}
+
+          {/* Rounded-top Scrollable Saved Details Sheet */}
+          <motion.div
+            initial={reduceMotion ? { opacity: 0 } : { y: 24, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={reduceMotion ? REDUCED_MOTION_TRANSITION : SHEET_ENTER_SPRING}
+            className={`relative z-10 flex flex-1 flex-col overflow-hidden bg-[var(--surface-page)] ${
+              capturedImage ? '-mt-6 rounded-t-[28px] shadow-[0_-10px_30px_rgba(0,0,0,0.22)]' : ''
+            }`}
+          >
+            <div className="flex-1 overflow-y-auto overscroll-contain px-5 pt-5 pb-4">
+              <div className="mx-auto max-w-lg space-y-4">
+                {/* Explicit Status Pill + Meal Type Badge */}
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  {saveStatus === 'error' ? (
+                    <div
+                      role="alert"
+                      className="inline-flex items-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-xs font-semibold text-[var(--status-danger)]"
+                    >
+                      <X className="h-3.5 w-3.5" aria-hidden="true" />
+                      Error al guardar
+                    </div>
+                  ) : saveStatus === 'saving' ? (
+                    <div className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border-subtle)] bg-[var(--surface-inset)] px-3 py-1 text-xs font-semibold text-[var(--text-secondary)]">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                      Guardando en tu registro...
+                    </div>
+                  ) : saveStatus === 'saved' ? (
+                    <motion.div
+                      key="saved-pill"
+                      initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.88, y: 4 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      transition={
+                        reduceMotion
+                          ? REDUCED_MOTION_TRANSITION
+                          : { type: 'spring', stiffness: 420, damping: 24 }
+                      }
+                      role="status"
+                      className="inline-flex items-center gap-1.5 rounded-full border border-[var(--status-success)]/45 bg-[var(--surface-card)] px-3 py-1 text-xs font-semibold text-[var(--status-success)] shadow-sm"
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                      Comida guardada en tu registro
+                    </motion.div>
+                  ) : (
+                    <div
+                      role="status"
+                      className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border-subtle)] bg-[var(--surface-card)] px-3 py-1 text-xs font-semibold text-[var(--text-primary)]"
+                    >
+                      <Sparkles className="h-3.5 w-3.5 text-[var(--accent-text)]" aria-hidden="true" />
+                      Análisis listo
+                    </div>
+                  )}
+
+                  <span className="rounded-full border border-[var(--border-subtle)] bg-[var(--surface-inset)] px-3 py-1 text-xs font-semibold text-[var(--text-secondary)]">
+                    {MEAL_TYPE_LABELS[mealType]}
+                  </span>
+                </div>
+
+                {/* Save Error Retry Banner (if network failed) */}
+                {saveStatus === 'error' && saveError ? (
+                  <div
+                    role="alert"
+                    className="flex items-center justify-between gap-3 rounded-2xl border border-red-500/30 bg-red-500/10 px-3.5 py-2.5 text-[13px] text-[var(--status-danger)]"
+                  >
+                    <span className="min-w-0 leading-snug">{saveError}</span>
+                    <button
+                      type="button"
+                      onClick={() => void handleSave()}
+                      className="shrink-0 cursor-pointer rounded-xl bg-[var(--accent-fill)] px-3 py-1.5 text-xs font-semibold text-[var(--on-accent)] active:scale-95"
+                    >
+                      Reintentar
+                    </button>
+                  </div>
+                ) : null}
+
+                {/* Dish Title */}
+                <div>
+                  <h2 className="text-[22px] font-bold leading-tight tracking-[-0.02em] text-[var(--text-primary)]">
+                    {dishName || 'Comida registrada'}
+                  </h2>
+                  <p className="mt-1 text-[13px] text-[var(--text-muted)]">
+                    {items.length} {items.length === 1 ? 'alimento detectado' : 'alimentos detectados'}
+                  </p>
+                </div>
+
+                {/* Explicit Calories & Macros Summary Card */}
+                <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-card)] p-4 tabular-nums">
+                  <div className="flex items-baseline justify-between gap-2 border-b border-[var(--divider)] pb-3">
+                    <span className="text-xs font-semibold uppercase tracking-[0.06em] text-[var(--text-muted)]">
+                      {saveStatus === 'saved' ? 'Total guardado' : 'Total estimado'}
+                    </span>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-[28px] font-extrabold leading-none tracking-[-0.03em] text-[var(--text-primary)]">
+                        {totals.calories}
+                      </span>
+                      <span className="text-[13px] font-semibold text-[var(--text-muted)]">
+                        kcal
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-3 gap-2.5">
+                    <div className="rounded-xl bg-[var(--surface-inset)] px-3 py-2.5 text-center">
+                      <span className="block text-[11px] font-semibold text-[var(--chart-protein)]">
+                        Proteínas
+                      </span>
+                      <span className="mt-0.5 block text-[16px] font-bold text-[var(--text-primary)]">
+                        {totals.proteinG}g
+                      </span>
+                    </div>
+                    <div className="rounded-xl bg-[var(--surface-inset)] px-3 py-2.5 text-center">
+                      <span className="block text-[11px] font-semibold text-[var(--chart-carb)]">
+                        Carbos
+                      </span>
+                      <span className="mt-0.5 block text-[16px] font-bold text-[var(--text-primary)]">
+                        {totals.carbG}g
+                      </span>
+                    </div>
+                    <div className="rounded-xl bg-[var(--surface-inset)] px-3 py-2.5 text-center">
+                      <span className="block text-[11px] font-semibold text-[var(--chart-fat)]">
+                        Grasas
+                      </span>
+                      <span className="mt-0.5 block text-[16px] font-bold text-[var(--text-primary)]">
+                        {totals.fatG}g
+                      </span>
+                    </div>
+                  </div>
+
+                  {totals.fiberG > 0 || totals.sugarG > 0 ? (
+                    <div className="mt-2.5 flex items-center justify-end gap-3 border-t border-[var(--divider)] pt-2 text-[12px] text-[var(--text-muted)]">
+                      {totals.fiberG > 0 ? <span>Fibra {totals.fiberG}g</span> : null}
+                      {totals.sugarG > 0 ? <span>Azúcares {totals.sugarG}g</span> : null}
+                    </div>
+                  ) : null}
+                </div>
+
+                {/* Explicit Ingredients Breakdown */}
+                <div>
+                  <h3 className="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--text-muted)]">
+                    {saveStatus === 'saved' ? 'Detalle guardado' : 'Detalle detectado'}
+                  </h3>
+                  <div className="divide-y divide-[var(--divider)] overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-card)]">
+                    {items.map((item) => (
+                      <div
+                        key={item.id}
+                        className="flex items-center justify-between gap-3 px-3.5 py-2.5"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[14px] font-semibold text-[var(--text-primary)]">
+                            {item.name}
+                          </p>
+                          <p className="mt-0.5 truncate text-[11.5px] text-[var(--text-muted)] tabular-nums">
+                            {Math.round(item.estimatedGrams)}g · P {roundMacro(item.proteinG)}g · C{' '}
+                            {roundMacro(item.carbG)}g · G {roundMacro(item.fatG)}g
+                          </p>
+                        </div>
+                        <span className="shrink-0 whitespace-nowrap text-[13.5px] font-bold text-[var(--text-primary)] tabular-nums">
+                          {formatCaloriesDisplay(item.calories)} kcal
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom Actions: Editar datos | Guardar (user closes with X whenever ready) */}
+            <div className="shrink-0 border-t border-[var(--border-subtle)] bg-[var(--surface-page)] px-5 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+              <div className="mx-auto grid max-w-lg grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setStage('REVIEW')}
+                  disabled={saveStatus === 'saving' || saveStatus === 'saved'}
+                  className="flex min-h-11 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-card)] px-3 text-[13.5px] font-semibold text-[var(--text-primary)] transition-transform duration-100 active:scale-[0.98] disabled:opacity-50"
+                >
+                  <Pencil className="h-4 w-4" aria-hidden="true" />
+                  Editar datos
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleSave()}
+                  disabled={saveStatus === 'saving' || saveStatus === 'saved' || items.length === 0}
+                  className={`flex min-h-11 items-center justify-center gap-1.5 rounded-xl px-3 text-[13.5px] font-semibold transition-transform duration-100 ${
+                    saveStatus === 'saved'
+                      ? 'cursor-default border border-[var(--status-success)]/35 bg-[var(--surface-card)] text-[var(--status-success)]'
+                      : 'cursor-pointer bg-[var(--accent-fill)] text-[var(--on-accent)] active:scale-[0.98] disabled:opacity-50'
+                  }`}
+                >
+                  {saveStatus === 'saving' ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                      Guardando...
+                    </>
+                  ) : saveStatus === 'saved' ? (
+                    <>
+                      <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                      Guardado
+                    </>
+                  ) : (
+                    <>
+                      <Check className="h-4 w-4" strokeWidth={2.4} aria-hidden="true" />
+                      Guardar
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      ) : null}
+
+      {/* STAGE 5: COMPACT MOBILE-FIRST REVIEW — ZERO BLOAT, DIRECT MANUAL EDITING */}
+      {stage === 'REVIEW' ? (
           <motion.div
             key="meal-review"
             initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 14, scale: 0.99 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -6 }}
             transition={reduceMotion ? REDUCED_MOTION_TRANSITION : SHEET_ENTER_SPRING}
             className="space-y-2.5 pb-1"
           >
@@ -1536,17 +1990,20 @@ export default function MealPhotoAnalyzer({
             <div className="pt-0.5 pb-[env(safe-area-inset-bottom,0px)]">
               <button
                 type="button"
-                onClick={handleSave}
+                onClick={() => void handleSave()}
                 disabled={items.length === 0 || isApplyingCorrection}
                 className="flex min-h-11 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-[var(--accent-fill)] px-4 text-[14px] font-semibold text-[var(--on-accent)] transition-transform duration-100 active:scale-[0.98] disabled:opacity-45"
               >
                 <Check className="h-4 w-4 shrink-0" strokeWidth={2.4} aria-hidden="true" />
-                <span className="tabular-nums">Registrar {totals.calories} kcal</span>
+                <span className="tabular-nums">
+                  {savedMealId
+                    ? `Guardar cambios · ${totals.calories} kcal`
+                    : `Registrar ${totals.calories} kcal`}
+                </span>
               </button>
             </div>
           </motion.div>
         ) : null}
-      </AnimatePresence>
     </div>
   );
 }

@@ -49,7 +49,7 @@ export default function LogMealModal(props: LogMealModalProps) {
 }
 
 function LogMealModalContent({ onClose, onSaved, date, initialTab, initialMealType }: Omit<LogMealModalProps, 'isOpen'>) {
-    const activeTab: Tab = initialTab ?? 'AI';
+    const [activeTab, setActiveTab] = useState<Tab>(initialTab ?? 'AI');
     const [aiStage, setAiStage] = useState<AnalyzerStage>('CAMERA');
     const [step, setStep] = useState<Step>('MAIN');
     const [mealType, setMealType] = useState<MealType>(() => initialMealType ?? inferDefaultMealType());
@@ -67,6 +67,7 @@ function LogMealModalContent({ onClose, onSaved, date, initialTab, initialMealTy
         isLoadingCustomFoods: isLoadingCustom,
         fetchCatalogIfNeeded,
         logMealOptimistic,
+        updateMealOptimistic,
         createCustomFoodOptimistic,
     } = useHealthStore();
 
@@ -276,7 +277,7 @@ function LogMealModalContent({ onClose, onSaved, date, initialTab, initialMealTy
         });
     };
 
-    const handleConfirmAiMeal = (meal: {
+    const handleConfirmAiMeal = async (meal: {
         name: string;
         calories: number;
         proteinG: number;
@@ -286,7 +287,8 @@ function LogMealModalContent({ onClose, onSaved, date, initialTab, initialMealTy
         sugarG: number;
         mealType: MealType;
         photoUrl?: string;
-    }) => {
+        existingMealId?: string;
+    }): Promise<string | void> => {
         const payload = {
             date,
             mealType: meal.mealType,
@@ -299,15 +301,27 @@ function LogMealModalContent({ onClose, onSaved, date, initialTab, initialMealTy
             sugarG: meal.sugarG,
             ...(meal.photoUrl ? { photoUrl: meal.photoUrl } : {}),
         };
+        if (meal.existingMealId) {
+            await updateMealOptimistic(meal.existingMealId, payload);
+            onSaved();
+            return meal.existingMealId;
+        }
+        const savedId = await logMealOptimistic(payload);
         onSaved();
-        onClose();
-        toast.success(`"${meal.name}" registrada`);
-        void logMealOptimistic(payload).catch(() => {
-            toast.error('No se pudo registrar la comida.');
-        });
+        return savedId;
     };
 
-    const isCameraFullscreen = step === 'MAIN' && activeTab === 'AI' && aiStage === 'CAMERA';
+    const isAiFullscreen =
+        step === 'MAIN' &&
+        activeTab === 'AI' &&
+        (aiStage === 'CAMERA' || aiStage === 'ANALYZING' || aiStage === 'SAVED');
+
+    const fullscreenAriaLabel =
+        aiStage === 'ANALYZING'
+            ? 'Analizando comida'
+            : aiStage === 'SAVED'
+                ? 'Resumen de comida guardada'
+                : 'Cámara para registrar comida';
 
     const mealTypeSelector = (
         <div className="flex bg-[var(--surface-inset)] p-1 rounded-xl border border-[var(--border-subtle)]">
@@ -334,24 +348,31 @@ function LogMealModalContent({ onClose, onSaved, date, initialTab, initialMealTy
 
     return (
         <div
-            className={isCameraFullscreen ? undefined : 'mobile-sheet-root fixed inset-0 z-[100] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center sm:p-4'}
+            className={isAiFullscreen ? 'fixed inset-0 z-[100]' : 'mobile-sheet-root fixed inset-0 z-[100] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center sm:p-4'}
             role="dialog"
             aria-modal="true"
-            aria-labelledby={isCameraFullscreen ? undefined : 'meal-modal-title'}
-            aria-label={isCameraFullscreen ? 'Cámara para registrar comida' : undefined}
-            onClick={(e) => { if (!isCameraFullscreen && e.target === e.currentTarget) onClose(); }}
+            aria-labelledby={isAiFullscreen ? undefined : 'meal-modal-title'}
+            aria-label={isAiFullscreen ? fullscreenAriaLabel : undefined}
+            onClick={(e) => { if (!isAiFullscreen && e.target === e.currentTarget) onClose(); }}
         >
-            <div className={isCameraFullscreen ? undefined : 'mobile-sheet-panel bg-[var(--surface-page)] border border-[var(--border-subtle)] rounded-t-[24px] sm:rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[92dvh] sm:max-h-[85vh] overflow-hidden'}>
+            <div className={isAiFullscreen ? undefined : 'mobile-sheet-panel bg-[var(--surface-page)] border border-[var(--border-subtle)] rounded-t-[24px] sm:rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[92dvh] sm:max-h-[85vh] overflow-hidden'}>
 
                 {/* Header */}
-                {!isCameraFullscreen && (
+                {!isAiFullscreen && (
                 <div className="flex items-center justify-between px-4 py-2.5 sm:px-5 sm:py-3 border-b border-[var(--border-subtle)] shrink-0">
                     <div className="flex items-center gap-2">
-                        {step !== 'MAIN' && (
+                        {(step !== 'MAIN' || (activeTab === 'CUSTOM' && (initialTab ?? 'AI') === 'AI')) && (
                             <button
                                 type="button"
                                 aria-label="Volver"
-                                onClick={() => setStep('MAIN')}
+                                onClick={() => {
+                                    if (step !== 'MAIN') {
+                                        setStep('MAIN');
+                                    } else {
+                                        setActiveTab('AI');
+                                        setAiStage('CAMERA');
+                                    }
+                                }}
                                 className="flex h-8 w-8 sm:h-9 sm:w-9 cursor-pointer items-center justify-center rounded-full text-[var(--text-muted)] hover:bg-[var(--surface-raised)] hover:text-[var(--text-primary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
                             >
                                 <ArrowLeft className="w-4.5 h-4.5" aria-hidden="true" />
@@ -371,7 +392,7 @@ function LogMealModalContent({ onClose, onSaved, date, initialTab, initialMealTy
                                     : activeTab === 'CUSTOM'
                                         ? 'Mis Comidas'
                                         : aiStage === 'REVIEW'
-                                            ? 'Revisar comida'
+                                            ? 'Editar comida'
                                             : aiStage === 'TEXT_INPUT'
                                                 ? 'Describir comida'
                                                 : 'Registrar Comida')
@@ -392,10 +413,10 @@ function LogMealModalContent({ onClose, onSaved, date, initialTab, initialMealTy
                 )}
 
                 {/* Body Content */}
-                <div className={isCameraFullscreen ? undefined : 'flex-1 overflow-y-auto overscroll-contain px-3.5 py-2.5 sm:px-5 sm:py-4 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent'}>
+                <div className={isAiFullscreen ? undefined : 'flex-1 overflow-y-auto overscroll-contain px-3.5 py-2.5 sm:px-5 sm:py-4 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent'}>
 
                     {step === 'MAIN' && (
-                        <div className={isCameraFullscreen ? undefined : (activeTab === 'AI' ? 'space-y-3' : 'space-y-4')}>
+                        <div className={isAiFullscreen ? undefined : (activeTab === 'AI' ? 'space-y-3' : 'space-y-4')}>
                             {activeTab === 'CUSTOM' && mealTypeSelector}
 
                             {activeTab === 'AI' && (
@@ -404,6 +425,7 @@ function LogMealModalContent({ onClose, onSaved, date, initialTab, initialMealTy
                                     onMealTypeChange={setMealType}
                                     onStageChange={setAiStage}
                                     onClose={onClose}
+                                    onOpenCustomMeals={() => setActiveTab('CUSTOM')}
                                     onConfirmMeal={handleConfirmAiMeal}
                                 />
                             )}

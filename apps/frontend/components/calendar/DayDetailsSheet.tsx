@@ -36,13 +36,24 @@ export default function DayDetailsSheet({ day, onClose, onPrevious, onNext }: { 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isClosingRef = useRef(false);
+  const onCloseRef = useRef(onClose);
+  const onPreviousRef = useRef(onPrevious);
+  const onNextRef = useRef(onNext);
   const [isSaving, setIsSaving] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const [isDragOverPhoto, setIsDragOverPhoto] = useState(false);
   const [justDroppedPhoto, setJustDroppedPhoto] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const shareOpenRef = useRef(shareOpen);
   const dragControls = useDragControls();
   const reduceMotion = useReducedMotion();
+  const reduceMotionRef = useRef(reduceMotion);
+
+  onCloseRef.current = onClose;
+  onPreviousRef.current = onPrevious;
+  onNextRef.current = onNext;
+  shareOpenRef.current = shareOpen;
+  reduceMotionRef.current = reduceMotion;
 
   useEffect(() => {
     if (day.status !== 'future') {
@@ -51,21 +62,36 @@ export default function DayDetailsSheet({ day, onClose, onPrevious, onNext }: { 
   }, [day.date, day.status, fetchProfileBundle]);
 
   const dismiss = useCallback(() => {
-    // Keep this guard in a ref. Using `isClosing` here made the effect below
-    // change identity after setIsClosing(), which cleaned up the timer before
-    // onClose could unmount the backdrop.
+    // Keep this guard and callbacks in refs so parent re-renders (e.g. store
+    // updates from saving metrics) never change `dismiss` identity or cancel
+    // the close timer before `onClose` unmounts the sheet.
     if (isClosingRef.current) return;
     isClosingRef.current = true;
     setIsClosing(true);
-    closeTimer.current = setTimeout(onClose, 180);
-  }, [onClose]);
+    closeTimer.current = setTimeout(() => {
+      closeTimer.current = null;
+      onCloseRef.current();
+    }, reduceMotionRef.current ? 110 : 200);
+  }, []);
 
   useEffect(() => {
     closeRef.current?.focus();
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = overflow;
+      if (closeTimer.current) {
+        clearTimeout(closeTimer.current);
+        closeTimer.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !shareOpen) dismiss();
-      if (event.key === 'ArrowLeft') onPrevious?.();
-      if (event.key === 'ArrowRight') onNext?.();
+      if (event.key === 'Escape' && !shareOpenRef.current) dismiss();
+      if (event.key === 'ArrowLeft') onPreviousRef.current?.();
+      if (event.key === 'ArrowRight') onNextRef.current?.();
       if (event.key === 'Tab') {
         const dialog = document.querySelector<HTMLElement>('.calendar-sheet');
         const focusable = dialog ? Array.from(dialog.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), textarea:not([disabled])')) : [];
@@ -77,14 +103,10 @@ export default function DayDetailsSheet({ day, onClose, onPrevious, onNext }: { 
       }
     };
     document.addEventListener('keydown', onKeyDown);
-    const overflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
     return () => {
       document.removeEventListener('keydown', onKeyDown);
-      document.body.style.overflow = overflow;
-      if (closeTimer.current) clearTimeout(closeTimer.current);
     };
-  }, [dismiss, onNext, onPrevious, shareOpen]);
+  }, [dismiss]);
 
   const processImageFile = (file: File | undefined) => {
     if (!file || !file.type.startsWith('image/')) return;
@@ -147,6 +169,7 @@ export default function DayDetailsSheet({ day, onClose, onPrevious, onNext }: { 
     <motion.div
       className="calendar-sheet-backdrop"
       role="presentation"
+      style={isClosing ? { pointerEvents: 'none' } : undefined}
       initial={{ opacity: 0 }}
       animate={{ opacity: isClosing ? 0 : 1 }}
       transition={{ duration: reduceMotion ? 0.1 : 0.18 }}

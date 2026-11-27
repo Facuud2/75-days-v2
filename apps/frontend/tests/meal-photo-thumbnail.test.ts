@@ -11,6 +11,7 @@ vi.mock('../lib/server/db', () => ({
 import { useHealthStore } from '../store/useHealthStore';
 import { healthService } from '../lib/api/health';
 import { logMeal } from '../lib/server/controllers/health/nutritionController';
+import { compressImageForAI } from '../lib/utils/image';
 
 describe('Meal photoUrl thumbnail flow', () => {
   beforeEach(() => {
@@ -113,5 +114,166 @@ describe('Meal photoUrl thumbnail flow', () => {
     await logMeal(req, res);
     expect(statusCode).toBe(400);
     expect(body?.error).toBeDefined();
+  });
+
+  it('compressImageForAI keeps objectUrl alive through drawImage, awaits decode, and generates thumbnailUrl synchronously', async () => {
+    const events: string[] = [];
+    const origWindow = (globalThis as any).window;
+    const origDocument = (globalThis as any).document;
+    const origImage = (globalThis as any).Image;
+    const origCreateObjectURL = URL.createObjectURL;
+    const origRevokeObjectURL = URL.revokeObjectURL;
+
+    let canvasCount = 0;
+    (globalThis as any).window = globalThis;
+    (globalThis as any).document = {
+      createElement: (tag: string) => {
+        if (tag !== 'canvas') throw new Error(`unexpected tag ${tag}`);
+        const idx = ++canvasCount;
+        return {
+          width: 0,
+          height: 0,
+          getContext: () => ({
+            globalCompositeOperation: 'source-over',
+            fillStyle: '',
+            clearRect: () => {},
+            fillRect: () => {},
+            drawImage: () => {
+              events.push(`drawImage:${idx}`);
+            },
+            getImageData: () => ({ data: new Uint8ClampedArray([120, 80, 40, 255]) }),
+          }),
+          toDataURL: () => {
+            events.push(`toDataURL:${idx}`);
+            return idx === 1
+              ? 'data:image/jpeg;base64,FULLIMAGE'
+              : 'data:image/jpeg;base64,THUMBIMAGE';
+          },
+        };
+      },
+    };
+
+    class MockImage {
+      naturalWidth = 1200;
+      naturalHeight = 900;
+      width = 1200;
+      height = 900;
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      set src(_val: string) {
+        queueMicrotask(() => this.onload?.());
+      }
+      async decode() {
+        events.push('decode');
+      }
+    }
+    (globalThis as any).Image = MockImage;
+    URL.createObjectURL = vi.fn(() => {
+      events.push('createObjectURL');
+      return 'blob:mock-gallery-photo';
+    });
+    URL.revokeObjectURL = vi.fn(() => {
+      events.push('revokeObjectURL');
+    });
+
+    try {
+      const result = await compressImageForAI(new Blob(['fake-jpeg'], { type: 'image/jpeg' }));
+      expect(result.previewUrl).toBe('data:image/jpeg;base64,FULLIMAGE');
+      expect(result.thumbnailUrl).toBe('data:image/jpeg;base64,THUMBIMAGE');
+      expect(events).toEqual([
+        'createObjectURL',
+        'decode',
+        'drawImage:1',
+        'toDataURL:1',
+        'drawImage:2',
+        'toDataURL:2',
+        'revokeObjectURL',
+      ]);
+    } finally {
+      (globalThis as any).window = origWindow;
+      (globalThis as any).document = origDocument;
+      (globalThis as any).Image = origImage;
+      URL.createObjectURL = origCreateObjectURL;
+      URL.revokeObjectURL = origRevokeObjectURL;
+    }
+  });
+
+  it('compressImageForAI falls back to createImageBitmap when the first draw is blank (alpha=0)', async () => {
+    const origWindow = (globalThis as any).window;
+    const origDocument = (globalThis as any).document;
+    const origImage = (globalThis as any).Image;
+    const origCreateObjectURL = URL.createObjectURL;
+    const origRevokeObjectURL = URL.revokeObjectURL;
+    const origCreateImageBitmap = (globalThis as any).createImageBitmap;
+
+    let mainDrawAttempt = 0;
+    let isThumbCanvas = false;
+
+    (globalThis as any).window = globalThis;
+    (globalThis as any).document = {
+      createElement: () => {
+        const currentIsThumb = isThumbCanvas;
+        return {
+          width: 0,
+          height: 0,
+          getContext: () => ({
+            globalCompositeOperation: 'source-over',
+            fillStyle: '',
+            clearRect: () => {},
+            fillRect: () => {},
+            drawImage: () => {
+              if (!currentIsThumb) {
+                mainDrawAttempt += 1;
+              }
+            },
+            getImageData: () => ({
+              // 1st attempt simulates silent WebKit blank draw (alpha=0); 2nd succeeds (alpha=255)
+              data: new Uint8ClampedArray([0, 0, 0, mainDrawAttempt === 1 ? 0 : 255]),
+            }),
+          }),
+          toDataURL: () => {
+            if (!currentIsThumb) {
+              isThumbCanvas = true;
+              return 'data:image/jpeg;base64,BITMAP_FULL';
+            }
+            return 'data:image/jpeg;base64,BITMAP_THUMB';
+          },
+        };
+      },
+    };
+
+    class MockImage {
+      naturalWidth = 800;
+      naturalHeight = 600;
+      onload: (() => void) | null = null;
+      set src(_val: string) {
+        queueMicrotask(() => this.onload?.());
+      }
+      async decode() {}
+    }
+    (globalThis as any).Image = MockImage;
+    URL.createObjectURL = vi.fn(() => 'blob:blank-first');
+    URL.revokeObjectURL = vi.fn();
+    const closeSpy = vi.fn();
+    (globalThis as any).createImageBitmap = vi.fn(async () => ({
+      width: 800,
+      height: 600,
+      close: closeSpy,
+    }));
+
+    try {
+      const result = await compressImageForAI(new Blob(['fake-jpeg'], { type: 'image/jpeg' }));
+      expect(mainDrawAttempt).toBe(2);
+      expect(result.previewUrl).toBe('data:image/jpeg;base64,BITMAP_FULL');
+      expect(result.thumbnailUrl).toBe('data:image/jpeg;base64,BITMAP_THUMB');
+      expect(closeSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      (globalThis as any).window = origWindow;
+      (globalThis as any).document = origDocument;
+      (globalThis as any).Image = origImage;
+      URL.createObjectURL = origCreateObjectURL;
+      URL.revokeObjectURL = origRevokeObjectURL;
+      (globalThis as any).createImageBitmap = origCreateImageBitmap;
+    }
   });
 });

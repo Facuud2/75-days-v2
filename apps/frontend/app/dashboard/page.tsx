@@ -5,7 +5,19 @@ import { useChallengeStore } from '@/store/useChallengeStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useQuestStore } from '@/store/useQuestStore';
 import { useUIStore } from '@/store/useUIStore';
+import { useSettingsStore } from '@/store/useSettingsStore';
 import InlineMetricEditor from '@/components/InlineMetricEditor';
+import LongPressTaskCard from '@/components/tasks/LongPressTaskCard';
+import {
+  buildUpdatedGoalTemplates,
+  dailyGoalToContextTarget,
+  periodGoalToContextTarget,
+  type ContextTaskTarget,
+  type SimpleRect,
+  type TaskEditPatch,
+} from '@/components/tasks/taskTemplates';
+import { getGoalStepKey } from '@/lib/utils/goalInference';
+import toast from 'react-hot-toast';
 import dynamic from 'next/dynamic';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -44,6 +56,8 @@ const SideQuestsModal = dynamic(() => import('@/components/SideQuestsModal'), { 
 const SideQuestDetailModal = dynamic(() => import('@/components/SideQuestDetailModal'), { ssr: false });
 const OnboardingTutorial = dynamic(() => import('@/components/OnboardingTutorial'), { ssr: false });
 const ShareProgressModal = dynamic(() => import('@/components/ShareProgressModal'), { ssr: false });
+const TaskContextMenu = dynamic(() => import('@/components/tasks/TaskContextMenu'), { ssr: false });
+const EditTaskSheet = dynamic(() => import('@/components/tasks/EditTaskSheet'), { ssr: false });
 
 type TabView = 'plan' | 'missions';
 
@@ -94,11 +108,13 @@ export default function Dashboard() {
   const { user } = useAuthStore();
   const {
     isActive,
+    difficulty,
     currentDay,
     logs,
     periodGoals,
     startDate,
     customGoalsTemplate,
+    updateCustomGoals,
     logDailyGoal,
     logDailyGoalProgress,
     logPeriodGoalProgress,
@@ -106,6 +122,7 @@ export default function Dashboard() {
     checkDailyReset,
     isLoading: isChallengeLoading
   } = useChallengeStore();
+  const { goalStepOverrides, setGoalStepOverride } = useSettingsStore();
   const {
     quests,
     fetchQuests,
@@ -145,6 +162,28 @@ export default function Dashboard() {
     open: false,
     initialKind: 'daily',
   });
+  const [contextMenuState, setContextMenuState] = useState<{
+    kind: 'daily' | 'period';
+    id: string;
+    rect: SimpleRect;
+  } | null>(null);
+  const [editingTask, setEditingTask] = useState<ContextTaskTarget | null>(null);
+
+  const openTaskContextMenu = useCallback(
+    (kind: 'daily' | 'period', id: string, rect: DOMRect) => {
+      setContextMenuState({
+        kind,
+        id,
+        rect: {
+          top: rect.top,
+          left: rect.left,
+          width: rect.width,
+          height: rect.height,
+        },
+      });
+    },
+    []
+  );
 
   // ── break-ui · dataset del laboratorio (sólo dev) ──────────────────────────
   // El estado por defecto deja la página exactamente como se diseñó; los demás
@@ -213,9 +252,21 @@ export default function Dashboard() {
       void logDailyGoalProgress(todayStr, goal.id, { delta }).catch(() => {});
     };
 
+    const stepKey = getGoalStepKey({
+      templateId: goal.templateId,
+      title: goal.title,
+      cadence: goal.cadence || 'daily',
+    });
+    const customStep = goalStepOverrides[stepKey];
+    const isElevated =
+      contextMenuState?.kind === 'daily' && contextMenuState.id === goal.id;
+
     return (
-      <div
+      <LongPressTaskCard
         key={goal.id}
+        disabled={isTemplatePlaceholder}
+        isElevated={isElevated}
+        onLongPress={(rect) => openTaskContextMenu('daily', goal.id, rect)}
         className={`w-full text-left dashboard-card px-3 py-2.5 sm:p-5 flex flex-col gap-2.5 sm:gap-3 min-h-12 sm:min-h-14 ${goal.completed
           ? ''
           : 'hover:border-rose-500/50'
@@ -267,6 +318,7 @@ export default function Dashboard() {
               targetValue={targetValue}
               targetUnit={goal.targetUnit}
               measurementType={measurementType}
+              stepOverride={customStep}
               isCompleted={goal.completed}
               compact
               onDelta={(delta) =>
@@ -278,9 +330,9 @@ export default function Dashboard() {
             />
           </div>
         )}
-      </div>
+      </LongPressTaskCard>
     );
-  }, [todayStr, logDailyGoal, logDailyGoalProgress]);
+  }, [todayStr, logDailyGoal, logDailyGoalProgress, goalStepOverrides, contextMenuState, openTaskContextMenu]);
 
   const renderPeriodGoalItem = useCallback((pg: any) => {
     const IconComponent = iconMap[pg.icon || 'target'] || Target;
@@ -318,9 +370,20 @@ export default function Dashboard() {
           ? 'bg-violet-400'
           : 'bg-sky-400';
 
+    const stepKey = getGoalStepKey({
+      templateId: pg.templateId,
+      title: pg.title,
+      cadence: pg.cadence,
+    });
+    const customStep = goalStepOverrides[stepKey];
+    const isElevated =
+      contextMenuState?.kind === 'period' && contextMenuState.id === pg.id;
+
     return (
-      <div
+      <LongPressTaskCard
         key={pg.id}
+        isElevated={isElevated}
+        onLongPress={(rect) => openTaskContextMenu('period', pg.id, rect)}
         className={`w-full text-left border rounded-2xl px-3.5 py-3 sm:p-5 flex flex-col gap-3 transition-colors duration-200 ${accentBorder}`}
       >
         <div
@@ -376,6 +439,7 @@ export default function Dashboard() {
               targetValue={targetValue}
               targetUnit={pg.targetUnit}
               measurementType={pg.measurementType}
+              stepOverride={customStep}
               isCompleted={isCompleted}
               isFailed={isFailed}
               compact
@@ -390,9 +454,9 @@ export default function Dashboard() {
             />
           </div>
         )}
-      </div>
+      </LongPressTaskCard>
     );
-  }, [logPeriodGoalProgress]);
+  }, [logPeriodGoalProgress, goalStepOverrides, contextMenuState, openTaskContextMenu]);
 
   // Stale-While-Revalidate: solo muestra el esqueleto completo en el primer arranque en frío sin datos en caché
   if ((isChallengeLoading || isInitialSyncing) && !todayLog) {
@@ -545,7 +609,8 @@ export default function Dashboard() {
   const customGoals = (devLog?.goals || []).filter(g => !allDefaultTitles.has(g.title.toLowerCase()));
 
   // Determine current active plan name mapped to UI strings
-  const currentPlanName = useChallengeStore.getState().difficulty || 'Activo';
+  const currentPlanName = difficulty || 'Activo';
+  const isBasePlan = currentPlanName !== 'Custom';
 
   // Active weekly and monthly goals for the current challenge period (relative to startDate)
   const currentWeekNumber = Math.floor((Math.max(1, currentDay) - 1) / 7) + 1;
@@ -558,6 +623,157 @@ export default function Dashboard() {
   const currentMonthlyGoals = (periodGoals || []).filter(
     (pg) => pg.cadence === 'monthly' && pg.periodNumber === currentMonthNumber
   );
+
+  // Derivar la tarea en foco en tiempo real para que el progreso se actualice en vivo
+  const activeContextTask: ContextTaskTarget | null = contextMenuState
+    ? contextMenuState.kind === 'daily'
+      ? (() => {
+          const found = (devLog?.goals || []).find((g) => g.id === contextMenuState.id);
+          return found ? dailyGoalToContextTarget(found) : null;
+        })()
+      : (() => {
+          const found = (periodGoals || []).find((pg) => pg.id === contextMenuState.id);
+          return found ? periodGoalToContextTarget(found) : null;
+        })()
+    : null;
+
+  const totalEditableGoals =
+    customGoalsTemplate.length > 0
+      ? customGoalsTemplate.length
+      : (todayLog?.goals?.length || 0) + currentWeeklyGoals.length + currentMonthlyGoals.length;
+
+  const activeContextStepOverride = activeContextTask
+    ? goalStepOverrides[
+        getGoalStepKey({
+          templateId: activeContextTask.templateId,
+          title: activeContextTask.title,
+          cadence: activeContextTask.cadence,
+        })
+      ]
+    : undefined;
+
+  const editingTaskStepOverride = editingTask
+    ? goalStepOverrides[
+        getGoalStepKey({
+          templateId: editingTask.templateId,
+          title: editingTask.title,
+          cadence: editingTask.cadence,
+        })
+      ]
+    : undefined;
+
+  const handleContextToggle = (task: ContextTaskTarget) => {
+    if (task.kind === 'daily') {
+      void logDailyGoal(todayStr, task.id, !task.completed).catch(() => {});
+    } else if (!task.isFailed) {
+      void logPeriodGoalProgress(task.id, { completed: !task.completed }).catch(() => {});
+    }
+  };
+
+  const handleContextDelta = (task: ContextTaskTarget, delta: number) => {
+    if (task.kind === 'daily') {
+      void logDailyGoalProgress(todayStr, task.id, { delta }).catch(() => {});
+    } else if (!task.isFailed) {
+      void logPeriodGoalProgress(task.id, { delta }).catch(() => {});
+    }
+  };
+
+  const handleContextSetProgress = (task: ContextTaskTarget, value: number) => {
+    if (task.kind === 'daily') {
+      void logDailyGoalProgress(todayStr, task.id, { currentValue: value }).catch(() => {});
+    } else if (!task.isFailed) {
+      void logPeriodGoalProgress(task.id, { currentValue: value }).catch(() => {});
+    }
+  };
+
+  const handleContextStepChange = (task: ContextTaskTarget, step: number | null) => {
+    const key = getGoalStepKey({
+      templateId: task.templateId,
+      title: task.title,
+      cadence: task.cadence,
+    });
+    setGoalStepOverride(key, step);
+    if (step) {
+      toast.success(`Incremento actualizado a ±${step}`);
+    }
+  };
+
+  const handleSaveTaskPatch = async (
+    task: ContextTaskTarget,
+    patch: TaskEditPatch,
+    nextStepOverride?: number | null
+  ) => {
+    const wasBase = isBasePlan;
+    const updatedTemplates = buildUpdatedGoalTemplates({
+      currentTemplates: customGoalsTemplate,
+      fallbackDailyGoals: todayLog?.goals || [],
+      fallbackPeriodGoals: [...currentWeeklyGoals, ...currentMonthlyGoals],
+      target: task,
+      mode: 'edit',
+      patch,
+    });
+
+    if (updatedTemplates.length === 0) return;
+
+    try {
+      await updateCustomGoals(updatedTemplates);
+      const oldKey = getGoalStepKey({
+        templateId: task.templateId,
+        title: task.title,
+        cadence: task.cadence,
+      });
+      const newKey = getGoalStepKey({
+        templateId: task.templateId,
+        title: patch.title,
+        cadence: task.cadence,
+      });
+      if (oldKey !== newKey && goalStepOverrides[oldKey] !== undefined) {
+        const preserved = goalStepOverrides[oldKey];
+        setGoalStepOverride(oldKey, null);
+        setGoalStepOverride(newKey, nextStepOverride ?? preserved);
+      } else if (nextStepOverride !== undefined) {
+        setGoalStepOverride(newKey, nextStepOverride);
+      }
+      toast.success(
+        wasBase ? 'Tarea actualizada · Tu reto pasó a Plan Custom' : 'Tarea actualizada'
+      );
+    } catch {
+      toast.error('No pudimos guardar los cambios de la tarea.');
+      throw new Error('Failed to update goal');
+    }
+  };
+
+  const handleDeleteTask = async (task: ContextTaskTarget) => {
+    const wasBase = isBasePlan;
+    const updatedTemplates = buildUpdatedGoalTemplates({
+      currentTemplates: customGoalsTemplate,
+      fallbackDailyGoals: todayLog?.goals || [],
+      fallbackPeriodGoals: [...currentWeeklyGoals, ...currentMonthlyGoals],
+      target: task,
+      mode: 'delete',
+    });
+
+    if (updatedTemplates.length === 0) {
+      toast.error('Tu reto necesita al menos una tarea activa.');
+      return;
+    }
+
+    try {
+      await updateCustomGoals(updatedTemplates);
+      const key = getGoalStepKey({
+        templateId: task.templateId,
+        title: task.title,
+        cadence: task.cadence,
+      });
+      setGoalStepOverride(key, null);
+      toast.success(
+        wasBase ? 'Tarea eliminada · Tu reto pasó a Plan Custom' : 'Tarea eliminada'
+      );
+    } catch {
+      toast.error('No pudimos eliminar la tarea.');
+      throw new Error('Failed to delete goal');
+    }
+  };
 
   const completedWeeklyCount = currentWeeklyGoals.filter((g) => g.status === 'success').length;
   const completedMonthlyCount = currentMonthlyGoals.filter((g) => g.status === 'success').length;
@@ -648,6 +864,10 @@ export default function Dashboard() {
                     : `${remainingTasks} tareas diarias restantes para terminar el día.`}
             </p>
             {(() => {
+              if (currentWeeklyGoals.length === 0 && currentMonthlyGoals.length === 0) {
+                return null;
+              }
+
               const calcHorizonPct = (
                 items: Array<{
                   completed?: boolean;
@@ -675,8 +895,6 @@ export default function Dashboard() {
                 return Math.round((totalRatio / items.length) * 100);
               };
 
-              const dailyGoalsList = devLog?.goals || [];
-              const dailyPct = calcHorizonPct(dailyGoalsList);
               const weeklyPct = calcHorizonPct(currentWeeklyGoals);
               const monthlyPct = calcHorizonPct(currentMonthlyGoals);
 
@@ -685,17 +903,6 @@ export default function Dashboard() {
                   <div className="flex items-center justify-between text-[11px] font-bold">
                     <span className="text-[var(--text-muted)] uppercase tracking-wider">Progreso multi-horizonte</span>
                   </div>
-                  {dailyGoalsList.length > 0 && (
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between text-xs tabular-nums">
-                        <span className="text-[var(--text-secondary)] font-medium">Hoy (Diario)</span>
-                        <span className="font-bold text-rose-600 dark:text-rose-400">{dailyPct}%</span>
-                      </div>
-                      <div className="h-1.5 rounded-full bg-[var(--progress-track,rgba(148,163,184,0.22))] overflow-hidden">
-                        <div className="h-full rounded-full bg-rose-500 transition-all duration-300" style={{ width: `${dailyPct}%` }} />
-                      </div>
-                    </div>
-                  )}
                   {currentWeeklyGoals.length > 0 && (
                     <div className="space-y-1">
                       <div className="flex items-center justify-between text-xs tabular-nums">
@@ -1164,6 +1371,49 @@ export default function Dashboard() {
             dayNumber: Math.max(1, currentDay),
             goals: devLog?.goals || [],
           }}
+        />
+      )}
+      {contextMenuState && activeContextTask && (
+        <TaskContextMenu
+          open={Boolean(contextMenuState && activeContextTask)}
+          task={activeContextTask}
+          anchorRect={contextMenuState.rect}
+          isBasePlan={isBasePlan}
+          planName={currentPlanName}
+          canDelete={totalEditableGoals > 1}
+          stepOverride={activeContextStepOverride}
+          onClose={() => setContextMenuState(null)}
+          onToggleComplete={handleContextToggle}
+          onDeltaProgress={handleContextDelta}
+          onSetProgress={handleContextSetProgress}
+          onChangeStepOverride={handleContextStepChange}
+          onQuickChangeMeasurement={async (task, next) => {
+            await handleSaveTaskPatch(
+              task,
+              {
+                title: task.title,
+                description: task.description ?? '',
+                icon: task.icon || 'target',
+                measurementType: next.measurementType,
+                targetValue: next.targetValue,
+                targetUnit: next.targetUnit,
+              },
+              next.stepOverride
+            );
+          }}
+          onRequestEdit={(task) => setEditingTask(task)}
+          onConfirmDelete={handleDeleteTask}
+        />
+      )}
+      {editingTask && (
+        <EditTaskSheet
+          open={Boolean(editingTask)}
+          task={editingTask}
+          isBasePlan={isBasePlan}
+          planName={currentPlanName}
+          stepOverride={editingTaskStepOverride}
+          onClose={() => setEditingTask(null)}
+          onSave={handleSaveTaskPatch}
         />
       )}
     </div>

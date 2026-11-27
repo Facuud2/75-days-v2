@@ -2,31 +2,17 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Activity,
   AlertTriangle,
-  ArrowLeft,
-  Award,
-  Bike,
   Check,
   CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
-  Clock,
-  Dumbbell,
   Feather,
   Flame,
-  Footprints,
   Gauge,
-  Home,
-  LayoutList,
+  ListChecks,
   Minus,
-  Pencil,
   Plus,
   Sparkles,
-  Square,
-  Trees,
   Trophy,
-  Waves,
   X,
   Zap,
 } from 'lucide-react';
@@ -38,13 +24,17 @@ import { useWakeLock } from '@/hooks/useWakeLock';
 import { healthService, WorkoutEntryRecord } from '@/lib/api/health';
 import { loadExerciseCatalog, type CatalogExercise } from '@/lib/api/exerciseCatalog';
 import { getLocalDateString } from '@/lib/utils/date';
-import { formatDurationClock } from '@/lib/constants/fitness';
-import ExerciseCatalogBrowser from './ExerciseCatalogBrowser';
+import { formatDurationClock, formatMuscleLabel } from '@/lib/constants/fitness';
 import ExerciseDetailSheet from './ExerciseDetailSheet';
 import WorkoutHudHeader from './WorkoutHudHeader';
-import ActiveExerciseCard from './ActiveExerciseCard';
+import WorkoutSetupWizard from './WorkoutSetupWizard';
+import ActiveExerciseCard, { type GuidedRestState } from './ActiveExerciseCard';
 import CardioLiveView from './CardioLiveView';
-import RestTimerPill from './RestTimerPill';
+import {
+  LiveWorkoutActivityRings,
+  WorkoutSummaryRingsCard,
+} from './WorkoutActivityRings';
+import { buildWorkoutSummaryRings } from '@/lib/utils/workoutSummaryMetrics';
 
 function playRestCompleteCue() {
   try {
@@ -73,15 +63,6 @@ function playRestCompleteCue() {
   }
 }
 
-const OUTDOOR_QUICK_ACTIVITIES = [
-  { sport: 'walking', label: 'Caminar', subtitle: 'Paseo o caminata al aire libre', icon: Activity },
-  { sport: 'running', label: 'Trotar / Correr', subtitle: 'Trote o carrera en calle o parque', icon: Footprints },
-  { sport: 'cycling', label: 'Ciclismo', subtitle: 'Bicicleta en ruta o ciudad', icon: Bike },
-  { sport: 'swimming', label: 'Natación', subtitle: 'Piscina o aguas abiertas', icon: Waves },
-  { sport: 'yoga', label: 'Yoga / Movilidad', subtitle: 'Estiramiento y movilidad al aire libre', icon: Sparkles },
-  { sport: 'other', label: 'Actividad libre', subtitle: 'Fútbol, senderismo, patín...', icon: Flame },
-] as const;
-
 const FEELING_OPTIONS = [
   { key: 'low', label: 'Suave', intensity: 'low' as const, icon: Feather },
   { key: 'easy', label: 'Cómodo', intensity: 'medium' as const, icon: Sparkles },
@@ -96,7 +77,6 @@ export default function LiveWorkoutOverlay() {
     isMinimized,
     isPreStartPickerOpen,
     sessionMode,
-    environment,
     startedAt,
     title,
     sport,
@@ -111,18 +91,11 @@ export default function LiveWorkoutOverlay() {
     startCardioWorkout,
     startFreeWorkout,
     setMinimized,
-    setTitle,
     setIntensity,
     setDistanceKm,
     setNotes,
     setKeepScreenAwake,
-    addExercises,
-    removeExercise,
-    updateExerciseRest,
-    updateExerciseNotes,
     addSet,
-    removeSet,
-    updateSet,
     toggleSetComplete,
     hydratePreviousSets,
     adjustRestTimer,
@@ -135,10 +108,6 @@ export default function LiveWorkoutOverlay() {
   const profileData = useHealthStore((s) => s.profileData);
 
   const [now, setNow] = useState(() => Date.now());
-  const [preStartStep, setPreStartStep] = useState<'environment' | 'exercise'>('environment');
-  const [preStartEnv, setPreStartEnv] = useState<'gym' | 'home' | 'outdoor' | null>(null);
-  const [preStartTitle, setPreStartTitle] = useState('');
-  const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [isFinishConfirmOpen, setIsFinishConfirmOpen] = useState(false);
   const [overrideDurationMin, setOverrideDurationMin] = useState<number>(1);
   const [isFinishing, setIsFinishing] = useState(false);
@@ -147,12 +116,20 @@ export default function LiveWorkoutOverlay() {
   const [catalogMap, setCatalogMap] = useState<Map<string, CatalogExercise>>(() => new Map());
   const [imageBaseUrl, setImageBaseUrl] = useState<string | undefined>(undefined);
   const [inspectedExercise, setInspectedExercise] = useState<CatalogExercise | null>(null);
-  const [viewMode, setViewMode] = useState<'focus' | 'list'>('focus');
+  const [isListSheetOpen, setIsListSheetOpen] = useState(false);
   const [activeExerciseIndex, setActiveExerciseIndex] = useState(0);
   const [selectedFeeling, setSelectedFeeling] = useState<string>('solid');
+  const [justConfirmedSetNumber, setJustConfirmedSetNumber] = useState<number | null>(null);
+  const [transitionTargetIndex, setTransitionTargetIndex] = useState<number | null>(null);
+  const [lastCompletedSet, setLastCompletedSet] = useState<{
+    uid: string;
+    setId: string;
+    prevIndex: number;
+  } | null>(null);
 
   const hydratedIdsRef = useRef<Set<string>>(new Set());
   const restNotifiedRef = useRef<number | null>(null);
+  const confirmTimeoutRef = useRef<number | null>(null);
 
   const isVisible = isActive && !isMinimized;
   const wakeLock = useWakeLock(isVisible && keepScreenAwake);
@@ -198,27 +175,6 @@ export default function LiveWorkoutOverlay() {
     };
   }, [isVisible, completedSummary, isPreStartPickerOpen]);
 
-  const handleClosePreStart = () => {
-    setPreStartStep('environment');
-    setPreStartEnv(null);
-    setPreStartTitle('');
-    closePreStartPicker();
-  };
-
-  useEffect(() => {
-    if (!isPreStartPickerOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setPreStartStep('environment');
-        setPreStartEnv(null);
-        setPreStartTitle('');
-        closePreStartPicker();
-      }
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [isPreStartPickerOpen, closePreStartPicker]);
-
   useEffect(() => {
     if (!isActive || exercises.length === 0) return;
     const missingIds = [
@@ -245,8 +201,20 @@ export default function LiveWorkoutOverlay() {
   useEffect(() => {
     if (!isActive) {
       hydratedIdsRef.current.clear();
+      setTransitionTargetIndex(null);
+      setLastCompletedSet(null);
+      setJustConfirmedSetNumber(null);
+      setIsListSheetOpen(false);
     }
   }, [isActive]);
+
+  useEffect(() => {
+    return () => {
+      if (confirmTimeoutRef.current) {
+        window.clearTimeout(confirmTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const showConfirmDiscard = isActive && confirmDiscard;
   const showFinishConfirm = isActive && isFinishConfirmOpen;
@@ -256,10 +224,15 @@ export default function LiveWorkoutOverlay() {
     if (restEndsAt && restRemainingSec === 0 && restNotifiedRef.current !== restEndsAt) {
       restNotifiedRef.current = restEndsAt;
       playRestCompleteCue();
-      toast.success('¡Descanso terminado! Siguiente serie', { duration: 2500 });
+      if (transitionTargetIndex !== null) {
+        setActiveExerciseIndex(transitionTargetIndex);
+        setTransitionTargetIndex(null);
+      }
+      setLastCompletedSet(null);
+      toast.success('¡Descanso terminado! Siguiente serie', { duration: 2200 });
       clearRestTimer();
     }
-  }, [restEndsAt, restRemainingSec, clearRestTimer]);
+  }, [restEndsAt, restRemainingSec, clearRestTimer, transitionTargetIndex]);
 
   const elapsedSec = startedAt ? Math.max(0, Math.floor((now - startedAt) / 1000)) : 0;
   const elapsedMin = Math.floor(elapsedSec / 60);
@@ -267,16 +240,15 @@ export default function LiveWorkoutOverlay() {
   const liveMetrics = useMemo(() => {
     let completedSets = 0;
     let totalSets = 0;
-    let volumeKg = 0;
+    let completedReps = 0;
     for (const ex of exercises) {
       for (const s of ex.sets) {
         totalSets += 1;
         if (s.completed) {
           completedSets += 1;
-          if (s.setType !== 'warmup') {
-            const w = Number(s.weightKg) || 0;
-            const r = Number(s.reps) || 0;
-            if (w > 0 && r > 0) volumeKg += w * r;
+          const parsedReps = Number.parseInt(s.reps, 10);
+          if (Number.isFinite(parsedReps) && parsedReps > 0) {
+            completedReps += parsedReps;
           }
         }
       }
@@ -284,23 +256,9 @@ export default function LiveWorkoutOverlay() {
     return {
       completedSets,
       totalSets,
-      volumeKg: Math.round(volumeKg),
+      completedReps,
     };
   }, [exercises]);
-
-  const handleAddPicked = (picked: CatalogExercise[]) => {
-    addExercises(
-      picked.map((ex) => ({
-        exerciseId: ex.id,
-        exerciseName: ex.name,
-        primaryMuscle: ex.primaryMuscle,
-        equipment: ex.equipment,
-        targetSets: 3,
-        defaultRestSec: 90,
-      }))
-    );
-    setIsPickerOpen(false);
-  };
 
   const canSaveSession =
     sessionMode === 'cardio' || liveMetrics.completedSets > 0 || elapsedSec >= 30;
@@ -336,90 +294,77 @@ export default function LiveWorkoutOverlay() {
     }
   };
 
-  // Post-workout celebration summary (Peak-End Rule)
+  // Post-workout celebration summary (Peak-End Rule + Interactive Apple Activity Rings)
   if (completedSummary) {
-    const prs = completedSummary.personalRecords || [];
+    const summaryModel = buildWorkoutSummaryRings(completedSummary, {
+      weightKg: profileData?.user?.currentWeight,
+      heightCm: profileData?.user?.height,
+      goalMinutes: 45,
+    });
     const meetsChallenge = completedSummary.durationMin >= 45;
+    const prCount = completedSummary.personalRecords?.length || 0;
+
     return (
       <div
-        className="fixed inset-0 z-[130] flex items-center justify-center bg-black/85 p-4 backdrop-blur-md"
+        className="fixed inset-0 z-[130] flex items-center justify-center bg-black/85 p-4 backdrop-blur-md [@media(prefers-reduced-transparency:reduce)]:bg-black/95 [@media(prefers-reduced-transparency:reduce)]:backdrop-blur-none"
         role="dialog"
         aria-modal="true"
         aria-labelledby="workout-complete-title"
       >
-        <div className="w-full max-w-md overflow-hidden rounded-[28px] border border-zinc-800 bg-zinc-950 p-6 shadow-2xl">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-500 dark:text-emerald-400">
-            <Trophy className="h-8 w-8" />
-          </div>
-          <h2
-            id="workout-complete-title"
-            className="mt-4 text-center text-2xl font-bold tracking-tight text-white"
-          >
-            ¡Entrenamiento guardado!
-          </h2>
-          <p className="mt-1 text-center text-sm text-zinc-400">
-            {completedSummary.title || 'Sesión de fuerza'}
-          </p>
+        <div className="w-full max-w-md overflow-hidden rounded-[24px] border border-white/[0.08] bg-zinc-950 p-4 shadow-2xl sm:p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.06em] text-emerald-500 dark:text-emerald-400">
+                <Trophy className="h-3.5 w-3.5 shrink-0" strokeWidth={2.25} aria-hidden="true" />
+                Sesión completada
+              </div>
+              <h2
+                id="workout-complete-title"
+                className="mt-1 text-[21px] font-bold leading-tight tracking-[-0.02em] text-white sm:text-[22px]"
+              >
+                ¡Entrenamiento guardado!
+              </h2>
+              <p className="mt-0.5 truncate text-[13px] text-zinc-400">
+                {completedSummary.title || 'Sesión de fuerza'}
+              </p>
+            </div>
 
-          <div className="mt-6 grid grid-cols-3 gap-2.5">
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-3 text-center">
-              <Clock className="mx-auto h-4 w-4 text-rose-600 dark:text-rose-400" />
-              <p className="mt-1 text-lg font-bold text-white tabular-nums">
-                {completedSummary.durationMin}m
-              </p>
-              <p className="text-[11px] text-zinc-400">Duración</p>
-            </div>
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-3 text-center">
-              <Dumbbell className="mx-auto h-4 w-4 text-emerald-500 dark:text-emerald-400" />
-              <p className="mt-1 text-lg font-bold text-white tabular-nums">
-                {Math.round(completedSummary.loadVolumeKg || 0)}
-              </p>
-              <p className="text-[11px] text-zinc-400">Peso movido (kg)</p>
-            </div>
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-3 text-center">
-              <Flame className="mx-auto h-4 w-4 text-amber-500 dark:text-amber-400" />
-              <p className="mt-1 text-lg font-bold text-white tabular-nums">
-                {Math.round(completedSummary.caloriesBurned)}
-              </p>
-              <p className="text-[11px] text-zinc-400">kcal est.</p>
-            </div>
+            <span
+              className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold tabular-nums ${
+                summaryModel.closedCount === 3
+                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-[#92E82A]'
+                  : 'border border-white/[0.08] bg-zinc-900/80 text-zinc-300'
+              }`}
+            >
+              {summaryModel.closedCount === 3 && (
+                <Check className="h-3 w-3" strokeWidth={3} aria-hidden="true" />
+              )}
+              {summaryModel.closedCount}/3 anillos
+            </span>
           </div>
 
-          {meetsChallenge && (
-            <div className="mt-4 flex items-center gap-2.5 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-xs font-semibold text-emerald-600 dark:text-emerald-300">
-              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500 dark:text-emerald-400" />
-              Meta diaria de 45 min del reto 75 Days cumplida hoy.
+          <WorkoutSummaryRingsCard model={summaryModel} />
+
+          {prCount > 0 && (
+            <div className="mt-3 flex items-center gap-2 rounded-[14px] border border-amber-500/25 bg-amber-500/10 px-3.5 py-2.5 text-xs font-semibold text-amber-600 dark:text-amber-300">
+              <Sparkles className="h-4 w-4 shrink-0 text-amber-500 dark:text-amber-400" aria-hidden="true" />
+              {prCount === 1
+                ? `Nuevo récord personal en ${completedSummary.personalRecords?.[0]?.exerciseName}`
+                : `${prCount} nuevos récords personales en esta sesión`}
             </div>
           )}
 
-          {prs.length > 0 && (
-            <div className="mt-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3.5">
-              <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-300">
-                <Award className="h-4 w-4" />
-                {prs.length === 1
-                  ? '¡Nuevo récord personal!'
-                  : `¡${prs.length} nuevos récords personales!`}
-              </p>
-              <ul className="mt-2 space-y-1.5">
-                {prs.map((pr) => (
-                  <li
-                    key={pr.exerciseId}
-                    className="flex items-center justify-between text-xs text-white"
-                  >
-                    <span className="truncate font-medium">{pr.exerciseName}</span>
-                    <span className="ml-2 shrink-0 font-bold text-amber-500 dark:text-amber-300 tabular-nums">
-                      {pr.previousBest} → {pr.newBest} kg
-                    </span>
-                  </li>
-                ))}
-              </ul>
+          {meetsChallenge && (
+            <div className="mt-3 flex items-center gap-2.5 rounded-[14px] border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-2.5 text-xs font-semibold text-emerald-600 dark:text-emerald-300">
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500 dark:text-emerald-400" aria-hidden="true" />
+              Meta diaria de 45 min del reto 75 Days cumplida hoy.
             </div>
           )}
 
           <button
             type="button"
             onClick={() => setCompletedSummary(null)}
-            className="mt-6 flex min-h-12 w-full cursor-pointer items-center justify-center rounded-2xl bg-rose-600 text-sm font-bold text-[#ffffff] shadow-lg shadow-rose-600/20 transition-transform active:scale-[0.98] hover:bg-rose-700"
+            className="mt-4 flex min-h-12 w-full cursor-pointer select-none touch-manipulation items-center justify-center rounded-[16px] bg-rose-600 text-sm font-bold text-[#ffffff] shadow-lg shadow-rose-600/20 [-webkit-touch-callout:none] transition-transform duration-100 ease-out active:scale-[0.98] hover:bg-rose-700"
           >
             Continuar
           </button>
@@ -428,237 +373,14 @@ export default function LiveWorkoutOverlay() {
     );
   }
 
-  // Pre-start general exercise picker (triggered when pressing "Entrenar ahora")
+  // Step-by-step pre-start setup wizard
   if (isPreStartPickerOpen && !isActive) {
-    const handleConfirmPreStart = (picked: CatalogExercise[]) => {
-      const uniqueZones = [...new Set(picked.map((ex) => ex.bodyZoneLabel))].slice(0, 2);
-      const autoTitle =
-        preStartTitle.trim() ||
-        (uniqueZones.length > 0 ? `Sesión de ${uniqueZones.join(' y ')}` : 'Entrenamiento de hoy');
-
-      const selectedEnv = preStartEnv ?? 'gym';
-      setPreStartStep('environment');
-      setPreStartEnv(null);
-      setPreStartTitle('');
-      startFreeWorkout(
-        picked.map((ex) => ({
-          exerciseId: ex.id,
-          exerciseName: ex.name,
-          primaryMuscle: ex.primaryMuscle,
-          equipment: ex.equipment,
-          targetSets: 3,
-          defaultRestSec: 90,
-        })),
-        autoTitle,
-        selectedEnv
-      );
-    };
-
-    const ENVIRONMENT_CARDS = [
-      {
-        key: 'gym' as const,
-        title: 'En gimnasio',
-        description:
-          'Máquinas de gimnasio, pesas, chalecos y ejercicios físicos como abdominales o dominadas.',
-        icon: Dumbbell,
-      },
-      {
-        key: 'home' as const,
-        title: 'En casa',
-        description:
-          'Ejercicios sin maquinaria: abdominales, plancha, pierna, bandas y peso corporal.',
-        icon: Home,
-      },
-      {
-        key: 'outdoor' as const,
-        title: 'Al aire libre',
-        description: 'Actividades como trotar, caminar, ciclismo, natación y más.',
-        icon: Trees,
-      },
-    ];
-
-    const activeEnvMeta = ENVIRONMENT_CARDS.find((c) => c.key === preStartEnv);
-
     return (
-      <div
-        className="fixed inset-0 z-[120] flex items-end justify-center bg-black/80 backdrop-blur-xs sm:items-center sm:p-4"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="prestart-picker-title"
-        onClick={handleClosePreStart}
-      >
-        <div
-          className="flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-[28px] border border-zinc-800 bg-zinc-950 shadow-2xl sm:rounded-2xl"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="flex items-start justify-between gap-3 border-b border-zinc-900 px-5 py-4">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-rose-700 dark:text-rose-400">
-                {preStartStep === 'environment'
-                  ? 'Paso 1 de 2 · Entorno'
-                  : `Paso 2 de 2 · ${activeEnvMeta?.title ?? 'Ejercicios'}`}
-              </p>
-              <h2
-                id="prestart-picker-title"
-                className="mt-0.5 text-lg font-bold text-white"
-              >
-                {preStartStep === 'environment'
-                  ? '¿Dónde vas a entrenar hoy?'
-                  : preStartEnv === 'outdoor'
-                    ? 'Elige tu actividad al aire libre'
-                    : 'Elige tus ejercicios'}
-              </h2>
-              <p className="mt-0.5 text-xs text-zinc-400">
-                {preStartStep === 'environment'
-                  ? 'Primero selecciona el lugar para mostrarte las opciones adecuadas.'
-                  : activeEnvMeta?.description}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={handleClosePreStart}
-              aria-label="Cerrar selector de ejercicios"
-              className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-900 hover:text-white"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-
-          {preStartStep === 'environment' ? (
-            <div className="flex-1 overflow-y-auto overscroll-contain p-5">
-              <div className="grid gap-3">
-                {ENVIRONMENT_CARDS.map((card) => {
-                  const Icon = card.icon;
-                  return (
-                    <button
-                      key={card.key}
-                      type="button"
-                      onClick={() => {
-                        setPreStartEnv(card.key);
-                        setPreStartStep('exercise');
-                      }}
-                      className="group flex w-full cursor-pointer items-center justify-between gap-4 rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4 text-left transition-all hover:border-rose-600/60 hover:bg-zinc-900 active:scale-[0.99]"
-                    >
-                      <div className="flex items-start gap-3.5">
-                        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-rose-600/15 text-rose-500 transition-colors group-hover:bg-rose-600 group-hover:text-white">
-                          <Icon className="h-5 w-5" />
-                        </span>
-                        <div>
-                          <p className="text-base font-bold text-white">{card.title}</p>
-                          <p className="mt-0.5 text-xs leading-relaxed text-zinc-400">
-                            {card.description}
-                          </p>
-                        </div>
-                      </div>
-                      <ChevronRight className="h-5 w-5 shrink-0 text-zinc-500 transition-transform group-hover:translate-x-0.5 group-hover:text-white" />
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ) : (
-            <>
-              <div className="border-b border-zinc-900 bg-zinc-900/40 px-5 py-3 space-y-2.5">
-                <div className="flex items-center justify-between gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setPreStartStep('environment')}
-                    className="inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-950 px-3 text-xs font-semibold text-zinc-200 transition-colors hover:border-zinc-700 hover:text-white"
-                  >
-                    <ArrowLeft className="h-3.5 w-3.5" />
-                    <span>Cambiar entorno</span>
-                  </button>
-                  {activeEnvMeta && (
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-600/40 bg-rose-600/15 px-3 py-1 text-xs font-bold text-rose-400">
-                      <activeEnvMeta.icon className="h-3.5 w-3.5" />
-                      {activeEnvMeta.title}
-                    </span>
-                  )}
-                </div>
-
-                {preStartEnv !== 'outdoor' && (
-                  <label className="flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 focus-within:border-rose-500">
-                    <Pencil className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
-                    <input
-                      type="text"
-                      maxLength={120}
-                      value={preStartTitle}
-                      onChange={(e) => setPreStartTitle(e.target.value)}
-                      placeholder={
-                        preStartEnv === 'home'
-                          ? 'Nombre de la sesión (opcional, ej: Full body en casa)'
-                          : 'Nombre de la sesión (opcional, ej: Pecho y bíceps)'
-                      }
-                      aria-label="Nombre opcional de la sesión"
-                      className="w-full bg-transparent text-xs font-medium text-white placeholder:text-zinc-500 focus:outline-none"
-                    />
-                  </label>
-                )}
-              </div>
-
-              <div className="flex-1 overflow-y-auto overscroll-contain p-4">
-                {preStartEnv === 'outdoor' ? (
-                  <div className="space-y-3">
-                    <p className="px-1 text-xs text-zinc-400">
-                      Toca una actividad al aire libre para iniciar el cronómetro en vivo sin máquinas ni series.
-                    </p>
-                    <div className="grid grid-cols-2 gap-2.5">
-                      {OUTDOOR_QUICK_ACTIVITIES.map((act) => {
-                        const Icon = act.icon;
-                        return (
-                          <button
-                            key={act.sport}
-                            type="button"
-                            onClick={() => {
-                              setPreStartStep('environment');
-                              setPreStartEnv(null);
-                              startCardioWorkout(act.sport, act.label);
-                            }}
-                            className="flex min-h-[88px] cursor-pointer flex-col items-start justify-between rounded-2xl border border-zinc-800 bg-zinc-900/70 p-3.5 text-left transition-colors hover:border-rose-600/60 hover:bg-zinc-900 active:scale-[0.98]"
-                          >
-                            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-rose-600/15 text-rose-700 dark:text-rose-400">
-                              <Icon className="h-4 w-4" />
-                            </span>
-                            <div className="mt-2">
-                              <p className="text-sm font-bold text-white">{act.label}</p>
-                              <p className="text-[11px] text-zinc-400">{act.subtitle}</p>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : (
-                  <ExerciseCatalogBrowser
-                    key={preStartEnv}
-                    mode="picker"
-                    environment={preStartEnv ?? 'gym'}
-                    onConfirmSelection={handleConfirmPreStart}
-                    confirmLabel={(count) =>
-                      count > 0
-                        ? `Empezar entrenamiento (${count})`
-                        : 'Elige al menos 1 ejercicio'
-                    }
-                    secondaryAction={{
-                      label: 'Empezar vacío',
-                      onClick: () => {
-                        const selectedEnv = preStartEnv ?? 'gym';
-                        const envTitle =
-                          selectedEnv === 'home'
-                            ? 'Entrenamiento en casa'
-                            : 'Entrenamiento en gimnasio';
-                        setPreStartStep('environment');
-                        setPreStartEnv(null);
-                        startFreeWorkout([], preStartTitle.trim() || envTitle, selectedEnv);
-                      },
-                    }}
-                  />
-                )}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
+      <WorkoutSetupWizard
+        onClose={closePreStartPicker}
+        onStartCardio={startCardioWorkout}
+        onStartStrength={startFreeWorkout}
+      />
     );
   }
 
@@ -674,23 +396,131 @@ export default function LiveWorkoutOverlay() {
     )
   );
 
-  const focusedExercise =
-    exercises.find((ex) => ex.sets.some((s) => !s.completed)) || exercises[0] || null;
-  const focusedExerciseUid = focusedExercise?.uid ?? null;
-
-  let nextSetPreview: { exerciseName: string; setNumber: number } | null = null;
-  for (const ex of exercises) {
-    const pendingSet = ex.sets.find((s) => !s.completed);
-    if (pendingSet) {
-      nextSetPreview = { exerciseName: ex.exerciseName, setNumber: pendingSet.setNumber };
-      break;
-    }
-  }
-
   const clampedIndex =
     exercises.length > 0 ? Math.min(activeExerciseIndex, exercises.length - 1) : 0;
-  const currentFocusExercise = exercises[clampedIndex] || null;
-  const isStrengthWithExercises = !(sessionMode === 'cardio' && exercises.length === 0) && exercises.length > 0;
+  const isStrengthWithExercises =
+    !(sessionMode === 'cardio' && exercises.length === 0) && exercises.length > 0;
+  const isResting = Boolean(restEndsAt && restRemainingSec > 0);
+  const isExerciseTransitionRest =
+    isResting && transitionTargetIndex !== null && Boolean(exercises[transitionTargetIndex]);
+
+  // During transition rest between exercises, preview the upcoming exercise directly
+  const displayedIndex =
+    isExerciseTransitionRest && transitionTargetIndex !== null
+      ? transitionTargetIndex
+      : clampedIndex;
+  const displayedExercise = exercises[displayedIndex] || null;
+
+  const exerciseSegments = exercises.map((ex) => ({
+    uid: ex.uid,
+    completedSets: ex.sets.filter((s) => s.completed).length,
+    totalSets: ex.sets.length,
+  }));
+
+  const handleCompleteActiveSet = (uid: string, setId: string, setNumber: number) => {
+    if (justConfirmedSetNumber !== null) return;
+
+    const currentEx = exercises[clampedIndex];
+    if (!currentEx) return;
+
+    const remainingInCurrent = currentEx.sets.filter(
+      (s) => !s.completed && s.id !== setId
+    );
+    const nextUnfinishedAfter = exercises.findIndex(
+      (ex, idx) => idx > clampedIndex && ex.sets.some((s) => !s.completed)
+    );
+    const fallbackUnfinished =
+      nextUnfinishedAfter !== -1
+        ? nextUnfinishedAfter
+        : exercises.findIndex(
+            (ex, idx) => idx !== clampedIndex && ex.sets.some((s) => !s.completed)
+          );
+
+    // Same-frame haptic + 420ms emerald confirmation before transitioning into rest
+    try {
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        navigator.vibrate(12);
+      }
+    } catch {
+      // Haptic feedback is best-effort
+    }
+
+    setJustConfirmedSetNumber(setNumber);
+    confirmTimeoutRef.current = window.setTimeout(() => {
+      setJustConfirmedSetNumber(null);
+      toggleSetComplete(uid, setId);
+      setLastCompletedSet({ uid, setId, prevIndex: clampedIndex });
+
+      if (remainingInCurrent.length > 0) {
+        setTransitionTargetIndex(null);
+      } else if (fallbackUnfinished !== -1) {
+        setTransitionTargetIndex(fallbackUnfinished);
+      } else {
+        // Entire routine completed — skip rest and go straight to finish check-in
+        setTransitionTargetIndex(null);
+        clearRestTimer();
+        handleOpenFinishConfirm();
+      }
+    }, 420);
+  };
+
+  const handleSkipRest = () => {
+    if (transitionTargetIndex !== null) {
+      setActiveExerciseIndex(transitionTargetIndex);
+      setTransitionTargetIndex(null);
+    }
+    setLastCompletedSet(null);
+    clearRestTimer();
+  };
+
+  const handleUndoRest = () => {
+    if (!lastCompletedSet) return;
+    toggleSetComplete(lastCompletedSet.uid, lastCompletedSet.setId);
+    setActiveExerciseIndex(lastCompletedSet.prevIndex);
+    setTransitionTargetIndex(null);
+    setLastCompletedSet(null);
+    clearRestTimer();
+  };
+
+  const handleJumpToExercise = (idx: number) => {
+    if (confirmTimeoutRef.current) {
+      window.clearTimeout(confirmTimeoutRef.current);
+      setJustConfirmedSetNumber(null);
+    }
+    setTransitionTargetIndex(null);
+    setLastCompletedSet(null);
+    clearRestTimer();
+    setActiveExerciseIndex(idx);
+    setIsListSheetOpen(false);
+  };
+
+  const handleAddExtraSet = () => {
+    if (!displayedExercise) return;
+    addSet(displayedExercise.uid);
+    toast.success('Serie añadida', { duration: 1500 });
+  };
+
+  let guidedRest: GuidedRestState | null = null;
+  if (isResting && displayedExercise) {
+    const nextPendingSet = displayedExercise.sets.find((s) => !s.completed);
+    guidedRest = {
+      remainingSec: restRemainingSec,
+      totalSec: restDurationSec,
+      isExerciseTransition: isExerciseTransitionRest,
+      nextLabel: isExerciseTransitionRest
+        ? `Descanso · Siguiente: ${displayedExercise.exerciseName}`
+        : `Descanso · Siguiente: Serie ${nextPendingSet?.setNumber ?? ''}`,
+      skipButtonLabel: isExerciseTransitionRest
+        ? `Empezar ${displayedExercise.exerciseName}`
+        : 'Saltar',
+      canUndo: Boolean(lastCompletedSet),
+      onAddSeconds: adjustRestTimer,
+      onSkip: handleSkipRest,
+      onUndo: handleUndoRest,
+    };
+  }
+
+  const anySheetOpen = Boolean(inspectedExercise || isListSheetOpen || showFinishConfirm);
 
   return (
     <div
@@ -705,11 +535,10 @@ export default function LiveWorkoutOverlay() {
         estimatedKcal={estimatedKcal}
         completedSets={liveMetrics.completedSets}
         totalSets={liveMetrics.totalSets}
-        volumeKg={liveMetrics.volumeKg}
         sessionMode={sessionMode}
-        environment={environment}
         title={title}
-        onChangeTitle={setTitle}
+        exerciseSegments={isStrengthWithExercises ? exerciseSegments : []}
+        activeSegmentIndex={displayedIndex}
         onMinimize={() => setMinimized(true)}
         onOpenFinish={handleOpenFinishConfirm}
         isFinishing={isFinishing}
@@ -718,75 +547,9 @@ export default function LiveWorkoutOverlay() {
         onToggleWakeLock={setKeepScreenAwake}
       />
 
-      {/* Exercise Stepper Strip + Focus/List Toggle */}
-      {isStrengthWithExercises && (
-        <div className="shrink-0 border-b border-white/[0.06] bg-zinc-950/80 px-4 py-2.5">
-          <div className="mx-auto flex max-w-2xl items-center gap-2">
-            <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-              {exercises.map((ex, idx) => {
-                const done = ex.sets.length > 0 && ex.sets.every((s) => s.completed);
-                const isCurrent = viewMode === 'focus' && idx === clampedIndex;
-                return (
-                  <button
-                    key={ex.uid}
-                    type="button"
-                    onClick={() => {
-                      setActiveExerciseIndex(idx);
-                      if (viewMode === 'list') setViewMode('focus');
-                    }}
-                    className={`inline-flex min-h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-colors ${
-                      isCurrent
-                        ? 'bg-rose-600 text-white shadow-sm shadow-rose-600/25'
-                        : done
-                          ? 'bg-emerald-500/15 text-emerald-400'
-                          : 'bg-white/[0.05] text-zinc-400 hover:bg-white/10 hover:text-zinc-200'
-                    }`}
-                  >
-                    {done ? (
-                      <Check className="h-3 w-3 shrink-0" strokeWidth={3} />
-                    ) : (
-                      <span className="tabular-nums opacity-75">{idx + 1}</span>
-                    )}
-                    <span className="max-w-[110px] truncate">{ex.exerciseName}</span>
-                  </button>
-                );
-              })}
-
-              <button
-                type="button"
-                onClick={() => setIsPickerOpen(true)}
-                aria-label="Añadir ejercicio"
-                className="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full border border-dashed border-white/20 text-zinc-400 transition-colors hover:border-rose-500/60 hover:text-rose-400"
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </button>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setViewMode((m) => (m === 'focus' ? 'list' : 'focus'))}
-              aria-label={viewMode === 'focus' ? 'Ver lista completa' : 'Cambiar a modo enfoque'}
-              className="inline-flex min-h-8 shrink-0 cursor-pointer items-center gap-1 rounded-full border border-white/10 bg-zinc-900 px-2.5 text-[11px] font-semibold text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white"
-            >
-              {viewMode === 'focus' ? (
-                <>
-                  <LayoutList className="h-3.5 w-3.5" />
-                  <span>Lista</span>
-                </>
-              ) : (
-                <>
-                  <Square className="h-3 w-3" />
-                  <span>Enfoque</span>
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Main scrollable workout log */}
-      <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4">
-        <div className="mx-auto max-w-2xl space-y-4 pb-6">
+      {/* Main Guided Execution Area */}
+      <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-3">
+        <div className="mx-auto max-w-2xl pb-4">
           {sessionMode === 'cardio' && exercises.length === 0 ? (
             <CardioLiveView
               sport={sport}
@@ -799,127 +562,140 @@ export default function LiveWorkoutOverlay() {
               onChangeIntensity={setIntensity}
               onChangeDistanceKm={setDistanceKm}
               onChangeNotes={setNotes}
-              onOpenExercisePicker={() => setIsPickerOpen(true)}
             />
-          ) : exercises.length === 0 ? (
-            <div className="rounded-3xl border border-dashed border-zinc-800 bg-zinc-900/40 px-6 py-12 text-center">
-              <Dumbbell className="mx-auto h-10 w-10 text-rose-500" />
-              <h3 className="mt-3 text-base font-bold text-white">
-                Añade tu primer ejercicio
-              </h3>
-              <p className="mt-1 text-xs text-zinc-400">
-                Elige del catálogo y guardaremos tus marcas para la próxima sesión.
-              </p>
-              <button
-                type="button"
-                onClick={() => setIsPickerOpen(true)}
-                className="mt-5 inline-flex min-h-12 cursor-pointer items-center gap-2 rounded-2xl bg-rose-600 px-6 text-sm font-bold text-white shadow-lg shadow-rose-600/25 active:scale-95 hover:bg-rose-500"
-              >
-                <Plus className="h-4 w-4" />
-                Elegir ejercicios
-              </button>
-            </div>
-          ) : viewMode === 'focus' && currentFocusExercise ? (
-            <ActiveExerciseCard
-              key={currentFocusExercise.uid}
-              exercise={currentFocusExercise}
-              catalogEntry={catalogMap.get(currentFocusExercise.exerciseId)}
-              imageBaseUrl={imageBaseUrl}
-              isFocused={true}
-              focusMode={true}
-              onInspectExercise={(entry) => setInspectedExercise(entry)}
-              onUpdateRest={updateExerciseRest}
-              onRemoveExercise={removeExercise}
-              onAddSet={addSet}
-              onRemoveSet={removeSet}
-              onUpdateSet={updateSet}
-              onToggleSetComplete={toggleSetComplete}
-              onUpdateNotes={updateExerciseNotes}
-            />
-          ) : (
+          ) : displayedExercise ? (
             <>
-              {exercises.map((exercise) => (
-                <ActiveExerciseCard
-                  key={exercise.uid}
-                  exercise={exercise}
-                  catalogEntry={catalogMap.get(exercise.exerciseId)}
-                  imageBaseUrl={imageBaseUrl}
-                  isFocused={exercise.uid === focusedExerciseUid}
-                  focusMode={false}
-                  onInspectExercise={(entry) => setInspectedExercise(entry)}
-                  onUpdateRest={updateExerciseRest}
-                  onRemoveExercise={removeExercise}
-                  onAddSet={addSet}
-                  onRemoveSet={removeSet}
-                  onUpdateSet={updateSet}
-                  onToggleSetComplete={toggleSetComplete}
-                  onUpdateNotes={updateExerciseNotes}
-                />
-              ))}
+              <ActiveExerciseCard
+                key={displayedExercise.uid}
+                exercise={displayedExercise}
+                catalogEntry={catalogMap.get(displayedExercise.exerciseId)}
+                imageBaseUrl={imageBaseUrl}
+                isFocused={true}
+                focusMode={true}
+                pausePreview={anySheetOpen}
+                justConfirmedSetNumber={justConfirmedSetNumber}
+                guidedRest={guidedRest}
+                onInspectExercise={(entry) => setInspectedExercise(entry)}
+                onToggleSetComplete={toggleSetComplete}
+                onCompleteActiveSet={handleCompleteActiveSet}
+                onOpenFinish={handleOpenFinishConfirm}
+              />
 
-              <button
-                type="button"
-                onClick={() => setIsPickerOpen(true)}
-                className="flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-2xl border border-rose-500/30 bg-rose-500/10 text-sm font-bold text-rose-400 transition-colors hover:bg-rose-500/20 active:scale-[0.98]"
-              >
-                <Plus className="h-4 w-4" />
-                Añadir ejercicio
-              </button>
+              <LiveWorkoutActivityRings
+                completedSets={liveMetrics.completedSets}
+                totalSets={liveMetrics.totalSets}
+                completedReps={liveMetrics.completedReps}
+                elapsedSec={elapsedSec}
+                estimatedKcal={estimatedKcal}
+                currentExerciseName={displayedExercise.exerciseName}
+                currentExerciseCompletedSets={
+                  displayedExercise.sets.filter((s) => s.completed).length
+                }
+                currentExerciseTotalSets={displayedExercise.sets.length}
+              />
             </>
-          )}
+          ) : null}
         </div>
       </div>
 
-      {/* Floating Rest Timer Pill in Thumb Zone */}
-      {restEndsAt && restRemainingSec > 0 && (
-        <RestTimerPill
-          remainingSec={restRemainingSec}
-          totalSec={restDurationSec}
-          nextSetPreview={nextSetPreview}
-          onAdjust={adjustRestTimer}
-          onSkip={clearRestTimer}
-        />
-      )}
-
-      {/* Thumb-Zone Focus Mode Navigation Bar */}
-      {isStrengthWithExercises && viewMode === 'focus' && !(restEndsAt && restRemainingSec > 0) && (
-        <div className="shrink-0 border-t border-white/[0.08] bg-zinc-950/95 px-4 pb-[calc(0.85rem+env(safe-area-inset-bottom,0px))] pt-3 backdrop-blur-md">
-          <div className="mx-auto flex max-w-2xl items-center justify-between gap-3">
+      {/* Minimal Thumb-Zone Bottom Dock (Disciplined Frosted Glass + Safe Area) */}
+      {isStrengthWithExercises && (
+        <div className="shrink-0 border-t border-white/[0.08] bg-zinc-950/85 px-4 pb-[calc(0.85rem+env(safe-area-inset-bottom,0px))] pt-3 backdrop-blur-xl backdrop-saturate-[180%] [@media(prefers-reduced-transparency:reduce)]:bg-zinc-950 [@media(prefers-reduced-transparency:reduce)]:backdrop-blur-none">
+          <div className="mx-auto flex max-w-2xl items-center gap-2">
             <button
               type="button"
-              disabled={clampedIndex === 0}
-              onClick={() => setActiveExerciseIndex((i) => Math.max(0, i - 1))}
-              className="inline-flex min-h-12 cursor-pointer items-center gap-1 rounded-2xl border border-white/10 bg-zinc-900 px-4 text-xs font-bold text-zinc-200 transition-transform active:scale-95 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-35"
+              onClick={handleAddExtraSet}
+              className="inline-flex min-h-11 shrink-0 cursor-pointer select-none touch-manipulation items-center justify-center gap-1.5 rounded-[14px] border border-white/[0.08] bg-zinc-900 px-4 text-xs font-semibold text-zinc-200 [-webkit-touch-callout:none] transition-transform duration-100 ease-out active:scale-[0.97] hover:bg-zinc-800"
             >
-              <ChevronLeft className="h-4 w-4" />
-              Anterior
+              <Plus className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+              Añadir
             </button>
 
-            <span className="text-xs font-semibold text-zinc-400 tabular-nums">
-              {clampedIndex + 1} / {exercises.length}
-            </span>
+            <button
+              type="button"
+              onClick={() => setIsListSheetOpen(true)}
+              className="inline-flex min-h-11 flex-1 cursor-pointer select-none touch-manipulation items-center justify-between rounded-[14px] border border-white/[0.08] bg-zinc-900 px-4 text-xs font-semibold text-zinc-200 [-webkit-touch-callout:none] transition-transform duration-100 ease-out active:scale-[0.98] hover:bg-zinc-800"
+            >
+              <span className="inline-flex items-center gap-2">
+                <ListChecks className="h-4 w-4 text-zinc-400" strokeWidth={2} aria-hidden="true" />
+                Rutina
+              </span>
+              <span className="text-[12px] font-bold text-zinc-400 tabular-nums">
+                {displayedIndex + 1}/{exercises.length}
+              </span>
+            </button>
+          </div>
+        </div>
+      )}
 
-            {clampedIndex < exercises.length - 1 ? (
+      {/* Exercise List Sheet — iOS Inset Grouped List */}
+      {isListSheetOpen && (
+        <div
+          className="fixed inset-0 z-[125] flex items-end justify-center bg-black/75 backdrop-blur-xs sm:items-center sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="exercise-list-title"
+          onClick={() => setIsListSheetOpen(false)}
+        >
+          <div
+            className="max-h-[75dvh] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-[28px] border border-white/[0.08] bg-zinc-950 px-4 pt-2.5 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] shadow-2xl sm:rounded-2xl sm:pt-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* iOS Sheet Grabber */}
+            <div className="mx-auto mb-2 h-1 w-9 rounded-full bg-zinc-700/80 sm:hidden" aria-hidden="true" />
+
+            <div className="flex items-center justify-between gap-2 pb-3">
+              <h3 id="exercise-list-title" className="text-[17px] font-semibold tracking-[-0.015em] text-white">
+                Rutina
+              </h3>
               <button
                 type="button"
-                onClick={() =>
-                  setActiveExerciseIndex((i) => Math.min(exercises.length - 1, i + 1))
-                }
-                className="inline-flex min-h-12 cursor-pointer items-center gap-1 rounded-2xl bg-rose-600 px-5 text-xs font-bold text-white shadow-lg shadow-rose-600/20 transition-transform active:scale-95 hover:bg-rose-500"
+                onClick={() => setIsListSheetOpen(false)}
+                aria-label="Cerrar lista de ejercicios"
+                className="flex h-11 w-11 cursor-pointer select-none touch-manipulation items-center justify-center rounded-full bg-zinc-900 text-zinc-400 [-webkit-touch-callout:none] transition-transform duration-100 active:scale-95 hover:bg-zinc-800 hover:text-white"
               >
-                Siguiente
-                <ChevronRight className="h-4 w-4" />
+                <X className="h-5 w-5" strokeWidth={2} aria-hidden="true" />
               </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleOpenFinishConfirm}
-                className="inline-flex min-h-12 cursor-pointer items-center gap-1.5 rounded-2xl bg-emerald-600 px-5 text-xs font-bold text-white shadow-lg shadow-emerald-600/20 transition-transform active:scale-95 hover:bg-emerald-500"
-              >
-                <Check className="h-4 w-4" />
-                Finalizar
-              </button>
-            )}
+            </div>
+
+            <div className="divide-y divide-white/[0.06] overflow-hidden rounded-[16px] border border-white/[0.08] bg-zinc-900/75">
+              {exercises.map((ex, idx) => {
+                const done = ex.sets.filter((s) => s.completed).length;
+                const total = ex.sets.length;
+                const allDone = total > 0 && done === total;
+                const isCurrent = idx === displayedIndex;
+
+                return (
+                  <button
+                    key={ex.uid}
+                    type="button"
+                    onClick={() => handleJumpToExercise(idx)}
+                    className={`flex min-h-[56px] w-full cursor-pointer select-none touch-manipulation items-center justify-between gap-3 px-4 py-3 text-left [-webkit-touch-callout:none] transition-colors active:bg-white/[0.06] ${
+                      isCurrent ? 'bg-rose-500/10' : 'hover:bg-white/[0.03]'
+                    }`}
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-[15px] font-semibold text-white">
+                        {idx + 1}. {ex.exerciseName}
+                      </p>
+                      <p className="mt-0.5 text-[12px] text-zinc-400 tabular-nums">
+                        {formatMuscleLabel(ex.primaryMuscle)} · {done}/{total} series
+                      </p>
+                    </div>
+
+                    {allDone ? (
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-[#ffffff]">
+                        <Check className="h-3.5 w-3.5" strokeWidth={2.75} aria-hidden="true" />
+                      </span>
+                    ) : isCurrent ? (
+                      <span className="shrink-0 rounded-full bg-rose-500/15 px-2.5 py-0.5 text-[11px] font-bold text-rose-400">
+                        Actual
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
@@ -951,7 +727,7 @@ export default function LiveWorkoutOverlay() {
                       ¿Descartar este entrenamiento?
                     </h3>
                     <p className="mt-1 text-xs leading-relaxed text-zinc-400">
-                      Si lo descartas se perderá todo el progreso de esta sesión (series, pesos y tiempo registrado). Esta acción no se puede deshacer.
+                      Si lo descartas se perderá todo el progreso de esta sesión (series y tiempo registrado). Esta acción no se puede deshacer.
                     </p>
                   </div>
                 </div>
@@ -986,7 +762,7 @@ export default function LiveWorkoutOverlay() {
                 <p className="mt-1 text-xs text-zinc-400">
                   {sessionMode === 'cardio' && exercises.length === 0
                     ? `${title || 'Actividad'} · ${formatDurationClock(elapsedSec)} transcurridos.`
-                    : `${liveMetrics.completedSets} de ${liveMetrics.totalSets} series · ${liveMetrics.volumeKg.toLocaleString('es-ES')} kg`}
+                    : `${liveMetrics.completedSets} de ${liveMetrics.totalSets} series completadas`}
                 </p>
 
                 {/* Effort / Feeling Check-in (Peak-End) */}
@@ -1058,7 +834,7 @@ export default function LiveWorkoutOverlay() {
                       onChange={(e) => setNotes(e.target.value)}
                       placeholder="Notas opcionales de la sesión..."
                       aria-label="Notas opcionales de la sesión"
-                      className="w-full resize-none rounded-2xl border border-white/[0.07] bg-zinc-900/60 px-3.5 py-2.5 text-xs text-white placeholder:text-zinc-500 focus:border-rose-500 focus:outline-none"
+                      className="w-full resize-none rounded-2xl border border-white/[0.07] bg-zinc-900/60 px-3.5 py-2.5 text-base sm:text-xs text-white placeholder:text-zinc-500 focus:border-rose-500 focus:outline-none"
                     />
                   </div>
                 )}
@@ -1102,44 +878,6 @@ export default function LiveWorkoutOverlay() {
                 </div>
               </>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* Exercise Picker Modal */}
-      {isPickerOpen && (
-        <div
-          className="fixed inset-0 z-[125] flex items-end justify-center bg-black/80 backdrop-blur-xs sm:items-center sm:p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Seleccionar ejercicios"
-          onClick={() => setIsPickerOpen(false)}
-        >
-          <div
-            className="flex max-h-[90dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-[28px] border border-zinc-800 bg-zinc-950 shadow-2xl sm:rounded-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-zinc-900 px-5 py-4">
-              <h3 className="text-base font-bold text-white">Añadir ejercicios</h3>
-              <button
-                type="button"
-                onClick={() => setIsPickerOpen(false)}
-                aria-label="Cerrar selector"
-                className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-900 hover:text-white"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto overscroll-contain p-4">
-              <ExerciseCatalogBrowser
-                mode="picker"
-                environment={
-                  environment === 'home' ? 'home' : environment === 'gym' ? 'gym' : 'all'
-                }
-                onConfirmSelection={handleAddPicked}
-                onClosePicker={() => setIsPickerOpen(false)}
-              />
-            </div>
           </div>
         </div>
       )}

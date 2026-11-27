@@ -14,9 +14,11 @@ export interface NotificationPreferences {
 interface SettingsState {
   notifications: NotificationPreferences;
   selectedPlan: PlanId;
+  goalStepOverrides: Record<string, number>;
   setNotification: (key: NotificationKey, value: boolean) => void;
   toggleNotification: (key: NotificationKey) => void;
   setSelectedPlan: (plan: PlanId) => void;
+  setGoalStepOverride: (key: string, step: number | null) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -29,6 +31,7 @@ export const useSettingsStore = create<SettingsState>()(
         weekly: false,
       },
       selectedPlan: 'free',
+      goalStepOverrides: {},
       setNotification: (key, value) =>
         set((state) => ({
           notifications: { ...state.notifications, [key]: value },
@@ -41,10 +44,30 @@ export const useSettingsStore = create<SettingsState>()(
           },
         })),
       setSelectedPlan: (plan) => set({ selectedPlan: plan }),
+      setGoalStepOverride: (key, step) =>
+        set((state) => {
+          const next = { ...(state.goalStepOverrides || {}) };
+          if (step === null || !Number.isFinite(step) || step <= 0) {
+            delete next[key];
+          } else {
+            next[key] = Math.round(step * 100) / 100;
+          }
+          return { goalStepOverrides: next };
+        }),
     }),
     {
       name: 'settings-preferences-storage',
-      version: 1,
+      version: 2,
+      migrate: (persisted: any) => ({
+        notifications: persisted?.notifications ?? {
+          daily: true,
+          streak: true,
+          achievements: false,
+          weekly: false,
+        },
+        selectedPlan: persisted?.selectedPlan ?? 'free',
+        goalStepOverrides: persisted?.goalStepOverrides ?? {},
+      }),
     }
   )
 );

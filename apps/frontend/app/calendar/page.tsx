@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -136,6 +136,18 @@ export default function CalendarView() {
   const selectedDay = selectedDayNumber ? days[selectedDayNumber - 1] : undefined;
   const progress = Math.min(100, Math.round(((currentDay || summary.finished) / 75) * 100));
 
+  const handleCloseSheet = useCallback(() => {
+    setSelectedDayNumber(null);
+  }, []);
+
+  const handlePreviousDay = useCallback(() => {
+    setSelectedDayNumber((prev) => (prev && prev > 1 ? prev - 1 : prev));
+  }, []);
+
+  const handleNextDay = useCallback(() => {
+    setSelectedDayNumber((prev) => (prev && prev < 75 ? prev + 1 : prev));
+  }, []);
+
   const devToggle = IS_DEV_BUILD ? (
     <DevDatasetPicker
       selected={devDataset}
@@ -197,7 +209,14 @@ export default function CalendarView() {
 
       {devToggle}
 
-      {selectedDay && <DayDetailsSheet day={selectedDay} onClose={() => setSelectedDayNumber(null)} onPrevious={selectedDay.dayNumber > 1 ? () => setSelectedDayNumber(selectedDay.dayNumber - 1) : undefined} onNext={selectedDay.dayNumber < 75 ? () => setSelectedDayNumber(selectedDay.dayNumber + 1) : undefined} />}
+      {selectedDay && (
+        <DayDetailsSheet
+          day={selectedDay}
+          onClose={handleCloseSheet}
+          onPrevious={selectedDay.dayNumber > 1 ? handlePreviousDay : undefined}
+          onNext={selectedDay.dayNumber < 75 ? handleNextDay : undefined}
+        />
+      )}
     </div>
   );
 }
