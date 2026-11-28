@@ -56,6 +56,15 @@ function playRestCompleteCue() {
     gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.28);
     osc.connect(gain);
     gain.connect(ctx.destination);
+    osc.onended = () => {
+      try {
+        osc.disconnect();
+        gain.disconnect();
+        void ctx.close().catch(() => {});
+      } catch {
+        // Ignore cleanup errors
+      }
+    };
     osc.start();
     osc.stop(ctx.currentTime + 0.3);
   } catch {
@@ -201,10 +210,13 @@ export default function LiveWorkoutOverlay() {
   useEffect(() => {
     if (!isActive) {
       hydratedIdsRef.current.clear();
-      setTransitionTargetIndex(null);
-      setLastCompletedSet(null);
-      setJustConfirmedSetNumber(null);
-      setIsListSheetOpen(false);
+      const timer = window.setTimeout(() => {
+        setTransitionTargetIndex(null);
+        setLastCompletedSet(null);
+        setJustConfirmedSetNumber(null);
+        setIsListSheetOpen(false);
+      }, 0);
+      return () => window.clearTimeout(timer);
     }
   }, [isActive]);
 
@@ -224,13 +236,17 @@ export default function LiveWorkoutOverlay() {
     if (restEndsAt && restRemainingSec === 0 && restNotifiedRef.current !== restEndsAt) {
       restNotifiedRef.current = restEndsAt;
       playRestCompleteCue();
-      if (transitionTargetIndex !== null) {
-        setActiveExerciseIndex(transitionTargetIndex);
-        setTransitionTargetIndex(null);
-      }
-      setLastCompletedSet(null);
+      const nextTarget = transitionTargetIndex;
       toast.success('¡Descanso terminado! Siguiente serie', { duration: 2200 });
       clearRestTimer();
+      const timer = window.setTimeout(() => {
+        if (nextTarget !== null) {
+          setActiveExerciseIndex(nextTarget);
+          setTransitionTargetIndex(null);
+        }
+        setLastCompletedSet(null);
+      }, 0);
+      return () => window.clearTimeout(timer);
     }
   }, [restEndsAt, restRemainingSec, clearRestTimer, transitionTargetIndex]);
 

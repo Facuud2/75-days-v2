@@ -66,9 +66,14 @@ function normalizeText(value: string): string {
     .trim();
 }
 
+const SAFE_MEDIA_PATH_REGEX =
+  /^[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_.-]+)*\.(?:jpg|jpeg|png|webp|gif)$/i;
+const MAX_QUERY_LEN = 100;
+const MAX_FILTER_LEN = 50;
+
 function isOriginAllowed(origin: string | undefined, allowedRaw?: string): string {
   if (!origin) return '*';
-  if (!allowedRaw) return origin;
+  if (!allowedRaw) return 'http://localhost:3000';
 
   const patterns = allowedRaw
     .split(',')
@@ -85,7 +90,7 @@ function isOriginAllowed(origin: string | undefined, allowedRaw?: string): strin
     }
   }
 
-  return patterns[0] || '*';
+  return patterns[0] || 'http://localhost:3000';
 }
 
 function resolveImageBaseUrl(env?: Env): string {
@@ -93,6 +98,18 @@ function resolveImageBaseUrl(env?: Env): string {
 }
 
 const app = new Hono<{ Bindings: Env }>();
+
+app.onError((err, c) => {
+  console.error('[exercise-api] Unhandled error:', err);
+  return c.json({ error: 'Internal server error' }, 500);
+});
+
+app.use('*', async (c, next) => {
+  await next();
+  c.header('X-Content-Type-Options', 'nosniff');
+  c.header('X-Frame-Options', 'DENY');
+  c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+});
 
 app.use(
   '*',
@@ -138,7 +155,7 @@ app.get('/v1/catalog/bundle', async (c) => {
   c.header('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
   c.header('X-Catalog-Version', CATALOG.version);
 
-  if (ifNoneMatch === etag) {
+  if (ifNoneMatch && (ifNoneMatch === etag || ifNoneMatch.includes(etag))) {
     return c.body(null, 304);
   }
 
@@ -163,12 +180,16 @@ app.get('/v1/catalog/bundle', async (c) => {
  * Server-side filtered & paginated search endpoint for direct REST clients.
  */
 app.get('/v1/exercises', (c) => {
-  const q = normalizeText(c.req.query('q') || '');
-  const bodyZone = normalizeText(c.req.query('bodyZone') || '');
-  const muscle = normalizeText(c.req.query('muscle') || '');
-  const equipment = normalizeText(c.req.query('equipment') || '');
-  const category = normalizeText(c.req.query('category') || '');
-  const level = normalizeText(c.req.query('level') || '');
+  const rawQ = c.req.query('q') || '';
+  if (rawQ.length > MAX_QUERY_LEN) {
+    return c.json({ error: 'Query parameter too long (max 100 chars)' }, 400);
+  }
+  const q = normalizeText(rawQ);
+  const bodyZone = normalizeText((c.req.query('bodyZone') || '').slice(0, MAX_FILTER_LEN));
+  const muscle = normalizeText((c.req.query('muscle') || '').slice(0, MAX_FILTER_LEN));
+  const equipment = normalizeText((c.req.query('equipment') || '').slice(0, MAX_FILTER_LEN));
+  const category = normalizeText((c.req.query('category') || '').slice(0, MAX_FILTER_LEN));
+  const level = normalizeText((c.req.query('level') || '').slice(0, MAX_FILTER_LEN));
 
   const rawLimit = Number(c.req.query('limit') ?? 40);
   const rawOffset = Number(c.req.query('offset') ?? 0);
@@ -197,7 +218,7 @@ app.get('/v1/exercises', (c) => {
     filtered = filtered.filter((e) => normalizeText(e.level) === level);
   }
   if (q) {
-    const tokens = q.split(/\s+/).filter(Boolean);
+    const tokens = q.split(/\s+/).filter(Boolean).slice(0, 8);
     filtered = filtered.filter((e) => {
       const haystack = normalizeText(
         `${e.name} ${e.nameEn} ${e.primaryMuscleLabel} ${e.bodyZoneLabel} ${e.equipmentLabel}`
@@ -241,23 +262,38 @@ app.get('/v1/exercises/:id', (c) => {
  * to the configured public CDN base URL.
  */
 app.get('/v1/media/*', async (c) => {
-  const assetPath = c.req.path.replace(/^\/v1\/media\//, '').replace(/^\/+/, '');
-  if (!assetPath || assetPath.includes('..')) {
+  const rawAssetPath = c.req.path.replace(/^\/v1\/media\//, '').replace(/^\/+/, '');
+  let decodedPath: string;
+  try {
+    decodedPath = decodeURIComponent(rawAssetPath);
+  } catch {
+    return c.json({ error: 'Invalid asset path' }, 400);
+  }
+
+  // Reject traversal, double-encoding, backslashes, or non-image extensions
+  if (
+    !decodedPath ||
+    decodedPath.includes('..') ||
+    decodedPath.includes('\\') ||
+    decodedPath.includes('%') ||
+    !SAFE_MEDIA_PATH_REGEX.test(decodedPath)
+  ) {
     return c.json({ error: 'Invalid asset path' }, 400);
   }
 
   if (c.env?.EXERCISES_BUCKET) {
-    const object = await c.env.EXERCISES_BUCKET.get(`exercises/${assetPath}`);
+    const object = await c.env.EXERCISES_BUCKET.get(`exercises/${decodedPath}`);
     if (object) {
       const headers = new Headers();
       object.writeHttpMetadata(headers);
       headers.set('etag', object.httpEtag);
       headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+      headers.set('X-Content-Type-Options', 'nosniff');
       return new Response(object.body, { headers });
     }
   }
 
-  const fallbackUrl = `${resolveImageBaseUrl(c.env)}/${assetPath}`;
+  const fallbackUrl = `${resolveImageBaseUrl(c.env)}/${decodedPath}`;
   return c.redirect(fallbackUrl, 302);
 });
 

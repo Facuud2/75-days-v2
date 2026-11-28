@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { getServerConfig } from './config';
-import { enforceRateLimit, RateLimitKind } from './rateLimit';
+import { enforceRateLimit, enforceUserAiQuota, RateLimitKind } from './rateLimit';
 
 const MAX_BODY_BYTES = 5 * 1024 * 1024; // 5 MB (matches backend-core express.json limit)
 
@@ -55,12 +55,31 @@ export function verifyBearerToken(authHeader?: string | null): { id: string } | 
 
   try {
     const { jwtSecret } = getServerConfig();
-    const decoded = jwt.verify(token, jwtSecret) as { id: string };
-    if (!decoded?.id) return null;
+    const decoded = jwt.verify(token, jwtSecret, {
+      algorithms: ['HS256'],
+    }) as Record<string, unknown> | string;
+    if (
+      !decoded ||
+      typeof decoded !== 'object' ||
+      typeof decoded.id !== 'string' ||
+      decoded.id.length === 0 ||
+      'purpose' in decoded
+    ) {
+      return null;
+    }
     return { id: decoded.id };
   } catch {
     return null;
   }
+}
+
+function isDevEndpointsAllowed(): boolean {
+  if (process.env.NODE_ENV === 'production') return false;
+  return (
+    process.env.NODE_ENV === 'development' ||
+    process.env.NODE_ENV === 'test' ||
+    process.env.ENABLE_DEV_ENDPOINTS === 'true'
+  );
 }
 
 export async function handleRoute(
@@ -70,9 +89,9 @@ export async function handleRoute(
   options: RouteOptions = {}
 ): Promise<Response> {
   try {
-    if (options.devOnly && process.env.NODE_ENV === 'production') {
+    if (options.devOnly && !isDevEndpointsAllowed()) {
       return Response.json(
-        { error: 'Dev endpoints are disabled in production' },
+        { error: 'Dev endpoints are disabled in this environment' },
         { status: 403 }
       );
     }
@@ -96,6 +115,13 @@ export async function handleRoute(
         return Response.json({ error: errorMsg }, { status: 401 });
       }
       user = verified;
+    }
+
+    if (options.rateLimit === 'ai' && user) {
+      const quotaResponse = await enforceUserAiQuota(user.id);
+      if (quotaResponse) {
+        return quotaResponse;
+      }
     }
 
     if (options.internalAuth) {

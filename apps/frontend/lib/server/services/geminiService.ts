@@ -4,6 +4,9 @@ import { getServerConfig } from '../config';
 import { DEFAULT_GOALS } from '../constants/defaultGoals';
 import { computeMealTotals } from '@/lib/utils/mealMath';
 import { inferGoalMeasurement, roundDynamicValue } from '@/lib/utils/goalInference';
+import { withTimeout } from '../utils/validation';
+
+const GEMINI_TIMEOUT_MS = 28_000;
 
 export const ALLOWED_ICONS = [
   'utensils',
@@ -778,17 +781,21 @@ export async function processCustomPlanTurn(
     });
   }
 
-  const interaction = await ai.interactions.create({
-    model: 'gemini-4-hydrogen',
-    system_instruction: buildCustomPlanSystemInstruction(forceProposal),
-    input: [{ type: 'user_input', content: parts }],
-    response_format: {
-      type: 'text',
-      mime_type: 'application/json',
-      schema: CUSTOM_PLAN_JSON_SCHEMA,
-    },
-    store: false,
-  });
+  const interaction = await withTimeout(
+    ai.interactions.create({
+      model: 'gemini-4-hydrogen',
+      system_instruction: buildCustomPlanSystemInstruction(forceProposal),
+      input: [{ type: 'user_input', content: parts }],
+      response_format: {
+        type: 'text',
+        mime_type: 'application/json',
+        schema: CUSTOM_PLAN_JSON_SCHEMA,
+      },
+      store: false,
+    }),
+    GEMINI_TIMEOUT_MS,
+    'Gemini custom-plan'
+  );
 
   const rawText = interaction.output_text?.trim();
   if (!rawText) {
@@ -910,17 +917,21 @@ export async function processSideQuestTurn(
     });
   }
 
-  const interaction = await ai.interactions.create({
-    model: 'gemini-4-hydrogen',
-    system_instruction: buildSideQuestSystemInstruction(forceProposal),
-    input: [{ type: 'user_input', content: parts }],
-    response_format: {
-      type: 'text',
-      mime_type: 'application/json',
-      schema: SIDE_QUEST_JSON_SCHEMA,
-    },
-    store: false,
-  });
+  const interaction = await withTimeout(
+    ai.interactions.create({
+      model: 'gemini-4-hydrogen',
+      system_instruction: buildSideQuestSystemInstruction(forceProposal),
+      input: [{ type: 'user_input', content: parts }],
+      response_format: {
+        type: 'text',
+        mime_type: 'application/json',
+        schema: SIDE_QUEST_JSON_SCHEMA,
+      },
+      store: false,
+    }),
+    GEMINI_TIMEOUT_MS,
+    'Gemini side-quest'
+  );
 
   const rawText = interaction.output_text?.trim();
   if (!rawText) {
@@ -985,33 +996,37 @@ export async function transcribeUserAudio(
   const cleanMimeType =
     (input.mimeType || 'audio/webm').split(';')[0].trim() || 'audio/webm';
 
-  const interaction = await ai.interactions.create({
-    model: 'gemini-4-hydrogen',
-    system_instruction:
-      'Sos un transcriptor de voz exacto en español para la app "75 Days". Transcribí fielmente lo que dice el usuario con puntuación limpia. Si el audio solo contiene silencio o ruido sin palabras inteligibles, devolvé hasSpeech: false y transcript: "". Nunca inventes texto.',
-    input: [
-      {
-        type: 'user_input',
-        content: [
-          {
-            type: 'text',
-            text: 'Transcribí el audio adjunto al objeto JSON solicitado.',
-          },
-          {
-            type: 'audio',
-            data: input.audioBase64,
-            mime_type: cleanMimeType,
-          },
-        ],
+  const interaction = await withTimeout(
+    ai.interactions.create({
+      model: 'gemini-4-hydrogen',
+      system_instruction:
+        'Sos un transcriptor de voz exacto en español para la app "75 Days". Transcribí fielmente lo que dice el usuario con puntuación limpia. Si el audio solo contiene silencio o ruido sin palabras inteligibles, devolvé hasSpeech: false y transcript: "". Nunca inventes texto.',
+      input: [
+        {
+          type: 'user_input',
+          content: [
+            {
+              type: 'text',
+              text: 'Transcribí el audio adjunto al objeto JSON solicitado.',
+            },
+            {
+              type: 'audio',
+              data: input.audioBase64,
+              mime_type: cleanMimeType,
+            },
+          ],
+        },
+      ],
+      response_format: {
+        type: 'text',
+        mime_type: 'application/json',
+        schema: TRANSCRIBE_JSON_SCHEMA,
       },
-    ],
-    response_format: {
-      type: 'text',
-      mime_type: 'application/json',
-      schema: TRANSCRIBE_JSON_SCHEMA,
-    },
-    store: false,
-  });
+      store: false,
+    }),
+    GEMINI_TIMEOUT_MS,
+    'Gemini transcribe'
+  );
 
   const rawText = interaction.output_text?.trim();
   if (!rawText) {
@@ -1354,22 +1369,26 @@ export async function analyzeMealInput(
     });
   }
 
-  const interaction = await ai.interactions.create({
-    model: 'gemini-4-hydrogen',
-    system_instruction: MEAL_ANALYSIS_SYSTEM_INSTRUCTION,
-    input: [
-      {
-        type: 'user_input',
-        content: contentParts,
+  const interaction = await withTimeout(
+    ai.interactions.create({
+      model: 'gemini-4-hydrogen',
+      system_instruction: MEAL_ANALYSIS_SYSTEM_INSTRUCTION,
+      input: [
+        {
+          type: 'user_input',
+          content: contentParts,
+        },
+      ],
+      response_format: {
+        type: 'text',
+        mime_type: 'application/json',
+        schema: MEAL_ANALYSIS_JSON_SCHEMA,
       },
-    ],
-    response_format: {
-      type: 'text',
-      mime_type: 'application/json',
-      schema: MEAL_ANALYSIS_JSON_SCHEMA,
-    },
-    store: false,
-  });
+      store: false,
+    }),
+    GEMINI_TIMEOUT_MS,
+    'Gemini analyze-meal'
+  );
 
   const rawText = interaction.output_text?.trim();
   if (!rawText) {

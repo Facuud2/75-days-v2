@@ -49,11 +49,13 @@ export default function DayDetailsSheet({ day, onClose, onPrevious, onNext }: { 
   const reduceMotion = useReducedMotion();
   const reduceMotionRef = useRef(reduceMotion);
 
-  onCloseRef.current = onClose;
-  onPreviousRef.current = onPrevious;
-  onNextRef.current = onNext;
-  shareOpenRef.current = shareOpen;
-  reduceMotionRef.current = reduceMotion;
+  useEffect(() => {
+    onCloseRef.current = onClose;
+    onPreviousRef.current = onPrevious;
+    onNextRef.current = onNext;
+    shareOpenRef.current = shareOpen;
+    reduceMotionRef.current = reduceMotion;
+  });
 
   useEffect(() => {
     if (day.status !== 'future') {

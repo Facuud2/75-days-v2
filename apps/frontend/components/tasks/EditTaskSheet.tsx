@@ -75,23 +75,28 @@ export default function EditTaskSheet({
 
   useEffect(() => {
     if (!open || !task) return;
-    setTitle(task.title);
-    setDescription(task.description ?? '');
-    setIcon(task.icon || 'target');
-    setMeasurementType(task.measurementType);
-    setTargetValueInput(
-      task.measurementType === 'boolean' ? '10' : String(roundDynamicValue(task.targetValue))
-    );
-    setTargetUnit(task.targetUnit ?? '');
-    setStepInput(
-      typeof stepOverride === 'number' && stepOverride > 0 ? String(stepOverride) : ''
-    );
-    setIsSaving(false);
+    const syncTimer = window.setTimeout(() => {
+      setTitle(task.title);
+      setDescription(task.description ?? '');
+      setIcon(task.icon || 'target');
+      setMeasurementType(task.measurementType);
+      setTargetValueInput(
+        task.measurementType === 'boolean' ? '10' : String(roundDynamicValue(task.targetValue))
+      );
+      setTargetUnit(task.targetUnit ?? '');
+      setStepInput(
+        typeof stepOverride === 'number' && stepOverride > 0 ? String(stepOverride) : ''
+      );
+      setIsSaving(false);
+    }, 0);
 
-    const timer = window.setTimeout(() => {
+    const focusTimer = window.setTimeout(() => {
       titleInputRef.current?.focus();
     }, 60);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(syncTimer);
+      window.clearTimeout(focusTimer);
+    };
   }, [open, task, stepOverride]);
 
   useEffect(() => {

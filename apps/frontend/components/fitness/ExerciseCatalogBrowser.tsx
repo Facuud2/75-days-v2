@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   Check,
@@ -204,15 +204,17 @@ export default function ExerciseCatalogBrowser({
     return [...customMapped, ...catalogSorted];
   }, [bundle, customExercises]);
 
+  const deferredQuery = useDeferredValue(query);
+
   const filtered = useMemo(() => {
     return filterExercises(allExercises, {
-      query,
+      query: deferredQuery,
       bodyZone,
       equipment: effectiveEquipment,
       onlyCustom,
       environment: effectiveEnvironment,
     });
-  }, [allExercises, query, bodyZone, effectiveEquipment, onlyCustom, effectiveEnvironment]);
+  }, [allExercises, deferredQuery, bodyZone, effectiveEquipment, onlyCustom, effectiveEnvironment]);
 
   const visibleItems = useMemo(
     () => filtered.slice(0, visibleCount),

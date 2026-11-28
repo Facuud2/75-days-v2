@@ -7,6 +7,7 @@ import { getServerConfig } from '../../config';
 import { DEFAULT_GOALS } from '../../constants/defaultGoals';
 import { localChallengeDate, parseTimezoneOffset } from '../../utils/challengeDate';
 import { normalizeGoalSpec } from '../../utils/periodRules';
+import { safeImageUrlSchema } from '../../utils/validation';
 
 export function serializeAuthUser(user: {
   id: string;
@@ -154,7 +155,12 @@ async function verifyGoogleIdentity(params: {
 }): Promise<VerifiedGoogleIdentity> {
   const rawToken = params.accessToken || params.idToken || '';
 
-  if (process.env.NODE_ENV !== 'production' && rawToken.startsWith('mock-google:')) {
+  const isMockAllowed =
+    process.env.NODE_ENV === 'development' ||
+    process.env.NODE_ENV === 'test' ||
+    process.env.ENABLE_MOCK_GOOGLE === 'true';
+
+  if (process.env.NODE_ENV !== 'production' && isMockAllowed && rawToken.startsWith('mock-google:')) {
     const jsonPart = rawToken.slice('mock-google:'.length);
     const parsed = JSON.parse(jsonPart) as Partial<VerifiedGoogleIdentity>;
     if (!parsed.googleId || !parsed.email) {
@@ -170,7 +176,33 @@ async function verifyGoogleIdentity(params: {
     };
   }
 
+  const { googleClientId } = getServerConfig();
+
   if (params.accessToken) {
+    // Anti-Confused-Deputy: verify access_token audience belongs to this app before trusting userinfo
+    const tokenInfoRes = await fetch(
+      `https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(params.accessToken)}`,
+      { signal: AbortSignal.timeout(EXTERNAL_OAUTH_TIMEOUT_MS) }
+    );
+    if (!tokenInfoRes.ok) {
+      throw new Error('Invalid Google access token');
+    }
+    const tokenInfo = (await tokenInfoRes.json()) as {
+      aud?: string;
+      azp?: string;
+      sub?: string;
+      email?: string;
+      email_verified?: string | boolean;
+    };
+    const tokenAudience = tokenInfo.aud || tokenInfo.azp;
+    if (!googleClientId) {
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error('Google OAuth client ID is not configured on the server');
+      }
+    } else if (!tokenAudience || tokenAudience !== googleClientId) {
+      throw new Error('Google access token audience mismatch');
+    }
+
     const userInfoRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
       signal: AbortSignal.timeout(EXTERNAL_OAUTH_TIMEOUT_MS),
       headers: { Authorization: `Bearer ${params.accessToken}` },
@@ -229,8 +261,12 @@ async function verifyGoogleIdentity(params: {
       aud?: string;
     };
 
-    const { googleClientId } = getServerConfig();
-    if (googleClientId && tokenInfo.aud && tokenInfo.aud !== googleClientId) {
+    // Fail closed: require aud === googleClientId whenever configured (and require config in production)
+    if (!googleClientId) {
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error('Google OAuth client ID is not configured on the server');
+      }
+    } else if (!tokenInfo.aud || tokenInfo.aud !== googleClientId) {
       throw new Error('Google ID token audience mismatch');
     }
 
@@ -440,7 +476,6 @@ const googleAuthSchema = z
 
 export const googleAuth = async (req: ControllerRequest, res: ControllerResponse) => {
   try {
-    const prisma = getCorePrisma();
     const { jwtSecret } = getServerConfig();
     const { accessToken, idToken, confirmLink, timezoneOffset } = googleAuthSchema.parse(
       req.body
@@ -456,6 +491,8 @@ export const googleAuth = async (req: ControllerRequest, res: ControllerResponse
     if (!googleIdentity.emailVerified) {
       return res.status(400).json({ error: 'Google email is not verified' });
     }
+
+    const prisma = getCorePrisma();
 
     const existingGoogleUser = await prisma.user.findUnique({
       where: { googleId: googleIdentity.googleId },
@@ -653,8 +690,8 @@ const completeOnboardingSchema = z.object({
   targetWeight: z.number().min(20).max(500).optional(),
   height: z.number().min(80).max(260).optional(),
   name: z.string().min(2).max(120).optional(),
-  avatarUrl: z.string().max(2_000_000).nullable().optional(),
-  bannerUrl: z.string().max(2_000_000).nullable().optional(),
+  avatarUrl: safeImageUrlSchema.nullable().optional(),
+  bannerUrl: safeImageUrlSchema.nullable().optional(),
   profileQuote: z.string().max(120).nullable().optional(),
 }).strict();
 

@@ -21,6 +21,14 @@ import {
   type ActiveChallengeWorkoutContext,
 } from '../../services/workoutPlanAiService';
 
+const SAFE_AUDIO_MIME_REGEX =
+  /^(?:audio\/(?:webm|mp4|mpeg|mp3|ogg|wav|x-wav|x-m4a|aac|flac|opus)|video\/webm)(?:;\s*codecs=[\w,.\s-]+)?$/i;
+
+const safeAudioMimeSchema = z
+  .string()
+  .max(80)
+  .regex(SAFE_AUDIO_MIME_REGEX, 'Unsupported audio MIME type');
+
 const historyItemSchema = z.object({
   role: z.enum(['user', 'assistant']),
   text: z.string().max(2500),
@@ -29,7 +37,7 @@ const historyItemSchema = z.object({
 const customPlanRequestSchema = z
   .object({
     audioBase64: z.string().max(4_500_000).optional(),
-    mimeType: z.string().max(80).optional(),
+    mimeType: safeAudioMimeSchema.optional(),
     textInput: z.string().max(2500).optional(),
     history: z.array(historyItemSchema).max(40).optional(),
     currentTasks: z.array(aiTaskSchema).max(12).optional(),
@@ -53,7 +61,7 @@ const customPlanRequestSchema = z
 const sideQuestRequestSchema = z
   .object({
     audioBase64: z.string().max(4_500_000).optional(),
-    mimeType: z.string().max(80).optional(),
+    mimeType: safeAudioMimeSchema.optional(),
     textInput: z.string().max(2500).optional(),
     history: z.array(historyItemSchema).max(40).optional(),
     currentQuest: aiSideQuestDraftSchema.nullable().optional(),
@@ -300,14 +308,14 @@ const workoutPlanDraftInputSchema = z.object({
   goalSummary: z.string().max(400).optional().default(''),
   scheduleType: z.enum(['daily', 'weekly', 'sequential']),
   environment: z.enum(['home', 'gym', 'outdoor', 'mixed']),
-  slots: z.array(z.any()).max(60),
-});
+  slots: z.array(z.record(z.string(), z.unknown())).max(60),
+}).strict();
 
 const workoutPlanRequestSchema = z
   .object({
     textInput: z.string().max(2500).optional(),
     audioBase64: z.string().max(4_500_000).optional(),
-    mimeType: z.string().max(80).optional(),
+    mimeType: safeAudioMimeSchema.optional(),
     history: z.array(historyItemSchema).max(30).optional(),
     currentDraft: workoutPlanDraftInputSchema.nullable().optional(),
     understoodFacts: z.array(z.string().max(260)).max(20).optional(),

@@ -1,26 +1,22 @@
-import {
-  getCorePrisma,
-  getHealthPrisma,
-  resolveCoreDatabaseUrl,
-  resolveHealthDatabaseUrl,
-} from '@/lib/server/db';
+import { getCorePrisma, getHealthPrisma } from '@/lib/server/db';
 
-function sanitizeErrorForDiagnostics(err: unknown): string {
-  const raw = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
-  // Redact any credentials if present in URLs
-  return raw.replace(/\/\/[^@/\s]+@/g, '//***@').slice(0, 500);
-}
+const DEEP_HEALTH_CACHE_TTL_MS = 15_000;
+let lastDeepOkAt = 0;
 
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     if (url.searchParams.get('deep') === '1') {
-      const corePrisma = getCorePrisma();
-      const healthPrisma = getHealthPrisma();
-      await Promise.all([
-        corePrisma.$queryRaw`SELECT 1`,
-        healthPrisma.$queryRaw`SELECT 1`,
-      ]);
+      const now = Date.now();
+      if (now - lastDeepOkAt >= DEEP_HEALTH_CACHE_TTL_MS) {
+        const corePrisma = getCorePrisma();
+        const healthPrisma = getHealthPrisma();
+        await Promise.all([
+          corePrisma.$queryRaw`SELECT 1`,
+          healthPrisma.$queryRaw`SELECT 1`,
+        ]);
+        lastDeepOkAt = now;
+      }
       return Response.json({
         service: '75-days-unified-vercel-api',
         status: 'ok',
@@ -35,18 +31,11 @@ export async function GET(req: Request) {
     });
   } catch (error) {
     console.error('[/api/health] Healthcheck failed:', error);
-    const coreUrlConfigured = Boolean(resolveCoreDatabaseUrl());
-    const healthUrlConfigured = Boolean(resolveHealthDatabaseUrl());
     return Response.json(
       {
         service: '75-days-unified-vercel-api',
         status: 'degraded',
         dbWarmed: false,
-        diagnostics: {
-          coreUrlConfigured,
-          healthUrlConfigured,
-          reason: sanitizeErrorForDiagnostics(error),
-        },
       },
       { status: 503 }
     );

@@ -449,7 +449,12 @@ export const getExerciseHistory = async (
 ) => {
   const prisma = getHealthPrisma();
   const userId = req.user!.id;
-  const exerciseId = decodeURIComponent(String(req.params.exerciseId ?? '')).trim();
+  let exerciseId: string;
+  try {
+    exerciseId = decodeURIComponent(String(req.params.exerciseId ?? '')).trim();
+  } catch {
+    return res.status(400).json({ error: 'Invalid exerciseId encoding' });
+  }
 
   if (!exerciseId || exerciseId.length > 160) {
     return res.status(400).json({ error: 'Invalid exerciseId' });
@@ -591,10 +596,15 @@ export const getFitnessOverview = async (
   const prisma = getHealthPrisma();
   const userId = req.user!.id;
 
-  const todayStr =
-    typeof req.query?.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date)
-      ? req.query.date
-      : new Date().toISOString().slice(0, 10);
+  const rawDate = typeof req.query?.date === 'string' ? req.query.date : '';
+  const parsedDate = rawDate ? new Date(`${rawDate}T00:00:00Z`) : null;
+  const isValidDateParam =
+    Boolean(rawDate) &&
+    /^\d{4}-\d{2}-\d{2}$/.test(rawDate) &&
+    parsedDate !== null &&
+    !Number.isNaN(parsedDate.getTime()) &&
+    parsedDate.toISOString().slice(0, 10) === rawDate;
+  const todayStr = isValidDateParam ? rawDate : new Date().toISOString().slice(0, 10);
 
   const todayDate = new Date(`${todayStr}T00:00:00Z`);
   const sevenDaysAgo = new Date(todayDate);

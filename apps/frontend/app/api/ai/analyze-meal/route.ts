@@ -1,6 +1,8 @@
 import { handleRoute } from '@/lib/server/http';
 import { analyzeMeal } from '@/lib/server/controllers/core/aiController';
 
+export const maxDuration = 60;
+
 export async function POST(req: Request, context: any) {
   try {
     return await handleRoute(req, context, analyzeMeal, {

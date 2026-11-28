@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import {
   Activity,
@@ -146,11 +146,17 @@ export default function FitnessPage() {
     }
   }, [today]);
 
+  const didInitialMountRef = useRef(false);
+
   useEffect(() => {
     void loadFitnessData();
   }, [loadFitnessData]);
 
   useEffect(() => {
+    if (!didInitialMountRef.current) {
+      didInitialMountRef.current = true;
+      return;
+    }
     if (!recentWorkoutsInStore.length && storeTodayWorkoutMin === undefined) return;
     const timer = window.setTimeout(() => {
       void loadFitnessData();

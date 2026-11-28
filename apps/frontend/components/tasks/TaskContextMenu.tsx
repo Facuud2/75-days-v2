@@ -117,16 +117,19 @@ export default function TaskContextMenu({
   // Sincronizar estado interno al abrir o cambiar de tarea
   useEffect(() => {
     if (!open || !task) return;
-    setView('main');
-    setShowProgressFocus(false);
-    setIsBusy(false);
-    setDraftType(task.measurementType);
-    setDraftTarget(
-      task.measurementType === 'boolean' ? '10' : String(roundDynamicValue(task.targetValue))
-    );
-    setDraftUnit(task.targetUnit ?? '');
-    setCustomStepInput('');
-  }, [open, task?.id]);
+    const timer = window.setTimeout(() => {
+      setView('main');
+      setShowProgressFocus(false);
+      setIsBusy(false);
+      setDraftType(task.measurementType);
+      setDraftTarget(
+        task.measurementType === 'boolean' ? '10' : String(roundDynamicValue(task.targetValue))
+      );
+      setDraftUnit(task.targetUnit ?? '');
+      setCustomStepInput('');
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [open, task]);
 
   // Actualizar dimensiones del viewport al abrir / resize
   useEffect(() => {

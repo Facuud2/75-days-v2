@@ -52,35 +52,55 @@ export function decryptSecret(stored: string): string {
   return decrypted.toString('utf8');
 }
 
-export function signOAuthState(userId: string): string {
+export function signOAuthStateWithNonce(userId: string): {
+  state: string;
+  nonce: string;
+} {
   const { jwtSecret } = getServerConfig();
-  return jwt.sign(
+  const nonce = crypto.randomBytes(16).toString('hex');
+  const state = jwt.sign(
     {
       sub: userId,
       purpose: OAUTH_STATE_PURPOSE,
-      nonce: crypto.randomBytes(8).toString('hex'),
+      nonce,
     },
     jwtSecret,
-    { expiresIn: '10m' }
+    { algorithm: 'HS256', expiresIn: '10m' }
   );
+  return { state, nonce };
 }
 
-export function verifyOAuthState(state: string): string | null {
+export function signOAuthState(userId: string): string {
+  return signOAuthStateWithNonce(userId).state;
+}
+
+export function verifyOAuthStatePayload(
+  state: string
+): { userId: string; nonce: string } | null {
   try {
     const { jwtSecret } = getServerConfig();
-    const decoded = jwt.verify(state, jwtSecret) as {
+    const decoded = jwt.verify(state, jwtSecret, {
+      algorithms: ['HS256'],
+    }) as {
       sub?: string;
       purpose?: string;
+      nonce?: string;
     };
     if (
       decoded?.purpose !== OAUTH_STATE_PURPOSE ||
       typeof decoded.sub !== 'string' ||
-      !decoded.sub
+      !decoded.sub ||
+      typeof decoded.nonce !== 'string' ||
+      !decoded.nonce
     ) {
       return null;
     }
-    return decoded.sub;
+    return { userId: decoded.sub, nonce: decoded.nonce };
   } catch {
     return null;
   }
+}
+
+export function verifyOAuthState(state: string): string | null {
+  return verifyOAuthStatePayload(state)?.userId ?? null;
 }

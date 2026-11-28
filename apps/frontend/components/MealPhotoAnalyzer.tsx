@@ -322,13 +322,15 @@ export default function MealPhotoAnalyzer({
 
   useEffect(() => {
     if (stage !== 'ANALYZING') {
-      setAnalyzingStepIdx(0);
       return;
     }
     const interval = window.setInterval(() => {
       setAnalyzingStepIdx((prev) => (prev + 1) % ANALYZING_MESSAGES.length);
     }, 1600);
-    return () => window.clearInterval(interval);
+    return () => {
+      window.clearInterval(interval);
+      setAnalyzingStepIdx(0);
+    };
   }, [stage]);
 
   useEffect(() => {

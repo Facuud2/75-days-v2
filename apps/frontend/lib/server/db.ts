@@ -98,7 +98,12 @@ function createCorePrismaClient(): CorePrismaClient {
   }
 
   if (isNeonConnectionString(connectionString)) {
-    const adapter = new PrismaNeon({ connectionString });
+    const adapter = new PrismaNeon({
+      connectionString,
+      max: 5,
+      idleTimeoutMillis: 20_000,
+      connectionTimeoutMillis: 10_000,
+    });
     return new CorePrismaClient({ adapter });
   }
 
@@ -114,7 +119,12 @@ function createHealthPrismaClient(): HealthPrismaClient {
   }
 
   if (isNeonConnectionString(connectionString)) {
-    const adapter = new PrismaNeon({ connectionString });
+    const adapter = new PrismaNeon({
+      connectionString,
+      max: 5,
+      idleTimeoutMillis: 20_000,
+      connectionTimeoutMillis: 10_000,
+    });
     return new HealthPrismaClient({ adapter });
   }
 

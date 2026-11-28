@@ -8,6 +8,9 @@ import {
   matchExercisesForSlot,
   type MatchedSlotExercise,
 } from './exerciseMatcher';
+import { withTimeout } from '../utils/validation';
+
+const GEMINI_WORKOUT_TIMEOUT_MS = 28_000;
 
 const boundedString = (max: number) =>
   z
@@ -465,22 +468,26 @@ export async function processWorkoutPlanTurn(
     });
   }
 
-  const interaction = await ai.interactions.create({
-    model: 'gemini-4-hydrogen',
-    system_instruction: WORKOUT_PLAN_SYSTEM_INSTRUCTION,
-    input: [
-      {
-        type: 'user_input',
-        content: parts,
+  const interaction = await withTimeout(
+    ai.interactions.create({
+      model: 'gemini-4-hydrogen',
+      system_instruction: WORKOUT_PLAN_SYSTEM_INSTRUCTION,
+      input: [
+        {
+          type: 'user_input',
+          content: parts,
+        },
+      ],
+      response_format: {
+        type: 'text',
+        mime_type: 'application/json',
+        schema: WORKOUT_PLAN_JSON_SCHEMA,
       },
-    ],
-    response_format: {
-      type: 'text',
-      mime_type: 'application/json',
-      schema: WORKOUT_PLAN_JSON_SCHEMA,
-    },
-    store: false,
-  });
+      store: false,
+    }),
+    GEMINI_WORKOUT_TIMEOUT_MS,
+    'Gemini workout-plan'
+  );
 
   const rawText = interaction.output_text?.trim();
   if (!rawText) {

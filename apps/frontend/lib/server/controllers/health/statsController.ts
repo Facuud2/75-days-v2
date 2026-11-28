@@ -1,5 +1,6 @@
 import { getHealthPrisma } from '../../db';
 import { ControllerRequest, ControllerResponse } from '../../http';
+import { isValidCalendarDate, isValidYearMonth } from '../../utils/validation';
 
 function dateRange(start: string, days: number): string[] {
   const result: string[] = [];
@@ -78,12 +79,39 @@ async function buildRangeSummaries(userId: string, dates: string[]) {
   const endDate = dates[dates.length - 1];
 
   const [profile, allMeals, allWorkouts] = await Promise.all([
-    prisma.userHealthProfile.findUnique({ where: { userId } }),
+    prisma.userHealthProfile.findUnique({
+      where: { userId },
+      select: {
+        dailyCalorieGoal: true,
+        proteinGoalG: true,
+        carbGoalG: true,
+        fatGoalG: true,
+      },
+    }),
+    // Exclude Base64 photoUrl blobs from multi-day range summaries (weekly/monthly)
     prisma.mealEntry.findMany({
       where: { userId, date: { gte: startDate, lte: endDate } },
+      select: {
+        id: true,
+        date: true,
+        mealType: true,
+        name: true,
+        calories: true,
+        proteinG: true,
+        carbG: true,
+        fatG: true,
+        fiberG: true,
+        sugarG: true,
+        routineItemId: true,
+      },
     }),
     prisma.workoutEntry.findMany({
       where: { userId, date: { gte: startDate, lte: endDate } },
+      select: {
+        date: true,
+        durationMin: true,
+        caloriesBurned: true,
+      },
     }),
   ]);
 
@@ -119,14 +147,28 @@ export const getDailyStats = async (
   const userId = req.user!.id;
   const date = String(req.params.date);
 
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+  if (!isValidCalendarDate(date)) {
     return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
   }
 
   const [profile, meals, workouts] = await Promise.all([
-    prisma.userHealthProfile.findUnique({ where: { userId } }),
+    prisma.userHealthProfile.findUnique({
+      where: { userId },
+      select: {
+        dailyCalorieGoal: true,
+        proteinGoalG: true,
+        carbGoalG: true,
+        fatGoalG: true,
+      },
+    }),
     prisma.mealEntry.findMany({ where: { userId, date } }),
-    prisma.workoutEntry.findMany({ where: { userId, date } }),
+    prisma.workoutEntry.findMany({
+      where: { userId, date },
+      select: {
+        durationMin: true,
+        caloriesBurned: true,
+      },
+    }),
   ]);
 
   const summary = formatDaySummaryFromLists(date, meals, workouts, profile);
@@ -140,7 +182,7 @@ export const getWeeklyStats = async (
   const userId = req.user!.id;
   const { startDate } = req.query;
 
-  if (!startDate || !/^\d{4}-\d{2}-\d{2}$/.test(String(startDate))) {
+  if (!startDate || !isValidCalendarDate(String(startDate))) {
     return res
       .status(400)
       .json({ error: 'Provide startDate as YYYY-MM-DD query param' });
@@ -168,7 +210,7 @@ export const getMonthlyStats = async (
   const userId = req.user!.id;
   const { month } = req.query;
 
-  if (!month || !/^\d{4}-\d{2}$/.test(String(month))) {
+  if (!month || !isValidYearMonth(String(month))) {
     return res
       .status(400)
       .json({ error: 'Provide month as YYYY-MM query param' });

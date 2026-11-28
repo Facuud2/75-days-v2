@@ -47,6 +47,8 @@ model Challenge {
   customGoalsTemplate GoalTemplate[]
   dailyLogs           DailyLog[]
   periodGoals         PeriodGoalProgress[]
+
+  @@index([userId, isActive])
 }
 
 model GoalTemplate {
@@ -64,6 +66,8 @@ model GoalTemplate {
 
   challenge      Challenge            @relation(fields: [challengeId], references: [id])
   periodProgress PeriodGoalProgress[]
+
+  @@index([challengeId, isActive])
 }
 
 model DailyLog {
@@ -95,6 +99,8 @@ model DailyGoal {
   completed       Boolean @default(false)
 
   dailyLog DailyLog @relation(fields: [dailyLogId], references: [id])
+
+  @@index([dailyLogId])
 }
 
 model PeriodGoalProgress {
@@ -140,6 +146,9 @@ model SideQuest {
   user     User               @relation(fields: [userId], references: [id])
   template SideQuestTemplate? @relation(fields: [templateId], references: [id])
   runs     SideQuestRun[]
+
+  @@index([userId, completed])
+  @@index([userId, startedAt])
 }
 
 model SideQuestTemplate {
@@ -168,6 +177,8 @@ model SideQuestTaskTemplate {
 
   template SideQuestTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
   tasks    SideQuestTask[]
+
+  @@index([templateId])
 }
 
 model SideQuestRun {

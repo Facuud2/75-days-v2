@@ -352,6 +352,7 @@ const toggleTaskBodySchema = z
     value: z.number().min(0).optional(),
     timezoneOffset: z.number().optional(),
   })
+  .strict()
   .optional();
 
 export const toggleQuestTask = async (

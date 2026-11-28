@@ -8,11 +8,13 @@ export const searchFoodController = async (
   res: ControllerResponse
 ) => {
   try {
-    const query = req.query.query as string;
-    const page = parseInt((req.query.page as string) || '0', 10);
+    const rawQuery = req.query.query;
+    const query = typeof rawQuery === 'string' ? rawQuery.trim() : '';
+    const parsedPage = parseInt((req.query.page as string) || '0', 10);
+    const page = Number.isFinite(parsedPage) && parsedPage >= 0 && parsedPage <= 100 ? parsedPage : 0;
 
-    if (!query) {
-      return res.status(400).json({ error: 'Falta el parámetro q.' });
+    if (!query || query.length > 100) {
+      return res.status(400).json({ error: 'Parámetro de búsqueda inválido (1–100 caracteres).' });
     }
 
     const data = await searchFoods(query, page);
@@ -51,8 +53,8 @@ export const getFoodController = async (
   try {
     const foodId = req.params.id as string;
 
-    if (!foodId) {
-      return res.status(400).json({ error: 'ID de alimento requerido.' });
+    if (!foodId || !/^\d{1,20}$/.test(foodId)) {
+      return res.status(400).json({ error: 'ID de alimento inválido.' });
     }
 
     const data = await getFoodDetails(foodId);
@@ -97,14 +99,16 @@ export const importFoodController = async (
   res: ControllerResponse
 ) => {
   try {
-    const prisma = getHealthPrisma();
     const foodId = req.params.id as string;
-    if (!foodId) return res.status(400).json({ error: 'ID de alimento requerido.' });
+    if (!foodId || !/^\d{1,20}$/.test(foodId)) {
+      return res.status(400).json({ error: 'ID de alimento inválido.' });
+    }
 
     const data = await getFoodDetails(foodId);
     const food = data?.food;
 
     if (!food) return res.status(404).json({ error: 'Alimento no encontrado.' });
+    const prisma = getHealthPrisma();
 
     let servings: any[] = [];
     if (food.servings && food.servings.serving) {
@@ -150,17 +154,18 @@ export const importFoodController = async (
     const carbPer100g = parseFloat(selectedServing.carbohydrate || '0') * multiplier;
     const fatPer100g = parseFloat(selectedServing.fat || '0') * multiplier;
 
-    const ingredientName = `${food.food_name}${food.brand_name ? ` (${food.brand_name})` : ''}`;
+    const ingredientName = `${food.food_name}${food.brand_name ? ` (${food.brand_name})` : ''}`.slice(0, 160);
 
-    const ingredient = await prisma.ingredient.upsert({
+    // Prevent authenticated users from overwriting seeded/existing global catalog ingredients
+    const existing = await prisma.ingredient.findUnique({
       where: { name: ingredientName },
-      update: {
-        caloriesPer100g,
-        proteinPer100g,
-        carbPer100g,
-        fatPer100g,
-      },
-      create: {
+    });
+    if (existing) {
+      return res.json(existing);
+    }
+
+    const ingredient = await prisma.ingredient.create({
+      data: {
         name: ingredientName,
         caloriesPer100g,
         proteinPer100g,

@@ -6,6 +6,7 @@ import {
   computeNextGoalProgress,
   getPeriodPoints,
 } from '../../utils/periodRules';
+import { safeImageUrlSchema } from '../../utils/validation';
 
 export const getLogs = async (req: ControllerRequest, res: ControllerResponse) => {
   try {
@@ -341,7 +342,7 @@ export const updatePeriodGoalProgress = async (
 
 const metricsSchema = z.object({
   weight: z.number().positive().max(500).optional(),
-  photoUrl: z.string().max(2_000_000).optional(),
+  photoUrl: safeImageUrlSchema.optional(),
   notes: z.string().max(2_000).optional(),
 }).strict();
 

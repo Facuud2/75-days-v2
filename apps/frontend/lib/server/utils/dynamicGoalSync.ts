@@ -377,12 +377,14 @@ export async function syncHealthMetricsToGoals(params: {
 
     if (dailyUpdates.length > 0) {
       await corePrisma.$transaction(async (tx) => {
-        for (const u of dailyUpdates) {
-          await tx.dailyGoal.update({
-            where: { id: u.id },
-            data: { currentValue: u.currentValue, completed: u.completed },
-          });
-        }
+        await Promise.all(
+          dailyUpdates.map((u) =>
+            tx.dailyGoal.update({
+              where: { id: u.id },
+              data: { currentValue: u.currentValue, completed: u.completed },
+            })
+          )
+        );
         const freshLog = await tx.dailyLog.findUnique({
           where: { id: dailyLog.id },
           include: {
@@ -420,8 +422,15 @@ export async function syncHealthMetricsToGoals(params: {
     }
   }
 
-  // 2. Sync Challenge PeriodGoalProgress (weekly / monthly)
+  // 2. Sync Challenge PeriodGoalProgress (weekly / monthly) in a single batched transaction
   if (challenge && challenge.periodGoals.length > 0) {
+    const periodUpdates: Array<{
+      id: string;
+      currentValue: number;
+      status: string;
+      pointsDelta: number;
+    }> = [];
+
     for (const pg of challenge.periodGoals) {
       if (pg.status === 'fail' || pg.measurementType === 'boolean') continue;
       const { metricSource, sportFilter } = detectMetricSource(
@@ -459,25 +468,45 @@ export async function syncHealthMetricsToGoals(params: {
 
       if (computed !== pg.currentValue || nextStatus !== pg.status) {
         const pts = getPeriodPoints(pg.cadence === 'monthly' ? 'monthly' : 'weekly');
-        await corePrisma.$transaction(async (tx) => {
-          await tx.periodGoalProgress.update({
-            where: { id: pg.id },
-            data: { currentValue: computed, status: nextStatus },
-          });
-          if (nextStatus === 'success' && pg.status !== 'success') {
-            await tx.challenge.update({
-              where: { id: challenge.id },
-              data: { points: { increment: pts } },
-            });
-          } else if (nextStatus !== 'success' && pg.status === 'success') {
-            await tx.challenge.update({
-              where: { id: challenge.id },
-              data: { points: Math.max(0, challenge.points - pts) },
-            });
-          }
+        const pointsDelta =
+          nextStatus === 'success' && pg.status !== 'success'
+            ? pts
+            : nextStatus !== 'success' && pg.status === 'success'
+              ? -pts
+              : 0;
+        periodUpdates.push({
+          id: pg.id,
+          currentValue: computed,
+          status: nextStatus,
+          pointsDelta,
         });
-        updatedPeriodGoals += 1;
       }
+    }
+
+    if (periodUpdates.length > 0) {
+      const totalPointsDelta = periodUpdates.reduce((sum, u) => sum + u.pointsDelta, 0);
+      await corePrisma.$transaction(async (tx) => {
+        await Promise.all(
+          periodUpdates.map((u) =>
+            tx.periodGoalProgress.update({
+              where: { id: u.id },
+              data: { currentValue: u.currentValue, status: u.status },
+            })
+          )
+        );
+        if (totalPointsDelta > 0) {
+          await tx.challenge.update({
+            where: { id: challenge.id },
+            data: { points: { increment: totalPointsDelta } },
+          });
+        } else if (totalPointsDelta < 0) {
+          await tx.challenge.update({
+            where: { id: challenge.id },
+            data: { points: Math.max(0, challenge.points + totalPointsDelta) },
+          });
+        }
+      });
+      updatedPeriodGoals = periodUpdates.length;
     }
   }
 

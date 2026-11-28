@@ -15,15 +15,15 @@ const timeTravelSchema = z.object({
   days: z.number().int().min(-365).max(365),
   fillMode: z.enum(['success', 'fail', 'none']).optional().default('success'),
   timezoneOffset: z.number().optional(),
-});
+}).strict();
 
 const completeChallengeSchema = z.object({
   timezoneOffset: z.number().optional(),
-});
+}).strict();
 
 const resetAccountSchema = z.object({
   keepProfile: z.boolean().optional().default(true),
-});
+}).strict();
 
 function getLocalNow(rawTimezoneOffset?: unknown): {
   timezoneOffset: number | undefined;

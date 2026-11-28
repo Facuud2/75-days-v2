@@ -29,9 +29,18 @@ export async function getDailyHealthSummary(
   const prisma = getHealthPrisma();
 
   const [profile, meals, workouts] = await Promise.all([
-    prisma.userHealthProfile.findUnique({ where: { userId } }),
-    prisma.mealEntry.findMany({ where: { userId, date } }),
-    prisma.workoutEntry.findMany({ where: { userId, date } }),
+    prisma.userHealthProfile.findUnique({
+      where: { userId },
+      select: { dailyCalorieGoal: true },
+    }),
+    prisma.mealEntry.findMany({
+      where: { userId, date },
+      select: { calories: true },
+    }),
+    prisma.workoutEntry.findMany({
+      where: { userId, date },
+      select: { durationMin: true },
+    }),
   ]);
 
   const consumed = meals.reduce((s, m) => s + m.calories, 0);

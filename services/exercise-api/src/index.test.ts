@@ -35,11 +35,32 @@ describe('75days-exercise-api Cloudflare Worker', () => {
     expect(second.status).toBe(304);
   });
 
-  it('returns 404 for unknown exercise id and 400 for path traversal in media', async () => {
+  it('returns 404 for unknown exercise id and 400 for path traversal or unsafe extensions in media', async () => {
     const missing = await app.request('/v1/exercises/does-not-exist-999');
     expect(missing.status).toBe(404);
 
     const traversal = await app.request('/v1/media/..%2Fsecret.json');
     expect(traversal.status).toBe(400);
+
+    const encodedTraversal = await app.request('/v1/media/%2e%2e%2f%2e%2e%2fetc/passwd.jpg');
+    expect(encodedTraversal.status).toBe(400);
+
+    const doubleEncoded = await app.request('/v1/media/%252e%252e%252fimg.jpg');
+    expect(doubleEncoded.status).toBe(400);
+
+    const badExtension = await app.request('/v1/media/Bench_Press/payload.svg');
+    expect(badExtension.status).toBe(400);
+
+    const validImage = await app.request('/v1/media/Barbell_Bench_Press/0.jpg');
+    expect(validImage.status).toBe(302);
+  });
+
+  it('rejects oversized search query and includes baseline security headers', async () => {
+    const oversized = await app.request(`/v1/exercises?q=${'a'.repeat(120)}`);
+    expect(oversized.status).toBe(400);
+
+    const health = await app.request('/health');
+    expect(health.headers.get('X-Content-Type-Options')).toBe('nosniff');
+    expect(health.headers.get('X-Frame-Options')).toBe('DENY');
   });
 });
